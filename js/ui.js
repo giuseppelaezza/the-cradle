@@ -16,6 +16,7 @@
   var SUIT_LABEL = { oro: 'Oro', spade: 'Spade', bastoni: 'Bastoni', coppe: 'Coppe' };
   var OBJ = (typeof window !== 'undefined' && window.CradleObjects) ? window.CradleObjects : null;
   var ENG = (typeof window !== 'undefined' && window.CradleEngine) ? window.CradleEngine : null;
+  var CHARS = (typeof window !== 'undefined' && window.CradleCharacters) ? window.CradleCharacters : null;
   // Colore associato a ciascun giocatore (arancione/viola per non confondersi con i semi).
   var PLAYER_COLOR = { N: 'var(--pN)', S: 'var(--pS)' };
 
@@ -114,22 +115,60 @@
     function playerCard(s, id) {
       var p = s.players[id];
       var card = h('div', 'pcard' + (!s.gameOver && s.activePlayer === id ? ' active' : ''));
-      var title = 'Giocatore ' + id + (isCpu(id) ? ' 🤖 CPU' : '');
-      var name = h('div', 'name', title);
-      if (s.firstPlayer === id) name.appendChild(h('span', 'first', ' ⬤ 1°'));
-      card.appendChild(name);
-      card.appendChild(h('div', 'score', p.score + ' pt'));
-      var meta = h('div', 'meta');
-      if (p.character) meta.appendChild(h('span', null, '🎭 ' + p.character + '  '));
-      if (p.belongingSuit) { meta.appendChild(document.createTextNode('seed ')); meta.appendChild(h('b', 'suit-' + p.belongingSuit, SUIT_SYMBOL[p.belongingSuit])); }
-      meta.appendChild(document.createTextNode('  · Trophies ' + p.trophies.length + ' · Figure ' + p.figuresMatched + (p.matchedCenter ? ' · ★Centro' : '')));
-      card.appendChild(meta);
-      // Carte scelte pubbliche: sempre tutte e 3; quelle usate restano visibili ma sbarrate.
-      if (p.revealedCards && p.revealedCards.length) card.appendChild(chosenStrip(p));
-      // Oggetti posseduti (pubblici).
-      if (s.modules.objects && p.objects.length) card.appendChild(objectsStrip(s, id));
+
+      // Banda verticale "first player" a sinistra (evidenziata per il Primo Giocatore).
+      var band = h('div', 'pc-first' + (s.firstPlayer === id ? ' on' : ''));
+      if (s.firstPlayer === id) band.textContent = 'first player';
+      card.appendChild(band);
+
+      var body = h('div', 'pc-body');
+
+      // ---- Riga superiore: seed | nome + punti/trofei | badge CPU ----
+      var top = h('div', 'pc-top');
+      var seed = h('div', 'pc-seed' + (p.belongingSuit ? ' suit-' + p.belongingSuit : ''));
+      if (p.belongingSuit) { seed.textContent = SUIT_SYMBOL[p.belongingSuit]; seed.title = 'Seme di appartenenza: ' + SUIT_LABEL[p.belongingSuit]; }
+      else seed.textContent = '—';
+      top.appendChild(seed);
+
+      var main = h('div', 'pc-main');
+      main.appendChild(h('div', 'pc-name', 'Giocatore ' + id + (id === 'N' ? ' (Nord)' : ' (Sud)')));
+      var stats = h('div', 'pc-stats');
+      var st1 = h('div', 'pc-stat'); st1.appendChild(h('span', 'pc-num', String(p.score))); st1.appendChild(h('span', 'pc-unit', ' punti'));
+      var st2 = h('div', 'pc-stat'); st2.appendChild(h('span', 'pc-num', String(p.trophies.length))); st2.appendChild(h('span', 'pc-unit', ' trofei'));
+      st2.title = 'Figure ' + p.figuresMatched + (p.matchedCenter ? ' · ★ Centro' : '');
+      stats.appendChild(st1); stats.appendChild(st2);
+      main.appendChild(stats);
+      top.appendChild(main);
+      if (isCpu(id)) top.appendChild(h('div', 'pc-cpu', 'CPU'));
+      body.appendChild(top);
+
+      // ---- Riga inferiore: character | hand | tools ----
+      var bottom = h('div', 'pc-bottom');
+      // character (con tooltip del potere)
+      var chCell = h('div', 'pc-cell pc-char');
+      if (p.character) {
+        chCell.appendChild(h('span', 'pc-char-name', p.character));
+        chCell.appendChild(h('span', 'tooltip', characterPowerDesc(p.character)));
+        bindTip(chCell);
+      } else chCell.appendChild(h('span', 'muted', '—'));
+      bottom.appendChild(chCell);
+      // hand (carte scelte pubbliche: sempre tutte e 3, quelle usate sbarrate)
+      var handCell = h('div', 'pc-cell pc-hand');
+      if (p.revealedCards && p.revealedCards.length) p.revealedCards.forEach(function (c) { if (c) handCell.appendChild(miniCard(c, !p.hand.some(function (x) { return x.id === c.id; }))); });
+      else handCell.appendChild(h('span', 'muted', '—'));
+      bottom.appendChild(handCell);
+      // tools (oggetti posseduti, con tooltip)
+      var toolsCell = h('div', 'pc-cell pc-tools');
+      if (s.modules.objects && p.objects.length) objectChips(s, id, toolsCell);
+      else toolsCell.appendChild(h('span', 'muted', '—'));
+      bottom.appendChild(toolsCell);
+      body.appendChild(bottom);
+
+      card.appendChild(body);
       return card;
     }
+
+    function characterPowerDesc(type) { var c = CHARS ? CHARS.get(type) : null; return (c && c.power) ? c.power : type; }
 
     function chosenStrip(p) {
       var wrap = h('div', 'chosen');
@@ -149,9 +188,8 @@
       return m;
     }
 
-    function objectsStrip(s, id) {
-      var wrap = h('div', 'objects');
-      wrap.appendChild(h('span', 'lbl', 'Oggetti:'));
+    // Chip degli oggetti posseduti (con tooltip), inseriti in `container`.
+    function objectChips(s, id, container) {
       var usable = game.usableObjects(id).map(function (o) { return o.id; });
       s.players[id].objects.forEach(function (o) {
         var def = OBJ ? OBJ.def(o.type) : null;
@@ -160,9 +198,8 @@
         var tip = h('span', 'tooltip', def ? def.desc : o.type);
         if (o.type === 'jetpack' || o.type === 'jump') tip.appendChild(moveSchema(o.type));
         box.appendChild(tip);
-        wrap.appendChild(box);
+        container.appendChild(box); bindTip(box);
       });
-      return wrap;
     }
 
     // Schema di movimento per jetpack (3×3) / jump (5×5).
@@ -397,7 +434,7 @@
         box.appendChild(tip);
         if (pickForPower) box.onclick = function () { game.activatePower(playerId, o.id); ui.tacticianPick = false; render(); };
         else if (usable) box.onclick = function () { game.useObject(playerId, o.id); ui.armedCardId = null; render(); };
-        row.appendChild(box);
+        row.appendChild(box); bindTip(box);
       });
       wrap.appendChild(row);
       return wrap;
@@ -542,11 +579,28 @@
         };
         body.appendChild(card);
       });
-      container.appendChild(body);
+      // Strip informativo: seed · character · power del giocatore attivo.
+      var layout = h('div', 'act-layout');
+      var info = actInfo(s, p);
+      if (info) layout.appendChild(info);
+      // Riga: hand | tools | confirm/azioni
+      var row = h('div', 'act-row');
+      var handCol = h('div', 'act-hand'); handCol.appendChild(body); row.appendChild(handCol);
       var panel = objectsPanel(s, playerId);
-      if (panel) container.appendChild(panel);
-      var actions = handActions(s, playerId, mode);
-      setAction((mode === 'select' ? 'Scelta carte — Giocatore ' : 'Mano — Giocatore ') + playerId, container, actions);
+      if (panel) row.appendChild(panel);
+      row.appendChild(handActions(s, playerId, mode));
+      layout.appendChild(row);
+      setAction((mode === 'select' ? 'Scelta carte — Giocatore ' : 'Mano — Giocatore ') + playerId, layout, null);
+    }
+
+    // Strip seed · character · power (potere mostrato per intero, leggibile).
+    function actInfo(s, p) {
+      if (!p.character && !p.belongingSuit) return null;
+      var wrap = h('div', 'act-info');
+      if (p.belongingSuit) { var sd = h('span', 'ai-seed suit-' + p.belongingSuit, SUIT_SYMBOL[p.belongingSuit]); sd.title = 'Seme di appartenenza: ' + SUIT_LABEL[p.belongingSuit]; wrap.appendChild(sd); }
+      if (p.character) wrap.appendChild(h('span', 'ai-char', p.character));
+      if (s.modules.powers && p.character) wrap.appendChild(h('span', 'ai-power', characterPowerDesc(p.character)));
+      return wrap;
     }
 
     function toggleChosen(playerId, cardId) {
@@ -649,6 +703,20 @@
       }
     }
     function clearMatchHints() { var ns = dom.board.querySelectorAll('.match-hint'); for (var i = 0; i < ns.length; i++) ns[i].classList.remove('match-hint'); }
+
+    // Tooltip a posizione fissa: mostrati agganciati al rect del genitore e clampati al viewport (mai tagliati).
+    function bindTip(parent) {
+      var tip = parent.querySelector('.tooltip'); if (!tip) return;
+      parent.addEventListener('mouseenter', function () { showTip(parent, tip); });
+      parent.addEventListener('mouseleave', function () { tip.style.display = 'none'; });
+    }
+    function showTip(parent, tip) {
+      tip.style.display = 'block'; tip.style.visibility = 'hidden'; tip.style.left = '0'; tip.style.top = '0';
+      var r = parent.getBoundingClientRect(), tw = tip.offsetWidth, th = tip.offsetHeight;
+      var left = Math.min(Math.max(8, r.left), Math.max(8, window.innerWidth - tw - 8));
+      var top = r.top - th - 8; if (top < 8) top = r.bottom + 8;
+      tip.style.left = left + 'px'; tip.style.top = top + 'px'; tip.style.visibility = '';
+    }
 
     // Dopo ogni render: anima gli spostamenti pedina (diff), i flip delle carte (diff) e l'eventuale sparo.
     function postRenderAnimations() {

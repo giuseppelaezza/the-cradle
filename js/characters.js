@@ -12,12 +12,16 @@
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
 
-  // type → { suit (seme di appartenenza), startObject (tipo oggetto iniziale) }
+  // type → { suit (seme di appartenenza), startObject (tipo oggetto iniziale), power (descrizione potere) }
   var CHARACTERS = {
-    runner:    { type: 'runner',    suit: 'spade',   startObject: 'jetpack',     label: 'Runner' },
-    brawler:   { type: 'brawler',   suit: 'coppe',   startObject: 'combat_juice', label: 'Brawler' },
-    tactician: { type: 'tactician', suit: 'oro',     startObject: 'timebomb',    label: 'Tactician' },
-    fighter:   { type: 'fighter',   suit: 'bastoni', startObject: 'hook',        label: 'Fighter' }
+    runner:    { type: 'runner',    suit: 'spade',   startObject: 'jetpack',     label: 'Runner',
+                 power: 'Potere: abbina SEMPRE le carte pari — una casella scoperta di valore pari è abbinabile con qualsiasi carta della mano.' },
+    brawler:   { type: 'brawler',   suit: 'coppe',   startObject: 'combat_juice', label: 'Brawler',
+                 power: 'Potere: se ha 3 carte disponibili può scartarle tutte e tre per abbinare QUALSIASI cella (rinuncia a un\'azione).' },
+    tactician: { type: 'tactician', suit: 'oro',     startObject: 'timebomb',    label: 'Tactician',
+                 power: 'Potere: scartando un oggetto usa anche le carte NON scelte in fase di selezione (tutte le carte in mano diventano utilizzabili per il turno).' },
+    fighter:   { type: 'fighter',   suit: 'bastoni', startObject: 'hook',        label: 'Fighter',
+                 power: 'Potere: se con la prima azione di movimento abbina una figura o la pedina avversaria, ottiene una mossa extra al posto dell\'attacco.' }
   };
 
   var ORDER = ['runner', 'brawler', 'tactician', 'fighter'];
