@@ -694,13 +694,23 @@
     function cellEl(x, y) { return dom.board.querySelector('[data-xy="' + x + ',' + y + '"]'); }
     function cellCenter(x, y) { var e = cellEl(x, y); if (!e) return null; var r = e.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }
 
+    // Evidenzia le celle abbinabili dalla carta, tenendo conto di TUTTE le condizioni correnti:
+    // poteri (runner: pari in movimento), seme di turno/appartenenza, e — in fase di movimento —
+    // le celle raggiungibili con l'eventuale modificatore attivo (jetpack/jump).
     function highlightMatches(playerId, card) {
-      if (!ENG || !ui.showMatches) return;
-      var s = game.state, bel = s.players[playerId].belongingSuit;
+      if (!ui.showMatches) return;
+      var s = game.state;
       clearMatchHints();
-      for (var x = 1; x <= 5; x++) for (var y = 1; y <= 5; y++) {
-        if (ENG.canMatch(card, game.getCell(x, y), s.currentSuit, bel)) { var e = cellEl(x, y); if (e) e.classList.add('match-hint'); }
+      var cells = [];
+      if (s.phase === 'move' && s.activePlayer === playerId && ENG) {
+        var pc = game.pawnCell(playerId);
+        if (pc) ENG.moveDestinations(pc.x, pc.y, s.moveModifier).forEach(function (d) { cells.push(d); });
+      } else {
+        for (var x = 1; x <= 5; x++) for (var y = 1; y <= 5; y++) cells.push([x, y]);
       }
+      cells.forEach(function (d) {
+        if (game._matches(playerId, card, game.getCell(d[0], d[1]))) { var e = cellEl(d[0], d[1]); if (e) e.classList.add('match-hint'); }
+      });
     }
     function clearMatchHints() { var ns = dom.board.querySelectorAll('.match-hint'); for (var i = 0; i < ns.length; i++) ns[i].classList.remove('match-hint'); }
 
