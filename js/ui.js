@@ -24,6 +24,45 @@
   function h(tag, cls, txt) { var e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; }
   function isFigureVal(v) { return v >= 8; }
 
+  // Renderer Markdown minimale per il regolamento (titoli, grassetto/codice inline, tabelle,
+  // liste, citazioni, righe orizzontali, blocchi di codice).
+  function mdEsc(t) { return t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function mdInline(t) {
+    return mdEsc(t)
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*([^*]+?)\*/g, '<em>$1</em>')
+      .replace(/`([^`]+)`/g, '<code>$1</code>');
+  }
+  function mdRow(line) { return line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(function (c) { return c.trim(); }); }
+  function mdToHtml(md) {
+    var lines = (md || '').replace(/\r\n/g, '\n').split('\n'), out = [], i = 0;
+    while (i < lines.length) {
+      var line = lines[i];
+      if (/^```/.test(line)) { var buf = []; i++; while (i < lines.length && !/^```/.test(lines[i])) { buf.push(lines[i]); i++; } i++; out.push('<pre class="md-code">' + mdEsc(buf.join('\n')) + '</pre>'); continue; }
+      if (/\|/.test(line) && i + 1 < lines.length && /^\s*\|?[\s:|-]*-[\s:|-]*\|?\s*$/.test(lines[i + 1])) {
+        var header = mdRow(line); i += 2; var rows = [];
+        while (i < lines.length && /\|/.test(lines[i]) && lines[i].trim() !== '') { rows.push(mdRow(lines[i])); i++; }
+        var t = '<table class="md-table"><thead><tr>' + header.map(function (c) { return '<th>' + mdInline(c) + '</th>'; }).join('') + '</tr></thead><tbody>';
+        rows.forEach(function (r) { t += '<tr>' + r.map(function (c) { return '<td>' + mdInline(c) + '</td>'; }).join('') + '</tr>'; });
+        out.push(t + '</tbody></table>'); continue;
+      }
+      var hm = /^(#{1,6})\s+(.*)$/.exec(line);
+      if (hm) { out.push('<h' + hm[1].length + '>' + mdInline(hm[2]) + '</h' + hm[1].length + '>'); i++; continue; }
+      if (/^---+\s*$/.test(line)) { out.push('<hr>'); i++; continue; }
+      if (/^>\s?/.test(line)) { var qb = []; while (i < lines.length && /^>\s?/.test(lines[i])) { qb.push(lines[i].replace(/^>\s?/, '')); i++; } out.push('<blockquote>' + mdInline(qb.join(' ')) + '</blockquote>'); continue; }
+      if (/^\s*([-*]|\d+\.)\s+/.test(line)) {
+        var ordered = /^\s*\d+\./.test(line), items = [];
+        while (i < lines.length && /^\s*([-*]|\d+\.)\s+/.test(lines[i])) { items.push(lines[i].replace(/^\s*([-*]|\d+\.)\s+/, '')); i++; }
+        out.push('<' + (ordered ? 'ol' : 'ul') + '>' + items.map(function (it) { return '<li>' + mdInline(it) + '</li>'; }).join('') + '</' + (ordered ? 'ol' : 'ul') + '>'); continue;
+      }
+      if (line.trim() === '') { i++; continue; }
+      var p = [line]; i++;
+      while (i < lines.length && lines[i].trim() !== '' && !/^(#{1,6}\s|```|---+\s*$|>|\s*([-*]|\d+\.)\s|\|)/.test(lines[i])) { p.push(lines[i]); i++; }
+      out.push('<p>' + mdInline(p.join(' ')) + '</p>');
+    }
+    return out.join('\n');
+  }
+
   function createController(game, opts) {
     opts = opts || {};
     var ui = {
@@ -75,6 +114,9 @@
       var reset = h('button', 'ghost', '↺ Nuova partita');
       reset.onclick = function () { location.reload(); };
       top.appendChild(reset);
+      var rules = h('button', 'ghost', '📖 Regolamento');
+      rules.onclick = openRulesDialog;
+      top.appendChild(rules);
       dom.hud.appendChild(top);
 
       var pl = h('div', 'players');
@@ -337,6 +379,27 @@
       box.appendChild(close);
       back.appendChild(box);
       back.onclick = function (e) { if (e.target === back) back.remove(); };
+      document.body.appendChild(back);
+    }
+
+    // Dialog scrollabile col contenuto del regolamento (markdown → HTML).
+    function openRulesDialog() {
+      var back = h('div', 'dialog-back');
+      var box = h('div', 'dialog rules-dialog');
+      var head = h('div', 'rules-head');
+      head.appendChild(h('h2', null, 'Regolamento'));
+      var x = h('button', 'rules-x', '✕'); x.title = 'Chiudi';
+      var close = function () { back.remove(); document.removeEventListener('keydown', onKey); };
+      x.onclick = close;
+      head.appendChild(x);
+      box.appendChild(head);
+      var content = h('div', 'rules-content');
+      content.innerHTML = mdToHtml((typeof window !== 'undefined' && window.CradleRegolamento) || '# Regolamento non disponibile');
+      box.appendChild(content);
+      back.appendChild(box);
+      back.onclick = function (e) { if (e.target === back) close(); };
+      function onKey(e) { if (e.key === 'Escape') close(); }
+      document.addEventListener('keydown', onKey);
       document.body.appendChild(back);
     }
 
