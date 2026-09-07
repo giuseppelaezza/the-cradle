@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>The Cradle - 0.2</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div class="app">
+    <div id="hud" class="hud"></div>
+
+    <div class="board-wrap">
+      <div class="board-row">
+        <div class="grid-col">
+          <div id="sideTop" class="side-label"></div>
+          <div id="board" class="grid"></div>
+          <div id="sideBottom" class="side-label"></div>
+        </div>
+        <div id="piles" class="piles"></div>
+      </div>
+    </div>
+
+    <!-- Timeline del turno (sopra la scheda della mano) -->
+    <div id="timeline" class="timeline-wrap"></div>
+
+    <div id="action" class="action-wrap"></div>
+
+    <div class="log-wrap">
+      <h2>Log eventi</h2>
+      <div id="log" class="log"></div>
+    </div>
+  </div>
+
+  <!-- Overlay: configurazione iniziale, interstiziali "pass the device", schermata finale -->
+  <div id="overlay" class="overlay" hidden>
+    <div id="sheet" class="sheet"></div>
+  </div>
+
+  <!-- Script classici (nessun build step): apribile via file:// (o server statico) -->
+  <script src="js/deck.js"></script>
+  <script src="js/objects.js"></script>
+  <script src="js/characters.js"></script>
+  <script src="js/engine.js"></script>
+  <script src="js/cpu.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
