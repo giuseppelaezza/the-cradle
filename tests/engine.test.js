@@ -367,9 +367,12 @@ console.log('# Poteri: runner (pari), tactician (apre carte), brawler (wildcard)
   var s = g.state;
   s.currentSuit = 'coppe'; s.players.N.belongingSuit = 'spade';
   var evenCell = { faceDown: false, destroyed: false, card: { value: 6, suit: 'bastoni' } };
-  ok(g._matches('N', { value: 3, suit: 'oro' }, evenCell), 'runner: abbina cella pari con carta qualsiasi');
+  s.phase = 'move';
+  ok(g._matches('N', { value: 3, suit: 'oro' }, evenCell), 'runner (move): abbina cella pari con carta qualsiasi');
   var oddCell = { faceDown: false, destroyed: false, card: { value: 7, suit: 'bastoni' } };
   ok(!g._matches('N', { value: 3, suit: 'oro' }, oddCell), 'runner: NON abbina cella dispari off-suit');
+  s.phase = 'attack';
+  ok(!g._matches('N', { value: 3, suit: 'oro' }, evenCell), 'runner (attack): il potere pari NON è attivo in attacco');
 
   // tactician: attiva potere → availableRevealed = tutta la mano
   var gt = Engine.createGame({ rng: makeRng(5), firstPlayer: 'N', modules: { characters: true, objects: true, powers: true }, characters: { N: 'tactician', S: 'runner' } });

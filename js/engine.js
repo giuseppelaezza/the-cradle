@@ -197,11 +197,12 @@
   };
   Game.prototype.belongingSuit = function (id) { return this.state.players[id].belongingSuit; };
 
-  // Match tenendo conto dei poteri personaggio (runner: abbina sempre le carte pari scoperte).
+  // Match tenendo conto dei poteri personaggio.
+  // Runner: abbina sempre le carte pari scoperte, ma SOLO in fase di movimento.
   Game.prototype._matches = function (playerId, card, cell) {
     var s = this.state, p = s.players[playerId];
     if (canMatch(card, cell, s.currentSuit, p.belongingSuit)) return true;
-    if (s.modules.powers && p.character === 'runner' && cell && !cell.destroyed && cell.card && !cell.faceDown && (cell.card.value % 2 === 0)) return true;
+    if (s.modules.powers && p.character === 'runner' && s.phase === 'move' && cell && !cell.destroyed && cell.card && !cell.faceDown && (cell.card.value % 2 === 0)) return true;
     return false;
   };
 

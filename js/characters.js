@@ -15,7 +15,7 @@
   // type → { suit (seme di appartenenza), startObject (tipo oggetto iniziale), power (descrizione potere) }
   var CHARACTERS = {
     runner:    { type: 'runner',    suit: 'spade',   startObject: 'jetpack',     label: 'Runner',
-                 power: 'Potere: abbina SEMPRE le carte pari — una casella scoperta di valore pari è abbinabile con qualsiasi carta della mano.' },
+                 power: 'Potere: solo in fase di MOVIMENTO abbina sempre le carte pari — una casella scoperta di valore pari è abbinabile con qualsiasi carta della mano.' },
     brawler:   { type: 'brawler',   suit: 'coppe',   startObject: 'combat_juice', label: 'Brawler',
                  power: 'Potere: se ha 3 carte disponibili può scartarle tutte e tre per abbinare QUALSIASI cella (rinuncia a un\'azione).' },
     tactician: { type: 'tactician', suit: 'oro',     startObject: 'timebomb',    label: 'Tactician',

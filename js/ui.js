@@ -66,7 +66,7 @@
       top.appendChild(sp);
       if (s.suitMode === 'rotating') top.appendChild(suitSequence(s.currentSuit));
       var spacer = h('div', 'spacer'); top.appendChild(spacer);
-      top.appendChild(hudCheckbox('Mostra match', ui.showMatches, function (v) { ui.showMatches = v; if (!v) clearMatchHints(); render(); }));
+      top.appendChild(hudCheckbox('Mostra abbinamenti', ui.showMatches, function (v) { ui.showMatches = v; if (!v) clearMatchHints(); render(); }));
       top.appendChild(hudCheckbox('Mostra etichette', ui.showLabels, function (v) { ui.showLabels = v; render(); }));
       var undo = h('button', 'ghost', '↶ Annulla');
       undo.disabled = !game.canUndo();
