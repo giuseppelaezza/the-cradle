@@ -80,6 +80,9 @@
       character: null, belongingSuit: null,
       objects: [],                          // include eventuale oggetto iniziale (fromCharacter)
       pendingActions: { moves: 1, attacks: 1 },
+      energyExtraDiscard: 0,       // scarti extra a fine turno dovuti a Energy Boost
+      reshuffleLeft: 2,            // Modulo Reshuffle: usi rimasti
+      reshuffleTotal: 2,           // Modulo Reshuffle: usi totali (da configurazione)
       // Modulo "poteri personaggi" (§12): stato per-round dei poteri.
       tacticianOpen: false,        // tactician: usa anche le carte non scelte
       fighterFirstMoveDone: false, // fighter: la prima azione di movimento è già avvenuta
@@ -102,7 +105,8 @@
     var suitMode = opts.suitMode === 'rotating' ? 'rotating' : 'fixed';
     var modules = { characters: !!(opts.modules && opts.modules.characters),
                     objects: !!(opts.modules && opts.modules.objects),
-                    powers: !!(opts.modules && opts.modules.powers) };
+                    powers: !!(opts.modules && opts.modules.powers),
+                    reshuffle: !!(opts.modules && opts.modules.reshuffle) };
 
     // 1-4. Mazzo, seme iniziale, asso centrale, griglia.
     var deck = Deck.shuffle(Deck.buildDeck(), rng);
@@ -122,6 +126,10 @@
     grid[5][5].pawn = 'S';
 
     var players = { N: makePlayer('N'), S: makePlayer('S') };
+
+    // Modulo Reshuffle: numero di usi per partita (1-3, default 2).
+    var reshuffleCount = opts.reshuffleCount ? Math.max(1, Math.min(3, opts.reshuffleCount | 0)) : 2;
+    ['N', 'S'].forEach(function (id) { players[id].reshuffleLeft = reshuffleCount; players[id].reshuffleTotal = reshuffleCount; });
 
     // 6-7. Personaggi e oggetto iniziale.
     if (modules.characters) {
@@ -180,9 +188,25 @@
   }
 
   Game.prototype._log = function (m) { this.state.log.push('R' + this.state.round + ' · ' + m); };
-  // Le carte che escono dal gioco finiscono nella pila degli scarti (per la UI; non si rimescola mai).
+  // Le carte che escono dal gioco finiscono nella pila degli scarti.
   Game.prototype._discard = function (card) { if (card) this.state.discard.push(card); };
   Game.prototype.getCell = function (x, y) { return this.state.grid[x][y]; };
+
+  // Se il mazzo è esaurito, rimescola gli scarti per formare un nuovo mazzo (§ regola reshuffle).
+  Game.prototype._reshuffleDiscardIntoDeck = function () {
+    var s = this.state;
+    if (s.deck.length === 0 && s.discard.length) {
+      s.deck = Deck.shuffle(s.discard.slice(), this._rng || Math.random);
+      s.discard = [];
+      this._log('Mazzo esaurito: ' + s.deck.length + ' scarti rimescolati in un nuovo mazzo.');
+    }
+  };
+  // Pesca una carta dal mazzo, rimescolando gli scarti se il mazzo è vuoto. Ritorna null se non ci sono carte.
+  Game.prototype._drawCard = function () {
+    var s = this.state;
+    if (s.deck.length === 0) this._reshuffleDiscardIntoDeck();
+    return s.deck.length ? s.deck.shift() : null;
+  };
 
   Game.prototype.pawnCell = function (id) {
     var g = this.state.grid;
@@ -322,6 +346,7 @@
       s.pendingClash = { attackerId: id, defenderId: otherPlayer(id), x: x, y: y, moveCard: card,
                          attackerCardId: null, defenderCardId: null, whoChooses: id };
       this._log(id + ' attacca ' + otherPlayer(id) + ' su [' + x + ',' + y + '] → clash.');
+      this._clashAdvanceAuto(); // chi non ha carte disponibili non contesta (perde di default)
       return { type: 'clash' };
     }
 
@@ -389,17 +414,38 @@
     if (!findCard(this.availableRevealed(id), cardId)) throw new Error('Carta non disponibile.');
     if (id === pc.attackerId) { pc.attackerCardId = cardId; pc.whoChooses = pc.defenderId; }
     else { pc.defenderCardId = cardId; pc.whoChooses = null; }
+    this._clashAdvanceAuto();
+  };
+
+  // Assegna automaticamente "nessuna carta" a chi, nel clash, non ha carte rivelate disponibili
+  // (le ha già spese in figure/centro): non contesta e perde di default. Risolve quando entrambe le scelte ci sono.
+  Game.prototype._clashAdvanceAuto = function () {
+    var s = this.state, pc = s.pendingClash;
+    if (!pc || s.subPhase !== 'clash-cards') return;
+    while (pc.whoChooses) {
+      var chooser = pc.whoChooses;
+      if (this.availableRevealed(chooser).length > 0) break; // serve una scelta reale: lascia il prompt
+      if (chooser === pc.attackerId) { pc.attackerCardId = 'none'; pc.whoChooses = pc.defenderId; }
+      else { pc.defenderCardId = 'none'; pc.whoChooses = null; }
+      this._log(chooser + ' non ha carte disponibili per il clash: non contesta.');
+    }
     if (pc.attackerCardId && pc.defenderCardId) this._resolveClash();
   };
 
   Game.prototype._resolveClash = function () {
     var s = this.state, pc = s.pendingClash;
-    var attCard = removeCard(s.players[pc.attackerId].hand, pc.attackerCardId);
-    var defCard = removeCard(s.players[pc.defenderId].hand, pc.defenderCardId);
-    this._discard(attCard); this._discard(defCard); // le carte del clash vanno agli scarti
-    var outcome = resolveClash(attCard, defCard);
-    this._log('Clash: ' + pc.attackerId + ' ' + attCard.value + attCard.suit[0].toUpperCase() +
-      ' vs ' + pc.defenderId + ' ' + defCard.value + defCard.suit[0].toUpperCase() + ' → ' + outcome + '.');
+    var attCard = pc.attackerCardId === 'none' ? null : removeCard(s.players[pc.attackerId].hand, pc.attackerCardId);
+    var defCard = pc.defenderCardId === 'none' ? null : removeCard(s.players[pc.defenderId].hand, pc.defenderCardId);
+    if (attCard) this._discard(attCard);
+    if (defCard) this._discard(defCard); // le carte del clash vanno agli scarti
+    // Chi non ha giocato una carta perde il clash; se entrambi senza carta è parità piena.
+    var outcome;
+    if (!attCard && !defCard) outcome = 'tie';
+    else if (!attCard) outcome = 'defender';
+    else if (!defCard) outcome = 'attacker';
+    else outcome = resolveClash(attCard, defCard);
+    function lbl(c) { return c ? (c.value + c.suit[0].toUpperCase()) : '—'; }
+    this._log('Clash: ' + pc.attackerId + ' ' + lbl(attCard) + ' vs ' + pc.defenderId + ' ' + lbl(defCard) + ' → ' + outcome + '.');
     var self = this, dest = s.grid[pc.x][pc.y], attackerId = pc.attackerId;
 
     if (outcome === 'tie') { this._discard(pc.moveCard); this._chain = [this._step_finishClashMove(attackerId)]; this._advanceChain(); return; }
@@ -622,23 +668,28 @@
    * - move:   è il tuo turno di movimento, con azioni disponibili e nessun modificatore già armato.
    * - attack: idem per l'attacco.
    */
+  // Fasi in cui un oggetto è utilizzabile (alcuni oggetti "energetici" valgono sia in movimento sia in attacco).
+  function objPhases(o) { var d = Objects.def(o.type); return (d && d.phases) ? d.phases : [o.phase]; }
+  function objInPhase(o, phase) { return objPhases(o).indexOf(phase) !== -1; }
+
   Game.prototype.usableObjects = function (playerId) {
-    var s = this.state;
+    var s = this.state, self = this;
     if (s.gameOver || !s.modules.objects || s.subPhase) return [];
     var objs = s.players[playerId].objects;
     if (s.phase === 'select') {
       if (s.selected[playerId] != null || s.selectObjectUsed[playerId]) return [];
-      return objs.filter(function (o) { return o.phase === 'select' && !(o.type === 'timebomb' && s.suitMode !== 'rotating'); });
+      return objs.filter(function (o) { return objInPhase(o, 'select') && !(o.type === 'timebomb' && s.suitMode !== 'rotating'); });
     }
-    if (s.phase === 'move') {
-      if (s.activePlayer !== playerId || s.actionsLeft <= 0 || s.moveModifier) return [];
-      return objs.filter(function (o) { return o.phase === 'move'; });
-    }
-    if (s.phase === 'attack') {
-      if (s.activePlayer !== playerId || s.actionsLeft <= 0 || s.attackModifier) return [];
+    if (s.phase === 'move' || s.phase === 'attack') {
+      var mod = s.phase === 'move' ? s.moveModifier : s.attackModifier;
+      if (s.activePlayer !== playerId || s.actionsLeft <= 0) return [];
       return objs.filter(function (o) {
-        if (o.phase !== 'attack') return false;
-        if (o.type === 'randomizer' && s.deck.length === 0) return false; // solo se il mazzo ha carte
+        if (!objInPhase(o, s.phase)) return false;
+        // Un modificatore già armato (jetpack/jump/hook/homing) blocca altri oggetti-modificatore, non gli "immediati".
+        if (mod && o.type !== 'energy_boost' && o.type !== 'energy_drain') return false;
+        if (o.type === 'randomizer' && s.deck.length === 0 && s.discard.length === 0) return false; // serve almeno una carta
+        if (o.type === 'energy_boost' && s.deck.length === 0 && s.discard.length === 0) return false; // niente da pescare
+        if (o.type === 'energy_drain' && s.players[otherPlayer(playerId)].hand.length === 0) return false; // niente da rubare
         return true;
       });
     }
@@ -666,6 +717,28 @@
         if (params.suit && Deck.SUITS.indexOf(params.suit) !== -1) { s.currentSuit = params.suit; this._log('Timebomb: seme di turno → ' + params.suit + '.'); }
         else { s.subPhase = 'timebomb-suit'; s.pendingTimebomb = { playerId: playerId }; } // la UI chiede il seme
         break;
+      // Oggetti "energetici" (movimento o attacco): effetto immediato, non consumano l'azione né armano modificatori.
+      case 'energy_boost': {
+        var p = s.players[playerId], drew = [];
+        for (var eb = 0; eb < 2; eb++) { var c = this._drawCard(); if (c) { p.hand.push(c); p.revealedIds.push(c.id); drew.push(c); } }
+        p.energyExtraDiscard = (p.energyExtraDiscard || 0) + 2;
+        this._log(playerId + ' usa Energy Boost: pesca ' + drew.length + ' carte (usabili ora; 2 scarti extra a fine turno).');
+        break;
+      }
+      case 'energy_drain': {
+        var me = s.players[playerId], opp = s.players[otherPlayer(playerId)];
+        if (opp.hand.length) {
+          // Preferisci rubare una carta NON rivelata dell'avversario, altrimenti una qualsiasi.
+          var pool = opp.hand.filter(function (cc) { return opp.revealedIds.indexOf(cc.id) === -1; });
+          if (!pool.length) pool = opp.hand;
+          var pick = pool[Math.floor((this._rng || Math.random)() * pool.length)];
+          removeCard(opp.hand, pick.id);
+          var ri = opp.revealedIds.indexOf(pick.id); if (ri !== -1) opp.revealedIds.splice(ri, 1);
+          me.hand.push(pick); me.revealedIds.push(pick.id);
+          this._log(playerId + ' usa Energy Drain: ruba una carta dalla mano di ' + otherPlayer(playerId) + ' (usabile ora).');
+        } else this._log(playerId + ' usa Energy Drain: l\'avversario non ha carte.');
+        break;
+      }
       // Oggetti d'attacco interattivi: avviano un sotto-flusso e "consumano" l'azione d'attacco.
       case 'elemental_bomb': s.subPhase = 'elemental-target'; s.pendingElemental = { playerId: playerId }; break;
       case 'barrage': s.subPhase = 'barrage-first'; s.pendingBarrage = { playerId: playerId, first: null }; break;
@@ -708,6 +781,27 @@
     this._log(playerId + ' scarta l\'oggetto ' + obj.type + ' (limite oggetti).');
     s.pendingObjectDiscard = null; s.subPhase = null;
     this._advanceChain();
+  };
+
+  // ================================================================== MODULO RESHUFFLE
+  // Due volte per partita un giocatore può rimescolare la propria mano nel mazzo e pescare 6 carte.
+  // Disponibile durante la propria fase di selezione, prima di scegliere le carte.
+  Game.prototype.canReshuffle = function (playerId) {
+    var s = this.state;
+    if (!s.modules.reshuffle || s.gameOver || s.subPhase) return false;
+    if (s.phase !== 'select' || s.selected[playerId] != null) return false;
+    var p = s.players[playerId];
+    return p.reshuffleLeft > 0 && p.hand.length > 0;
+  };
+  Game.prototype.reshuffleHand = function (playerId) {
+    if (!this.canReshuffle(playerId)) throw new Error('Reshuffle non disponibile ora.');
+    var s = this.state, p = s.players[playerId];
+    p.hand.forEach(function (c) { s.deck.push(c); });
+    p.hand = []; p.revealedIds = []; p.revealedCards = [];
+    Deck.shuffle(s.deck, this._rng || Math.random);
+    for (var i = 0; i < 6; i++) { var c = this._drawCard(); if (c) p.hand.push(c); }
+    p.reshuffleLeft -= 1;
+    this._log(playerId + ' rimescola la mano nel mazzo e pesca ' + p.hand.length + ' carte (reshuffle rimasti: ' + p.reshuffleLeft + ').');
   };
 
   // ================================================================== POTERI PERSONAGGIO (§12)
@@ -869,6 +963,7 @@
     if (s.subPhase !== 'randomizer-select') throw new Error('Nessun randomizer in corso.');
     if (!pr.chosen.length) throw new Error('Scegli almeno una cella.');
     var n = pr.chosen.length;
+    if (s.deck.length === 0) this._reshuffleDiscardIntoDeck(); // mazzo esaurito → usa gli scarti per un mescolamento reale
     pr.chosen.forEach(function (ch) { var c = s.grid[ch.x][ch.y]; s.deck.push(c.card); c.card = null; }); // carte nel mazzo, celle svuotate
     Deck.shuffle(s.deck, this._rng || Math.random);
     pr.drawn = [];
@@ -931,6 +1026,12 @@
         return true;
       });
       p.revealedIds = []; p.revealedCards = [];
+      // Scarti extra dovuti a Energy Boost (2 per uso).
+      var extra = p.energyExtraDiscard || 0;
+      var discarded = 0;
+      for (var e = 0; e < extra && p.hand.length; e++) { self._discard(p.hand.pop()); discarded++; }
+      if (discarded) self._log(id + ' scarta ' + discarded + ' carte extra (Energy Boost).');
+      p.energyExtraDiscard = 0;
       p.pendingActions = { moves: 1, attacks: 1 };
       // Reset dei poteri personaggio a fine round.
       p.tacticianOpen = false; p.fighterFirstMoveDone = false; p.fighterBonusUsed = false; p.fighterQualified = false;
@@ -939,8 +1040,7 @@
 
     s.firstPlayer = otherPlayer(s.firstPlayer);
     ['N', 'S'].forEach(function (id) {
-      var draw = Math.min(3, s.deck.length);
-      for (var i = 0; i < draw; i++) s.players[id].hand.push(s.deck.shift());
+      for (var i = 0; i < 3; i++) { var c = self._drawCard(); if (c) s.players[id].hand.push(c); }
     });
     s.round += 1;
     if (s.suitMode === 'rotating') { s.currentSuit = Deck.nextSuit(s.currentSuit); this._log('Il seme di turno avanza a ' + s.currentSuit + '.'); }
@@ -999,7 +1099,7 @@
   // così un singolo undo annulla l'intero uso dell'oggetto.
   ['selectCards', 'move', 'passMove', 'shoot', 'passShoot', 'clashChoose', 'clashRelocate',
    'clashSkipRelocate', 'forcedRelocate', 'forcedRelocateSkip', 'discardObject', 'useObject',
-   'timebombChoose', 'activatePower', 'brawlerAction'
+   'timebombChoose', 'activatePower', 'brawlerAction', 'reshuffleHand'
   ].forEach(function (name) {
     var orig = Game.prototype[name];
     if (!orig) return; // metodi aggiunti più avanti: verranno avvolti quando esistono

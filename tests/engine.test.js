@@ -78,8 +78,9 @@ console.log('# Economia carte / max 9 round (regressione)');
   }
   ok(s.gameOver, 'partita conclusa');
   eq(s.round, 9, 'arriva al round 9');
-  snap.forEach(function (h) { if (h.round <= 8) { eq(h.N, 6, 'round ' + h.round + ' N=6'); } if (h.round === 9) eq(h.N, 3, 'round 9 N=3'); });
-  eq(s.deck.length, 0, 'mazzo esaurito, nessun rimescolo');
+  // Con la regola di rimescolo (mazzo esaurito → si rimescolano gli scarti) la mano resta sempre a 6.
+  snap.forEach(function (h) { eq(h.N, 6, 'round ' + h.round + ' N=6'); });
+  ok(s.deck.length > 0 || s.discard.length > 0, 'mazzo/scarti mai entrambi esauriti (rimescolo attivo)');
 })();
 
 // -------------------------------------------------------------------- Movimento figura/centro/bersaglio
@@ -431,6 +432,50 @@ console.log('# Oggetti avanzati: elemental bomb, barrage, randomizer');
   var dr = s3.pendingRandomizer.drawn;
   g3.randomizerPlace(dr[0].id, 1, 2); g3.randomizerPlace(dr[1].id, 2, 2); g3.randomizerDone();
   ok(g3.getCell(1, 2).card && g3.getCell(2, 2).card, 'randomizer: celle riempite'); eq(s3.deck.length, deck0, 'randomizer: mazzo di lunghezza invariata');
+})();
+
+// -------------------------------------------------------------------- Reshuffle mazzo / tools energetici / modulo reshuffle
+console.log('# Rimescolo mazzo, Energy Boost/Drain, modulo Reshuffle');
+(function () {
+  // _drawCard rimescola gli scarti quando il mazzo è vuoto.
+  var g = Engine.createGame({ rng: makeRng(5), firstPlayer: 'N' });
+  var s = g.state;
+  s.deck = []; s.discard = [{ id: 'a', value: 4, suit: 'oro' }, { id: 'b', value: 7, suit: 'spade' }];
+  var c = g._drawCard();
+  ok(c && (c.id === 'a' || c.id === 'b'), 'drawCard: pesca da un mazzo rimescolato dagli scarti');
+  eq(s.deck.length + (c ? 1 : 0), 2, 'drawCard: scarti trasferiti nel mazzo');
+  eq(s.discard.length, 0, 'drawCard: scarti svuotati dopo il rimescolo');
+
+  // Energy Boost: pesca 2 carte usabili + 2 scarti extra a fine turno.
+  var gb = Engine.createGame({ rng: makeRng(9), firstPlayer: 'N', modules: { objects: true } });
+  var sb = gb.state; sb.phase = 'move'; sb.activePlayer = 'N'; sb.actionsLeft = 1; sb.moveModifier = null;
+  sb.players.N.objects = [{ id: 'eb', type: 'energy_boost', phase: 'move', fromCharacter: false }];
+  var handBefore = sb.players.N.hand.length;
+  ok(gb.usableObjects('N').some(function (o) { return o.id === 'eb'; }), 'energy boost usabile in movimento');
+  gb.useObject('N', 'eb');
+  eq(sb.players.N.hand.length, handBefore + 2, 'energy boost: +2 carte in mano');
+  eq(sb.players.N.energyExtraDiscard, 2, 'energy boost: 2 scarti extra segnati');
+  ok(sb.players.N.revealedIds.length >= 2, 'energy boost: carte pescate rese disponibili');
+  eq(sb.actionsLeft, 1, 'energy boost: non consuma l\'azione');
+
+  // Energy Drain: ruba una carta dall\'avversario.
+  var gd = Engine.createGame({ rng: makeRng(11), firstPlayer: 'N', modules: { objects: true } });
+  var sd = gd.state; sd.phase = 'attack'; sd.activePlayer = 'N'; sd.actionsLeft = 1; sd.attackModifier = null;
+  sd.players.N.objects = [{ id: 'ed', type: 'energy_drain', phase: 'attack', fromCharacter: false }];
+  var oppBefore = sd.players.S.hand.length, meBefore = sd.players.N.hand.length;
+  gd.useObject('N', 'ed');
+  eq(sd.players.S.hand.length, oppBefore - 1, 'energy drain: -1 carta all\'avversario');
+  eq(sd.players.N.hand.length, meBefore + 1, 'energy drain: +1 carta a me');
+
+  // Modulo Reshuffle: rimescola la mano nel mazzo e pesca 6 (2 usi per partita).
+  var gr = Engine.createGame({ rng: makeRng(13), firstPlayer: 'N', modules: { reshuffle: true } });
+  var sr = gr.state;
+  ok(gr.canReshuffle('N'), 'reshuffle disponibile in selezione');
+  var deckR = sr.deck.length;
+  gr.reshuffleHand('N');
+  eq(sr.players.N.hand.length, 6, 'reshuffle: mano riportata a 6');
+  eq(sr.players.N.reshuffleLeft, 1, 'reshuffle: usi decrementati');
+  eq(sr.deck.length, deckR, 'reshuffle: mazzo di lunghezza netta invariata (6 dentro, 6 fuori)');
 })();
 
 // --------------------------------------------------------------------

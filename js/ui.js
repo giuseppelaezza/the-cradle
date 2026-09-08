@@ -17,12 +17,42 @@
   var OBJ = (typeof window !== 'undefined' && window.CradleObjects) ? window.CradleObjects : null;
   var ENG = (typeof window !== 'undefined' && window.CradleEngine) ? window.CradleEngine : null;
   var CHARS = (typeof window !== 'undefined' && window.CradleCharacters) ? window.CradleCharacters : null;
+  var SUITS = (typeof window !== 'undefined' && window.CradleSuits) ? window.CradleSuits : null;
   // Colore associato a ciascun giocatore (arancione/viola per non confondersi con i semi).
   var PLAYER_COLOR = { N: 'var(--pN)', S: 'var(--pS)' };
+  var PLAYER_TEXT = { N: '#1a1a1a', S: '#ffffff' };
+  // Preferenze di visualizzazione condivise (persistono tra partite nella stessa sessione).
+  var VIEW = { showMatches: true, showLabels: false, cardDouble: false };
 
   function el(id) { return document.getElementById(id); }
   function h(tag, cls, txt) { var e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; }
   function isFigureVal(v) { return v >= 8; }
+  function needsDot(v) { return v === 6 || v === 9; }
+
+  // Simbolo del seme come SVG inline (cerchio centrale colorato; bianco se inverted).
+  function suitIcon(suit, inverted) {
+    var w = h('span', 'suit-ic s-' + suit + (inverted ? ' inv' : ''));
+    if (SUITS) w.innerHTML = SUITS.svg(suit); else w.textContent = SUIT_SYMBOL[suit];
+    return w;
+  }
+  // Faccia di una carta unificata: doppio numero + doppio seme agli angoli (o singolo).
+  // inverted = fondo colorato (figure/centro) → inchiostro/semi bianchi.
+  function cardFace(card, inverted, forceDouble) {
+    var f = h('div', 'cface' + ((forceDouble || VIEW.cardDouble) ? '' : ' single'));
+    function numEl() { var n = h('span', 'cnum' + (needsDot(card.value) ? ' dot' : '')); n.appendChild(h('span', 'cn', String(card.value))); return n; }
+    var tl = h('div', 'corner tl'); tl.appendChild(numEl());
+    var tr = h('div', 'corner tr'); tr.appendChild(suitIcon(card.suit, inverted));
+    var br = h('div', 'corner br'); br.appendChild(numEl());
+    var bl = h('div', 'corner bl'); bl.appendChild(suitIcon(card.suit, inverted));
+    f.appendChild(tl); f.appendChild(tr); f.appendChild(br); f.appendChild(bl);
+    return f;
+  }
+  // Tasto "conferma" colorato col colore del giocatore (come la barra delle fasi del turno).
+  function confirmBtn(label, playerId) {
+    var b = h('button', 'primary btn-confirm', label);
+    if (playerId && PLAYER_COLOR[playerId]) { b.style.background = PLAYER_COLOR[playerId]; b.style.color = PLAYER_TEXT[playerId]; b.style.borderColor = PLAYER_COLOR[playerId]; }
+    return b;
+  }
 
   // Renderer Markdown minimale per il regolamento (titoli, grassetto/codice inline, tabelle,
   // liste, citazioni, righe orizzontali, blocchi di codice).
@@ -68,8 +98,6 @@
     var ui = {
       mode: opts.mode || '2p', cpuId: opts.cpuId || 'S', humanId: (opts.cpuId === 'N' ? 'S' : 'N'),
       cpuTimer: null, gate: null, chosen: [], selectingPlayer: null, clashChooser: null, armedCardId: null,
-      // preferenze di visualizzazione (etichette nascoste di default)
-      showMatches: true, showLabels: false,
       // stato per le animazioni (diff tra render)
       lastPawns: null, lastFaceDown: null, lastRound: null, pendingShot: null, flashingEnd: false, tlSegs: null
     };
@@ -99,14 +127,13 @@
       var top = h('div', 'hud-top');
       top.appendChild(pill('Round', s.round + '/9'));
       top.appendChild(pill('Turno', s.gameOver ? '—' : s.activePlayer));
-      // Seme di turno: unico testo colorato.
+      // Seme di turno: etichetta colorata + icona del seme.
       var sp = h('span', 'pill'); sp.appendChild(document.createTextNode('Seme di turno: '));
-      var suitB = h('b', 'suit-' + s.currentSuit, SUIT_LABEL[s.currentSuit] + ' ' + SUIT_SYMBOL[s.currentSuit]); sp.appendChild(suitB);
+      var suitB = h('b', 'suit-' + s.currentSuit, SUIT_LABEL[s.currentSuit] + ' '); sp.appendChild(suitB);
+      sp.appendChild(suitIcon(s.currentSuit));
       top.appendChild(sp);
       if (s.suitMode === 'rotating') top.appendChild(suitSequence(s.currentSuit));
       var spacer = h('div', 'spacer'); top.appendChild(spacer);
-      top.appendChild(hudCheckbox('Mostra abbinamenti', ui.showMatches, function (v) { ui.showMatches = v; if (!v) clearMatchHints(); render(); }));
-      top.appendChild(hudCheckbox('Mostra etichette', ui.showLabels, function (v) { ui.showLabels = v; render(); }));
       var undo = h('button', 'ghost', '↶ Annulla');
       undo.disabled = !game.canUndo();
       undo.onclick = doUndo;
@@ -114,6 +141,9 @@
       var reset = h('button', 'ghost', '↺ Nuova partita');
       reset.onclick = function () { location.reload(); };
       top.appendChild(reset);
+      var opts = h('button', 'ghost', '⚙️ Opzioni');
+      opts.onclick = openOptionsDialog;
+      top.appendChild(opts);
       var rules = h('button', 'ghost', '📖 Regolamento');
       rules.onclick = openRulesDialog;
       top.appendChild(rules);
@@ -136,19 +166,13 @@
     }
 
     function pill(label, val) { var p = h('span', 'pill'); p.appendChild(document.createTextNode(label + ': ')); p.appendChild(h('b', null, val)); return p; }
-    function hudCheckbox(label, checked, onToggle) {
-      var l = h('label', 'hud-check');
-      var cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = checked;
-      cb.onchange = function () { onToggle(cb.checked); };
-      l.appendChild(cb); l.appendChild(document.createTextNode(' ' + label));
-      return l;
-    }
 
     function suitSequence(current) {
       var wrap = h('span', 'pill seq');
       ['oro', 'spade', 'coppe', 'bastoni'].forEach(function (su, i) {
         if (i) wrap.appendChild(h('span', 'seq-arrow', '→'));
-        var b = h('span', 'seq-suit suit-' + su + (su === current ? ' cur' : ''), SUIT_SYMBOL[su]);
+        // Seme corrente: pallino pieno del colore del seme + simbolo bianco (inv).
+        var b = suitIcon(su, su === current); b.classList.add('seq-suit'); if (su === current) b.classList.add('cur');
         wrap.appendChild(b);
       });
       return wrap;
@@ -160,15 +184,15 @@
 
       // Banda verticale "first player" a sinistra (evidenziata per il Primo Giocatore).
       var band = h('div', 'pc-first' + (s.firstPlayer === id ? ' on' : ''));
-      if (s.firstPlayer === id) band.textContent = 'first player';
+      if (s.firstPlayer === id) band.textContent = '1° giocatore';
       card.appendChild(band);
 
       var body = h('div', 'pc-body');
 
       // ---- Riga superiore: seed | nome + punti/trofei | badge CPU ----
       var top = h('div', 'pc-top');
-      var seed = h('div', 'pc-seed' + (p.belongingSuit ? ' suit-' + p.belongingSuit : ''));
-      if (p.belongingSuit) { seed.textContent = SUIT_SYMBOL[p.belongingSuit]; seed.title = 'Seme di appartenenza: ' + SUIT_LABEL[p.belongingSuit]; }
+      var seed = h('div', 'pc-seed' + (p.belongingSuit ? '' : ' empty'));
+      if (p.belongingSuit) { var sb = h('span', 'seed-badge bg-' + p.belongingSuit); sb.appendChild(suitIcon(p.belongingSuit, true)); seed.appendChild(sb); seed.title = 'Seme di appartenenza: ' + SUIT_LABEL[p.belongingSuit]; }
       else seed.textContent = '—';
       top.appendChild(seed);
 
@@ -224,10 +248,24 @@
     }
 
     function miniCard(c, used) {
-      var m = h('span', 'mini card-mini ' + (isFigureVal(c.value) ? 'inv suit-bg-' + c.suit : 'suit-' + c.suit) + (used ? ' used' : ''));
-      m.appendChild(h('span', 'mv', String(c.value) + (isFigureVal(c.value) ? '' : '')));
-      m.appendChild(h('span', 'ms', SUIT_SYMBOL[c.suit]));
+      var inv = isFigureVal(c.value);
+      var m = h('span', 'mini' + (inv ? ' inv suit-bg-' + c.suit : ' suit-' + c.suit) + (used ? ' used' : ''));
+      m.appendChild(cardFace(c, inv));
       return m;
+    }
+    // Carta di anteprima a grandezza mano (per il dialog Opzioni).
+    function bigPreviewCard(c) {
+      var inv = isFigureVal(c.value);
+      var card = h('div', 'card' + (inv ? ' inv suit-bg-' + c.suit : ''));
+      card.appendChild(cardFace(c, inv));
+      return card;
+    }
+    // Carta grande e leggibile per rivelare una carta coperta (tooltip): sempre doppio numero+seme.
+    function revealCard(c) {
+      var inv = isFigureVal(c.value);
+      var card = h('div', 'card reveal-card' + (inv ? ' inv suit-bg-' + c.suit : ''));
+      card.appendChild(cardFace(c, inv, true));
+      return card;
     }
 
     // Chip degli oggetti posseduti (con tooltip), inseriti in `container`.
@@ -270,8 +308,8 @@
 
     // ---- Board ----
     function renderBoard(s) {
-      dom.sideTop.textContent = ui.showLabels ? 'Nord' : '';
-      dom.sideBottom.textContent = ui.showLabels ? 'Sud' : '';
+      dom.sideTop.textContent = VIEW.showLabels ? 'Nord' : '';
+      dom.sideBottom.textContent = VIEW.showLabels ? 'Sud' : '';
       dom.board.innerHTML = '';
       var selectable = currentSelectableCells(s);
       var relocKeys = {}, pick = {}, chosenKeys = {}, dropKeys = {};
@@ -307,12 +345,12 @@
 
         var c = h('div', cls);
         c.setAttribute('data-xy', key);
-        if (ui.showLabels) c.appendChild(h('div', 'coord', '[' + x + ',' + y + ']'));
         if (cell.destroyed) { c.appendChild(h('div', 'destroyed-mark', '✖')); }
         else if (!isPending) {
-          c.appendChild(h('div', 'value', String(shownCard.value) + (invert ? ' ' : '')));
-          c.appendChild(h('div', 'suit', SUIT_SYMBOL[shownCard.suit]));
+          var faceDownNow = !placedCard && cell.faceDown;
+          if (!faceDownNow) c.appendChild(cardFace(shownCard, invert));
         }
+        if (VIEW.showLabels) c.appendChild(h('div', 'coord', '[' + x + ',' + y + ']'));
         if (cell.pawn) {
           c.appendChild(h('div', 'cell-ring ' + cell.pawn)); // outline colorato della cella con pedina
           c.appendChild(h('div', 'pawn ' + cell.pawn, cell.pawn));
@@ -353,17 +391,21 @@
     // ---- Deck + pila scarti accanto alla griglia ----
     function renderPiles(s) {
       dom.piles.innerHTML = '';
-      var deck = h('div', 'pile deck');
-      deck.appendChild(h('div', 'pile-label', 'Mazzo'));
-      deck.appendChild(h('div', 'pile-count', String(s.deck.length)));
-      deck.appendChild(h('div', 'pile-sub', 'carte'));
-      dom.piles.appendChild(deck);
-      var disc = h('div', 'pile discard');
-      disc.appendChild(h('div', 'pile-label', 'Scarti'));
-      disc.appendChild(h('div', 'pile-count', String(s.discard.length)));
-      disc.appendChild(h('div', 'pile-sub', 'clic per vedere'));
+      // Mazzo: dorso della carta + conteggio.
+      var deckWrap = h('div', 'pile-wrap');
+      var deck = h('div', 'pile deck' + (s.deck.length ? '' : ' empty'));
+      var db = h('div', 'pile-badge'); db.appendChild(h('b', null, String(s.deck.length))); deck.appendChild(db);
+      deckWrap.appendChild(deck); deckWrap.appendChild(h('div', 'pile-cap', 'Mazzo'));
+      dom.piles.appendChild(deckWrap);
+      // Scarti: carta in cima + conteggio, cliccabile.
+      var discWrap = h('div', 'pile-wrap');
+      var top = s.discard.length ? s.discard[s.discard.length - 1] : null;
+      var disc = h('div', 'pile discard' + (top ? (isFigureVal(top.value) ? ' inv suit-bg-' + top.suit : '') : ' empty'));
+      if (top) disc.appendChild(cardFace(top, isFigureVal(top.value)));
+      var xb = h('div', 'pile-badge'); xb.appendChild(h('b', null, String(s.discard.length))); disc.appendChild(xb);
       disc.onclick = function () { openDiscardDialog(s); };
-      dom.piles.appendChild(disc);
+      discWrap.appendChild(disc); discWrap.appendChild(h('div', 'pile-cap', 'Scarti'));
+      dom.piles.appendChild(discWrap);
     }
 
     function openDiscardDialog(s) {
@@ -403,9 +445,56 @@
       document.body.appendChild(back);
     }
 
+    // Dialog "Opzioni": raccoglie i checkbox di visualizzazione (layout carte, abbinamenti, etichette).
+    function openOptionsDialog() {
+      var back = h('div', 'dialog-back');
+      var box = h('div', 'dialog rules-dialog');
+      var head = h('div', 'rules-head');
+      head.appendChild(h('h2', null, 'Opzioni'));
+      var x = h('button', 'rules-x', '✕'); x.title = 'Chiudi';
+      var close = function () { back.remove(); document.removeEventListener('keydown', onKey); };
+      x.onclick = close; head.appendChild(x); box.appendChild(head);
+
+      var content = h('div', 'opt-content');
+      function optCheck(title, desc, checked, onChange) {
+        var l = h('label', 'opt-check');
+        var cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = checked;
+        cb.onchange = function () { onChange(cb.checked); render(); };
+        var txt = h('span', 'oc-txt'); txt.appendChild(h('span', 'oc-title', title)); if (desc) txt.appendChild(h('span', 'oc-desc', desc));
+        l.appendChild(cb); l.appendChild(txt); return l;
+      }
+
+      var gCards = h('div', 'opt-group'); gCards.appendChild(h('h3', null, 'Carte'));
+      // Anteprima live delle due modalità (una carta normale + una figura).
+      var prev = h('div', 'opt-preview');
+      function refreshPrev() { prev.innerHTML = ''; prev.appendChild(bigPreviewCard({ id: 'p1', value: 6, suit: 'oro' })); prev.appendChild(bigPreviewCard({ id: 'p2', value: 10, suit: 'spade' })); }
+      gCards.appendChild(optCheck('Doppio numero e seme',
+        'Numero e seme ripetuti agli angoli, leggibili da entrambi i lati. Deseleziona per mostrare un solo numero e seme (copie sottosopra nascoste).',
+        VIEW.cardDouble, function (v) { VIEW.cardDouble = v; refreshPrev(); }));
+      refreshPrev();
+      gCards.appendChild(prev);
+      content.appendChild(gCards);
+
+      var gBoard = h('div', 'opt-group'); gBoard.appendChild(h('h3', null, 'Campo di gioco'));
+      gBoard.appendChild(optCheck('Mostra abbinamenti',
+        'Evidenzia sul campo le celle abbinabili quando passi il mouse su una carta della mano.',
+        VIEW.showMatches, function (v) { VIEW.showMatches = v; if (!v) clearMatchHints(); }));
+      gBoard.appendChild(optCheck('Mostra etichette',
+        'Mostra le etichette Nord/Sud e le coordinate delle caselle.',
+        VIEW.showLabels, function (v) { VIEW.showLabels = v; }));
+      content.appendChild(gBoard);
+
+      box.appendChild(content);
+      back.appendChild(box);
+      back.onclick = function (e) { if (e.target === back) close(); };
+      function onKey(e) { if (e.key === 'Escape') close(); }
+      document.addEventListener('keydown', onKey);
+      document.body.appendChild(back);
+    }
+
     // ---- Timeline del turno (persistente per animare le transizioni) ----
     var TL_ORDER = ['select', 'move1', 'move2', 'attack1', 'attack2', 'end'];
-    var TL_LABEL = { select: 'Scelta carte', move1: 'Mov. G1', move2: 'Mov. G2', attack1: 'Att. G1', attack2: 'Att. G2', end: 'Fine turno' };
+    var TL_LABEL = { select: 'Scelta carte', move1: 'Movimento G1', move2: 'Movimento G2', attack1: 'Attacco G1', attack2: 'Attacco G2', end: 'Fine turno' };
     function tlColorFor(key, s) {
       if (key === 'move1' || key === 'attack1') return PLAYER_COLOR[s.firstPlayer];
       if (key === 'move2' || key === 'attack2') return PLAYER_COLOR[s.firstPlayer === 'N' ? 'S' : 'N'];
@@ -522,7 +611,8 @@
     function renderSuitChoice(title, onPick) {
       var body = h('div', 'choices');
       ['oro', 'spade', 'coppe', 'bastoni'].forEach(function (su) {
-        var b = h('button', 'primary suit-' + su, SUIT_LABEL[su] + ' ' + SUIT_SYMBOL[su]);
+        var b = h('button', 'primary', SUIT_LABEL[su] + ' ');
+        b.appendChild(suitIcon(su));
         b.onclick = function () { onPick(su); };
         body.appendChild(b);
       });
@@ -540,7 +630,7 @@
       var pr = s.pendingRandomizer;
       var body = h('div', 'hint', 'Clicca fino a 3 celle da rimescolare. Selezionate: ' + pr.chosen.length + '/3.');
       var actions = h('div', 'act-actions');
-      var conf = h('button', 'primary', 'Conferma (' + pr.chosen.length + ')');
+      var conf = confirmBtn('Conferma (' + pr.chosen.length + ')', s.activePlayer);
       conf.disabled = pr.chosen.length === 0;
       conf.onclick = function () { game.randomizerConfirm(); render(); };
       actions.appendChild(conf);
@@ -563,7 +653,7 @@
       if (!tray.children.length) tray.appendChild(h('span', 'hint', 'Tutte le carte sono posizionate.'));
       body.appendChild(tray);
       var actions = h('div', 'act-actions');
-      var conf = h('button', 'primary', 'Conferma');
+      var conf = confirmBtn('Conferma', s.activePlayer);
       conf.disabled = Object.keys(pr.placed).length !== pr.chosen.length;
       conf.onclick = function () { ui.selectedDrawn = null; game.randomizerDone(); render(); };
       actions.appendChild(conf);
@@ -621,20 +711,27 @@
       cards.forEach(function (c) {
         var revealed = p.revealedIds.indexOf(c.id) !== -1;
         var avail = game.availableRevealed(playerId).some(function (x) { return x.id === c.id; });
-        var cls = 'card ' + (isFigureVal(c.value) ? 'inv suit-bg-' + c.suit : 'suit-' + c.suit);
-        var showFace = true;
+        var isFig = isFigureVal(c.value);
+        var showFace = mode === 'select' ? true : avail;
+        // Il colore/fondo carta si applica SOLO quando la faccia è visibile: le carte coperte
+        // (non scelte) hanno tutte lo stesso dorso, anche le figure.
+        var cls = 'card';
+        if (showFace) cls += ' ' + (isFig ? 'inv suit-bg-' + c.suit : 'suit-' + c.suit);
         if (mode === 'select') { cls += ' selectable'; if (ui.chosen.indexOf(c.id) !== -1) cls += ' chosen'; }
         else {
-          // Usabile ADESSO = in availableRevealed (include le carte extra aperte dal potere tactician).
-          if (avail) { cls += ' selectable'; cls += revealed ? ' revealed' : ' extra'; }
-          else { cls += ' hidden-card'; showFace = false; }
+          if (avail) { cls += ' selectable ' + (revealed ? 'revealed' : 'extra'); }
+          else { cls += ' hidden-card'; }
           if (ui.armedCardId === c.id) cls += ' armed';
         }
         var card = h('div', cls);
         if (showFace) {
-          card.appendChild(h('div', 'v', String(c.value) + (isFigureVal(c.value) ? '' : ''))); card.appendChild(h('div', 's', SUIT_SYMBOL[c.suit]));
+          card.appendChild(cardFace(c, isFig));
           // Hover: evidenzia sul campo tutte le celle abbinabili da questa carta.
           (function (cc) { card.onmouseenter = function () { highlightMatches(playerId, cc); }; card.onmouseleave = clearMatchHints; })(c);
+        } else {
+          // Carta coperta (non scelta): hover per rivelarla (tooltip con valore e seme leggibili).
+          var tip = h('span', 'tooltip card-tip'); tip.appendChild(revealCard(c));
+          card.appendChild(tip); bindTip(card);
         }
         card.onclick = function () {
           if (mode === 'select') toggleChosen(playerId, c.id);
@@ -660,7 +757,7 @@
     function actInfo(s, p) {
       if (!p.character && !p.belongingSuit) return null;
       var wrap = h('div', 'act-info');
-      if (p.belongingSuit) { var sd = h('span', 'ai-seed suit-' + p.belongingSuit, SUIT_SYMBOL[p.belongingSuit]); sd.title = 'Seme di appartenenza: ' + SUIT_LABEL[p.belongingSuit]; wrap.appendChild(sd); }
+      if (p.belongingSuit) { var sd = h('span', 'ai-seed bg-' + p.belongingSuit); sd.appendChild(suitIcon(p.belongingSuit, true)); sd.title = 'Seme di appartenenza: ' + SUIT_LABEL[p.belongingSuit]; wrap.appendChild(sd); }
       if (p.character) wrap.appendChild(h('span', 'ai-char', p.character));
       if (s.modules.powers && p.character) wrap.appendChild(h('span', 'ai-power', characterPowerDesc(p.character)));
       return wrap;
@@ -677,11 +774,30 @@
       var wrap = h('div', 'act-actions');
       if (mode === 'select') {
         var need = game.selectCount(playerId);
-        wrap.appendChild(h('span', 'hint', 'Scegli ' + need + ' carte (' + ui.chosen.length + '/' + need + '), segrete.'));
-        var conf = h('button', 'primary', 'Conferma');
+        wrap.appendChild(h('span', 'hint', 'Scegli ' + need + ' carte (' + ui.chosen.length + '/' + need + ')'));
+        var conf = confirmBtn('Conferma', playerId);
         conf.disabled = ui.chosen.length !== need;
         conf.onclick = function () { game.selectCards(playerId, ui.chosen.slice()); ui.selectingPlayer = null; ui.chosen = []; render(); };
         wrap.appendChild(conf);
+        // Modulo Reshuffle: bottone + cerchi (usi rimasti = pieni, usati = solo contorno; colore del giocatore).
+        if (s.modules.reshuffle) {
+          var pr = s.players[playerId], total = pr.reshuffleTotal || 0, left = pr.reshuffleLeft || 0;
+          var ctl = h('div', 'reshuffle-ctl');
+          var rs = h('button', 'ghost rs-btn', 'Reshuffle');
+          rs.disabled = !(game.canReshuffle && game.canReshuffle(playerId));
+          rs.title = 'Rimescola la tua mano nel mazzo e pesca 6 carte.';
+          rs.onclick = function () { game.reshuffleHand(playerId); ui.chosen = []; render(); };
+          ctl.appendChild(rs);
+          var dots = h('div', 'rs-dots');
+          for (var di = 0; di < total; di++) {
+            var d = h('span', 'rs-dot' + (di < left ? ' on' : ''));
+            d.style.setProperty('--rc', PLAYER_COLOR[playerId]);
+            d.title = (di < left ? 'Reshuffle disponibile' : 'Reshuffle usato');
+            dots.appendChild(d);
+          }
+          ctl.appendChild(dots);
+          wrap.appendChild(ctl);
+        }
       } else {
         var word = s.phase === 'move' ? 'muovere' : 'attaccare';
         var list = s.phase === 'move' ? game.legalMoves(playerId) : game.legalShots(playerId);
@@ -711,7 +827,7 @@
       var body = h('div', 'hand');
       choices.forEach(function (c) {
         var card = h('div', 'card selectable ' + (isFigureVal(c.value) ? 'inv suit-bg-' + c.suit : 'suit-' + c.suit) + (ui.armedCardId === c.id ? ' armed' : ''));
-        card.appendChild(h('div', 'v', String(c.value) + (isFigureVal(c.value) ? '' : ''))); card.appendChild(h('div', 's', SUIT_SYMBOL[c.suit]));
+        card.appendChild(cardFace(c, isFigureVal(c.value)));
         card.onclick = function () { game.clashChoose(chooser, c.id); ui.clashChooser = null; render(); };
         body.appendChild(card);
       });
@@ -761,7 +877,7 @@
     // poteri (runner: pari in movimento), seme di turno/appartenenza, e — in fase di movimento —
     // le celle raggiungibili con l'eventuale modificatore attivo (jetpack/jump).
     function highlightMatches(playerId, card) {
-      if (!ui.showMatches) return;
+      if (!VIEW.showMatches) return;
       var s = game.state;
       clearMatchHints();
       var cells = [];

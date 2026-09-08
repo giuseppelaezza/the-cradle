@@ -11,20 +11,24 @@
   var overlay = document.getElementById('overlay');
   var sheet = document.getElementById('sheet');
 
-  // Stato della configurazione.
-  var cfg = { opponent: 'cpu', suitMode: 'rotating', characters: true, objects: true, powers: true, charN: 'runner', charS: 'brawler' };
+  // Stato della configurazione. I poteri seguono automaticamente il modulo Personaggi.
+  var cfg = { opponent: 'cpu', suitMode: 'rotating', characters: true, objects: true, reshuffle: false, reshuffleCount: 2, charN: 'runner', charS: 'brawler' };
 
   function h(tag, cls, txt) { var e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; }
 
   function renderConfig() {
+    document.body.classList.add('setup');
     sheet.innerHTML = '';
-    sheet.appendChild(h('h2', null, 'The Cradle — Configurazione partita'));
+    var logo = document.createElement('img');
+    logo.className = 'setup-logo'; logo.src = 'assets/logo.svg'; logo.alt = 'The Cradle';
+    sheet.appendChild(logo);
+    sheet.appendChild(h('p', 'setup-sub', 'Configurazione partita'));
 
     // Avversario
     sheet.appendChild(fieldLabel('Avversario'));
     var opp = h('div', 'cfg-row');
-    opp.appendChild(radio('opp', '👥 Hot Seat', cfg.opponent === '2p', function () { cfg.opponent = '2p'; }));
-    opp.appendChild(radio('opp', '🤖 VS CPU', cfg.opponent === 'cpu', function () { cfg.opponent = 'cpu'; }));
+    opp.appendChild(radio('opp', 'Hot Seat', cfg.opponent === '2p', function () { cfg.opponent = '2p'; }));
+    opp.appendChild(radio('opp', 'VS CPU', cfg.opponent === 'cpu', function () { cfg.opponent = 'cpu'; }));
     sheet.appendChild(opp);
 
     // Modalità seme (dropdown)
@@ -36,14 +40,24 @@
     sel.onchange = function () { cfg.suitMode = sel.value; renderConfig(); };
     sheet.appendChild(sel);
 
-    // Moduli
+    // Moduli (i poteri sono attivati automaticamente col modulo Personaggi)
     sheet.appendChild(fieldLabel('Moduli'));
     var mods = h('div', 'cfg-row');
     mods.appendChild(checkbox('Personaggi', cfg.characters, function (v) { cfg.characters = v; renderConfig(); }));
     mods.appendChild(checkbox('Oggetti', cfg.objects, function (v) { cfg.objects = v; renderConfig(); }));
-    mods.appendChild(checkbox('Poteri personaggi', cfg.powers, function (v) { cfg.powers = v; renderConfig(); }));
     sheet.appendChild(mods);
-    if (cfg.powers && !cfg.characters) sheet.appendChild(h('p', 'note', 'I poteri richiedono il modulo Personaggi per avere effetto.'));
+
+    // Regole addizionali
+    sheet.appendChild(fieldLabel('Regole addizionali'));
+    var addl = h('div', 'cfg-row');
+    addl.appendChild(checkbox('Reshuffle', cfg.reshuffle, function (v) { cfg.reshuffle = v; renderConfig(); }));
+    if (cfg.reshuffle) {
+      var rc = h('select', 'cfg-select');
+      [1, 2, 3].forEach(function (n) { var op = h('option', null, String(n)); op.value = n; if (cfg.reshuffleCount === n) op.selected = true; rc.appendChild(op); });
+      rc.onchange = function () { cfg.reshuffleCount = parseInt(rc.value, 10); };
+      addl.appendChild(rc);
+    }
+    sheet.appendChild(addl);
 
     // Scelta personaggi (solo se modulo attivo) — via menu a tendina.
     if (cfg.characters) {
@@ -96,7 +110,8 @@
   function startGame() {
     var opts = {
       suitMode: cfg.suitMode,
-      modules: { characters: cfg.characters, objects: cfg.objects, powers: cfg.powers },
+      modules: { characters: cfg.characters, objects: cfg.objects, powers: cfg.characters, reshuffle: cfg.reshuffle },
+      reshuffleCount: cfg.reshuffleCount,
       characters: { N: cfg.charN, S: cfg.charS }
     };
     var game = window.CradleEngine.createGame(opts);
@@ -108,6 +123,7 @@
 
     var controller = window.CradleUI.createController(game, { mode: cfg.opponent, cpuId: 'S' });
     window.__cradle = { game: game, controller: controller };
+    document.body.classList.remove('setup');
     overlay.hidden = true;
     controller.render();
   }

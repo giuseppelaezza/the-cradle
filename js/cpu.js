@@ -180,6 +180,14 @@
     return best;
   }
 
+  // Reshuffle (modulo): rimescola se con l'intera mano non è raggiungibile alcun punto.
+  function cpuShouldReshuffle(game, id) {
+    var p = game.state.players[id];
+    var a = bestArrival(game, id, p.hand, null).value;
+    var sh = bestShotWith(game, id, p.hand).value;
+    return Math.max(a, sh) === 0;
+  }
+
   // Oggetto da usare in fase di selezione (timebomb / combat / rush).
   function chooseSelectObject(game, id) {
     var s = game.state, p = s.players[id], usable = game.usableObjects(id);
@@ -297,6 +305,7 @@
 
     // --- selezione ---
     if (s.phase === 'select' && s.selected[id] == null) {
+      if (game.canReshuffle && game.canReshuffle(id) && cpuShouldReshuffle(game, id)) { game.reshuffleHand(id); return {}; }
       var so = chooseSelectObject(game, id);
       if (so) { game.useObject(id, so.id, so.params || {}); return {}; }
       game.selectCards(id, chooseSelection(game, id)); return {};

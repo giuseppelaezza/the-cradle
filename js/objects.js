@@ -51,11 +51,19 @@
     },
     randomizer: {
       type: 'randomizer', phase: 'attack', label: 'Randomizer',
-      desc: 'Attacco (rinunci all\'attacco, solo se il mazzo ha carte): scegli fino a 3 celle; le loro carte tornano nel mazzo, si mescola, si pescano altrettante carte da ricollocare in quelle celle.'
+      desc: 'Attacco (rinunci all\'attacco, solo se mazzo o scarti hanno carte): scegli fino a 3 celle; le loro carte tornano nel mazzo, si mescola (se il mazzo è vuoto si rimescolano gli scarti), si pescano altrettante carte da ricollocare in quelle celle.'
+    },
+    energy_boost: {
+      type: 'energy_boost', phase: 'move', phases: ['move', 'attack'], label: 'Energy Boost',
+      desc: 'Movimento o attacco: pesca 2 carte dal mazzo e puoi usarle in questa mano. Se usi questo tool scarti 2 carte extra alla fine del turno.'
+    },
+    energy_drain: {
+      type: 'energy_drain', phase: 'move', phases: ['move', 'attack'], label: 'Energy Drain',
+      desc: 'Movimento o attacco: ruba una carta dalla mano dell\'avversario (la puoi usare in questa mano).'
     }
   };
 
-  var ALL_TYPES = ['jetpack', 'jump', 'hook', 'homing_missile', 'rush_juice', 'combat_juice', 'timebomb', 'elemental_bomb', 'barrage', 'randomizer'];
+  var ALL_TYPES = ['jetpack', 'jump', 'hook', 'homing_missile', 'rush_juice', 'combat_juice', 'timebomb', 'elemental_bomb', 'barrage', 'randomizer', 'energy_boost', 'energy_drain'];
 
   function def(type) { return OBJECT_DEFS[type] || null; }
 
