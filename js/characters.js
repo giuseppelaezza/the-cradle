@@ -15,13 +15,13 @@
   // type → { suit (seme di appartenenza), startObject (tipo oggetto iniziale), power (descrizione potere) }
   var CHARACTERS = {
     runner:    { type: 'runner',    suit: 'spade',   startObject: 'jetpack',     label: 'Runner',
-                 power: 'Potere: solo in fase di MOVIMENTO abbina sempre le carte pari — una casella scoperta di valore pari è abbinabile con qualsiasi carta della mano.' },
+                 power: 'Potere: solo in fase di MOVIMENTO abbina le carte PARI tra di loro — una carta pari in mano abbina una casella scoperta di valore pari (es. 2 con 4, 4 con 8, 2 con 6).' },
     brawler:   { type: 'brawler',   suit: 'coppe',   startObject: 'combat_juice', label: 'Brawler',
                  power: 'Potere: se ha 3 carte disponibili può scartarle tutte e tre per abbinare QUALSIASI cella (rinuncia a un\'azione).' },
     tactician: { type: 'tactician', suit: 'oro',     startObject: 'timebomb',    label: 'Tactician',
-                 power: 'Potere: scartando un oggetto usa anche le carte NON scelte in fase di selezione (tutte le carte in mano diventano utilizzabili per il turno).' },
+                 power: 'Potere: fino a 2 volte per partita usa anche le carte NON scelte in fase di selezione (tutte le carte in mano diventano utilizzabili per il turno).' },
     fighter:   { type: 'fighter',   suit: 'bastoni', startObject: 'hook',        label: 'Fighter',
-                 power: 'Potere: se con la prima azione di movimento abbina una figura o la pedina avversaria, ottiene una mossa extra al posto dell\'attacco.' }
+                 power: 'Potere: solo in fase di ATTACCO abbina le carte PARI tra di loro — una carta pari in mano abbina una casella scoperta di valore pari (es. 2 con 4, 4 con 8, 2 con 6).' }
   };
 
   var ORDER = ['runner', 'brawler', 'tactician', 'fighter'];

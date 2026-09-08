@@ -47,6 +47,18 @@
     f.appendChild(tl); f.appendChild(tr); f.appendChild(br); f.appendChild(bl);
     return f;
   }
+  // Indicatore usi rimasti (rettangoli stondati: pieni = disponibili, vuoti = usati), colore del giocatore.
+  function usesDots(total, left, playerId, extraCls) {
+    var d = h('div', 'uses-dots' + (extraCls ? ' ' + extraCls : ''));
+    for (var i = 0; i < total; i++) {
+      var dot = h('span', 'uses-dot' + (i < left ? ' on' : ''));
+      if (playerId && PLAYER_COLOR[playerId]) dot.style.setProperty('--rc', PLAYER_COLOR[playerId]);
+      dot.title = (i < left ? 'disponibile' : 'usato');
+      d.appendChild(dot);
+    }
+    return d;
+  }
+
   // Tasto "conferma" colorato col colore del giocatore (come la barra delle fasi del turno).
   function confirmBtn(label, playerId) {
     var b = h('button', 'primary btn-confirm', label);
@@ -101,7 +113,7 @@
       // stato per le animazioni (diff tra render)
       lastPawns: null, lastFaceDown: null, lastRound: null, pendingShot: null, flashingEnd: false, tlSegs: null
     };
-    function isCpu(id) { return ui.mode === 'cpu' && id === ui.cpuId; }
+    function isCpu(id) { return (ui.mode === 'cpu' && id === ui.cpuId) || ui.mode === 'cpucpu'; }
 
     var dom = {
       hud: el('hud'), board: el('board'), sideTop: el('sideTop'), sideBottom: el('sideBottom'),
@@ -204,6 +216,13 @@
       st2.title = 'Figure ' + p.figuresMatched + (p.matchedCenter ? ' · ★ Centro' : '');
       stats.appendChild(st1); stats.appendChild(st2);
       main.appendChild(stats);
+      // Modulo Reshuffle: usi rimasti accanto a nome/punti.
+      if (s.modules.reshuffle) {
+        var rr = h('div', 'pc-reshuffle');
+        rr.appendChild(h('span', 'pc-reshuffle-lbl', 'Reshuffle'));
+        rr.appendChild(usesDots(p.reshuffleTotal, p.reshuffleLeft, id, 'pc-uses'));
+        main.appendChild(rr);
+      }
       top.appendChild(main);
       if (isCpu(id)) top.appendChild(h('div', 'pc-cpu', 'CPU'));
       body.appendChild(top);
@@ -214,6 +233,7 @@
       var chCell = h('div', 'pc-cell pc-char');
       if (p.character) {
         chCell.appendChild(h('span', 'pc-char-name', p.character));
+        if (s.modules.powers && p.character === 'tactician') chCell.appendChild(usesDots(p.tacticianTotal, p.tacticianLeft, id, 'pc-uses'));
         chCell.appendChild(h('span', 'tooltip', characterPowerDesc(p.character)));
         bindTip(chCell);
       } else chCell.appendChild(h('span', 'muted', '—'));
@@ -301,6 +321,7 @@
       if (s.subPhase === 'elemental-target') return game.elementalTargetOptions();
       if (s.subPhase === 'barrage-first') return game.barrageFirstOptions();
       if (s.subPhase === 'barrage-second') return game.barrageSecondOptions();
+      if (s.subPhase === 'barrage-third') return game.barrageThirdOptions();
       if (s.subPhase === 'randomizer-select') return game.randomizerSelectOptions();
       if (!s.subPhase && ui.brawlerMode && (s.phase === 'move' || s.phase === 'attack')) return game.brawlerTargets(s.activePlayer);
       return [];
@@ -316,6 +337,9 @@
       if (s.subPhase === 'clash-reloc' || s.subPhase === 'forced-reloc') game.relocationOptions().forEach(function (o) { relocKeys[o.key] = true; });
       pickCells(s).forEach(function (o) { pick[o.key] = true; });
       if (s.subPhase === 'randomizer-select') s.pendingRandomizer.chosen.forEach(function (o) { chosenKeys[o.key] = true; });
+      if ((s.subPhase === 'barrage-second' || s.subPhase === 'barrage-third') && s.pendingBarrage) {
+        [s.pendingBarrage.first, s.pendingBarrage.second].forEach(function (c) { if (c) chosenKeys[c.x + ',' + c.y] = true; });
+      }
       var rz = s.subPhase === 'randomizer-place' ? s.pendingRandomizer : null;
       if (rz) rz.chosen.forEach(function (o) { if (!rz.placed[o.key]) dropKeys[o.key] = true; });
 
@@ -547,8 +571,9 @@
       // Oggetti avanzati (attacco)
       if (s.subPhase === 'elemental-target') return renderPickInfo('💥 Elemental Bomb', 'Clicca la cella bersaglio: cambieranno il suo seme e quello delle celle ortogonali.');
       if (s.subPhase === 'elemental-suit') return renderSuitChoice('💥 Elemental Bomb — scegli il seme', function (su) { game.elementalSuit(su); render(); });
-      if (s.subPhase === 'barrage-first') return renderPickInfo('🧨 Barrage', 'Clicca la prima cella da distruggere.');
-      if (s.subPhase === 'barrage-second') return renderPickInfo('🧨 Barrage', 'Clicca una cella adiacente (no centro, no pedina) da distruggere insieme alla prima.');
+      if (s.subPhase === 'barrage-first') return renderPickInfo('🧨 Barrage', 'Clicca la prima cella da distruggere (1/3).');
+      if (s.subPhase === 'barrage-second') return renderPickInfo('🧨 Barrage', 'Clicca una cella adiacente (no centro, no pedina) da distruggere (2/3).');
+      if (s.subPhase === 'barrage-third') return renderPickInfo('🧨 Barrage', 'Clicca la terza cella, adiacente a una di quelle già scelte (3/3).');
       if (s.subPhase === 'randomizer-select') return renderRandomizerSelect(s);
       if (s.subPhase === 'randomizer-place') return renderRandomizerPlace(s);
       if (s.phase === 'select') return renderSelect(s);
@@ -572,20 +597,16 @@
       var usableIds = game.usableObjects(playerId).map(function (o) { return o.id; });
       var objs = s.players[playerId].objects;
       if (!objs.length) { row.appendChild(h('div', 'hint', 'Nessun oggetto posseduto.')); wrap.appendChild(row); return wrap; }
-      // Modalità "scarta un oggetto per il potere tactician": ogni oggetto diventa cliccabile.
-      var pickForPower = ui.tacticianPick && playerId === s.activePlayer;
-      if (pickForPower) wrap.querySelector('.obj-panel-title').textContent = 'Oggetti — clicca quello da scartare per il potere';
       objs.forEach(function (o) {
         var def = OBJ ? OBJ.def(o.type) : null;
         var usable = usableIds.indexOf(o.id) !== -1;
-        var box = h('div', 'obj-card' + (o.fromCharacter ? ' init' : '') + ((usable || pickForPower) ? ' usable' : ' disabled'));
+        var box = h('div', 'obj-card' + (o.fromCharacter ? ' init' : '') + (usable ? ' usable' : ' disabled'));
         box.appendChild(h('span', 'obj-name', def ? def.label : o.type));
         box.appendChild(h('span', 'obj-phase', o.phase));
         var tip = h('span', 'tooltip', def ? def.desc : o.type);
         if (o.type === 'jetpack' || o.type === 'jump') tip.appendChild(moveSchema(o.type));
         box.appendChild(tip);
-        if (pickForPower) box.onclick = function () { game.activatePower(playerId, o.id); ui.tacticianPick = false; render(); };
-        else if (usable) box.onclick = function () { game.useObject(playerId, o.id); ui.armedCardId = null; render(); };
+        if (usable) box.onclick = function () { game.useObject(playerId, o.id); ui.armedCardId = null; render(); };
         row.appendChild(box); bindTip(box);
       });
       wrap.appendChild(row);
@@ -760,6 +781,8 @@
       if (p.belongingSuit) { var sd = h('span', 'ai-seed bg-' + p.belongingSuit); sd.appendChild(suitIcon(p.belongingSuit, true)); sd.title = 'Seme di appartenenza: ' + SUIT_LABEL[p.belongingSuit]; wrap.appendChild(sd); }
       if (p.character) wrap.appendChild(h('span', 'ai-char', p.character));
       if (s.modules.powers && p.character) wrap.appendChild(h('span', 'ai-power', characterPowerDesc(p.character)));
+      // Tactician: attivazioni rimaste (rettangoli come i reshuffle).
+      if (s.modules.powers && p.character === 'tactician') wrap.appendChild(usesDots(p.tacticianTotal, p.tacticianLeft, p.id, 'ai-uses'));
       return wrap;
     }
 
@@ -802,15 +825,20 @@
         var word = s.phase === 'move' ? 'muovere' : 'attaccare';
         var list = s.phase === 'move' ? game.legalMoves(playerId) : game.legalShots(playerId);
         var can = list.length > 0;
-        wrap.appendChild(h('span', 'hint', ui.armedCardId ? 'Carta scelta: clicca una casella evidenziata per ' + word + '.' : (can ? 'Scegli una carta rivelata, poi la casella dove ' + word + '.' : 'Nessuna azione: puoi solo passare.') + (s.actionsLeft > 1 ? ' (azioni rimaste: ' + s.actionsLeft + ')' : '')));
-        var pass = h('button', can ? 'ghost' : 'primary', 'Passa (' + word + ')');
+        wrap.appendChild(h('span', 'hint', ui.armedCardId ? 'Carta scelta: clicca una casella evidenziata per ' + word + '.' : (can ? 'Scegli una carta rivelata, poi la casella dove ' + word + '.' : 'Nessuna azione') + (s.actionsLeft > 1 ? ' (azioni rimaste: ' + s.actionsLeft + ')' : '')));
+        var pass = h('button', can ? 'ghost' : 'primary', 'Passa');
         pass.onclick = function () { ui.armedCardId = null; if (s.phase === 'move') game.passMove(playerId); else game.passShoot(playerId); render(); };
         wrap.appendChild(pass);
         // Poteri personaggio attivi (tactician / brawler).
         if (game.canActivatePower && game.canActivatePower(playerId)) {
-          var pw = h('button', ui.tacticianPick ? 'primary' : 'ghost', ui.tacticianPick ? 'Annulla potere' : '🧠 Potere: apri tutte le carte (scarta 1 oggetto)');
-          pw.onclick = function () { ui.tacticianPick = !ui.tacticianPick; render(); };
-          wrap.appendChild(pw);
+          var tp = s.players[playerId];
+          var pwWrap = h('div', 'power-ctl');
+          var pw = h('button', 'ghost', 'Potere');
+          pw.title = 'Tactician: usa anche le carte non scelte per questo turno.';
+          pw.onclick = function () { game.activatePower(playerId); ui.armedCardId = null; render(); };
+          pwWrap.appendChild(pw);
+          pwWrap.appendChild(usesDots(tp.tacticianTotal, tp.tacticianLeft, playerId));
+          wrap.appendChild(pwWrap);
         }
         if (game.canBrawler && game.canBrawler(playerId)) {
           var bw = h('button', ui.brawlerMode ? 'primary' : 'ghost', ui.brawlerMode ? 'Annulla (match qualsiasi)' : '💪 Match qualsiasi (scarta 3 carte)');
@@ -844,6 +872,7 @@
       if (s.subPhase === 'elemental-target') { if (game.elementalTargetOptions().some(function (o) { return o.x === x && o.y === y; })) { game.elementalTarget(x, y); render(); } return; }
       if (s.subPhase === 'barrage-first') { if (game.barrageFirstOptions().some(function (o) { return o.x === x && o.y === y; })) { game.barrageFirst(x, y); render(); } return; }
       if (s.subPhase === 'barrage-second') { if (game.barrageSecondOptions().some(function (o) { return o.x === x && o.y === y; })) { game.barrageSecond(x, y); render(); } return; }
+      if (s.subPhase === 'barrage-third') { if (game.barrageThirdOptions().some(function (o) { return o.x === x && o.y === y; })) { game.barrageThird(x, y); render(); } return; }
       if (s.subPhase === 'randomizer-select') { if (game.randomizerSelectOptions().some(function (o) { return o.x === x && o.y === y; })) { game.randomizerToggle(x, y); render(); } return; }
       if (s.subPhase === 'randomizer-place') {
         var prk = x + ',' + y, pr = s.pendingRandomizer;
@@ -978,7 +1007,7 @@
     // ============================================================ UNDO / ripristino
     function resetUiTransient() {
       ui.armedCardId = null; ui.chosen = []; ui.selectingPlayer = null; ui.clashChooser = null;
-      ui.gate = null; ui.pendingShot = null; ui.brawlerMode = false; ui.tacticianPick = false; ui.selectedDrawn = null;
+      ui.gate = null; ui.pendingShot = null; ui.brawlerMode = false; ui.selectedDrawn = null;
     }
     function afterRestore() {
       if (ui.cpuTimer) { clearTimeout(ui.cpuTimer); ui.cpuTimer = null; }
@@ -990,41 +1019,45 @@
       if (!game.canUndo()) return;
       game.undo();
       // Contro la CPU, salta indietro sugli stati in cui tocca alla CPU fino alla decisione umana.
-      if (ui.mode === 'cpu') { var guard = 0; while (game.canUndo() && cpuShouldAct(game.state) && guard++ < 200) game.undo(); }
+      if (ui.mode === 'cpu') { var guard = 0; while (game.canUndo() && cpuActor(game.state) && guard++ < 200) game.undo(); }
       afterRestore();
     }
     function doRestoreLog(i) {
       if (!game.restoreToLogIndex(i)) return;
-      if (ui.mode === 'cpu') { var guard = 0; while (game.canUndo() && cpuShouldAct(game.state) && guard++ < 200) game.undo(); }
+      if (ui.mode === 'cpu') { var guard = 0; while (game.canUndo() && cpuActor(game.state) && guard++ < 200) game.undo(); }
       afterRestore();
     }
 
     // ============================================================ CPU
     function scheduleCpu() {
       if (ui.cpuTimer) { clearTimeout(ui.cpuTimer); ui.cpuTimer = null; }
-      if (ui.mode !== 'cpu') return;
+      if (ui.mode !== 'cpu' && ui.mode !== 'cpucpu') return;
       var s = game.state;
       if (s.gameOver || ui.gate) return;
-      if (!cpuShouldAct(s)) return;
-      ui.cpuTimer = setTimeout(function () { ui.cpuTimer = null; cpuStep(); }, 600);
+      if (!cpuActor(s)) return;
+      ui.cpuTimer = setTimeout(function () { ui.cpuTimer = null; cpuStep(); }, ui.cpuDelay || 600);
     }
-    function cpuShouldAct(s) {
-      var c = ui.cpuId;
-      if (s.subPhase === 'object-discard') return s.pendingObjectDiscard.playerId === c;
-      if (s.subPhase === 'timebomb-suit') return s.pendingTimebomb.playerId === c;
-      if (s.subPhase === 'elemental-target' || s.subPhase === 'elemental-suit') return s.pendingElemental && s.pendingElemental.playerId === c;
-      if (s.subPhase === 'barrage-first' || s.subPhase === 'barrage-second') return s.pendingBarrage && s.pendingBarrage.playerId === c;
-      if (s.subPhase === 'randomizer-select' || s.subPhase === 'randomizer-place') return s.pendingRandomizer && s.pendingRandomizer.playerId === c;
-      if (s.subPhase === 'clash-cards') return game.clashCurrentChooser() === c;
-      if (s.subPhase === 'clash-reloc') return s.pendingClash.relocatorId === c;
-      if (s.subPhase === 'forced-reloc') return s.pendingForced.chooserId === c;
-      if (s.subPhase) return false;
-      if (s.phase === 'select') return s.selected[c] == null && s.selected[ui.humanId] != null;
-      if (s.phase === 'move' || s.phase === 'attack') return s.activePlayer === c;
-      return false;
+    // Chi deve agire adesso secondo lo stato (indipendentemente da chi è CPU).
+    function engineActor(s) {
+      if (s.gameOver) return null;
+      if (s.subPhase === 'object-discard') return s.pendingObjectDiscard.playerId;
+      if (s.subPhase === 'timebomb-suit') return s.pendingTimebomb.playerId;
+      if (s.subPhase === 'elemental-target' || s.subPhase === 'elemental-suit') return s.pendingElemental ? s.pendingElemental.playerId : null;
+      if (s.subPhase === 'barrage-first' || s.subPhase === 'barrage-second' || s.subPhase === 'barrage-third') return s.pendingBarrage ? s.pendingBarrage.playerId : null;
+      if (s.subPhase === 'randomizer-select' || s.subPhase === 'randomizer-place') return s.pendingRandomizer ? s.pendingRandomizer.playerId : null;
+      if (s.subPhase === 'clash-cards') return game.clashCurrentChooser();
+      if (s.subPhase === 'clash-reloc') return s.pendingClash.relocatorId;
+      if (s.subPhase === 'forced-reloc') return s.pendingForced.chooserId;
+      if (s.subPhase) return null;
+      if (s.phase === 'select') return s.selected.N == null ? 'N' : (s.selected.S == null ? 'S' : null);
+      if (s.phase === 'move' || s.phase === 'attack') return s.activePlayer;
+      return null;
     }
+    // Il giocatore CPU che deve agire ora (o null): in 'cpucpu' entrambi sono CPU.
+    function cpuActor(s) { var a = engineActor(s); return (a && isCpu(a)) ? a : null; }
     function cpuStep() {
-      var c = ui.cpuId, Cpu = window.CradleCpu;
+      var Cpu = window.CradleCpu, c = cpuActor(game.state);
+      if (!c) { render(); return; }
       try {
         var r = Cpu.cpuAct(game, c); // esegue una singola azione (oggetti/poteri inclusi)
         if (r && r.type === 'shoot' && r.from) ui.pendingShot = { from: r.from, to: r.to };

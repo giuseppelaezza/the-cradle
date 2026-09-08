@@ -16,7 +16,7 @@ function whoActs(s, g) {
   if (s.subPhase === 'object-discard') return s.pendingObjectDiscard.playerId;
   if (s.subPhase === 'timebomb-suit') return s.pendingTimebomb.playerId;
   if (s.subPhase === 'elemental-target' || s.subPhase === 'elemental-suit') return s.pendingElemental.playerId;
-  if (s.subPhase === 'barrage-first' || s.subPhase === 'barrage-second') return s.pendingBarrage.playerId;
+  if (s.subPhase === 'barrage-first' || s.subPhase === 'barrage-second' || s.subPhase === 'barrage-third') return s.pendingBarrage.playerId;
   if (s.subPhase === 'randomizer-select' || s.subPhase === 'randomizer-place') return s.pendingRandomizer.playerId;
   if (s.subPhase === 'clash-cards') return g.clashCurrentChooser();
   if (s.subPhase === 'clash-reloc') return s.pendingClash.relocatorId;

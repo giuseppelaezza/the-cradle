@@ -15,19 +15,19 @@
   var OBJECT_DEFS = {
     jetpack: {
       type: 'jetpack', phase: 'move', label: 'Jetpack',
-      desc: 'Movimento: per questo spostamento puoi abbinare anche in diagonale (oltre che ortogonalmente).'
+      desc: 'Movimento (costo: scarta 1 carta extra): per questo spostamento puoi abbinare anche in diagonale (oltre che ortogonalmente).'
     },
     jump: {
       type: 'jump', phase: 'move', label: 'Jump',
-      desc: 'Movimento: per questo spostamento puoi abbinare SOLO le caselle a 2 celle ortogonali di distanza (salto).'
+      desc: 'Movimento (costo: scarta 1 carta extra): per questo spostamento puoi abbinare SOLO le caselle a 2 celle ortogonali di distanza (salto).'
     },
     hook: {
       type: 'hook', phase: 'attack', label: 'Hook',
-      desc: 'Attacco: se colpisci la pedina avversaria, puoi spostarla di 1 casella ortogonale (esclusa la centrale).'
+      desc: 'Attacco: se colpisci la pedina avversaria, puoi spostarla di 1 casella in QUALSIASI direzione (ortogonale o diagonale, esclusa la centrale).'
     },
     homing_missile: {
       type: 'homing_missile', phase: 'attack', label: 'Homing Missile',
-      desc: 'Attacco: ottieni i normali punti E la carta colpita è rimossa dal gioco (cella Distrutta). La pedina eventuale viene ricollocata.'
+      desc: 'Attacco: ottieni i normali punti E la carta colpita è rimossa dal gioco (cella Distrutta). Se la cella aveva una pedina, è il TIRATORE a decidere dove ricollocarla.'
     },
     rush_juice: {
       type: 'rush_juice', phase: 'select', label: 'Rush Juice',
@@ -47,7 +47,7 @@
     },
     barrage: {
       type: 'barrage', phase: 'attack', label: 'Barrage',
-      desc: 'Attacco (rinunci all\'attacco): scegli una cella, poi una adiacente ortogonale (non centrale, non con pedina); distruggi entrambe (come homing missile).'
+      desc: 'Attacco (rinunci all\'attacco): scegli una cella, poi due adiacenti ortogonali (non centrale, non con pedina; ogni nuova cella adiacente a una già scelta); distruggi tutte e tre (come homing missile).'
     },
     randomizer: {
       type: 'randomizer', phase: 'attack', label: 'Randomizer',

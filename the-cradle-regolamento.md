@@ -204,16 +204,18 @@ Scelta a inizio partita (dropdown):
 
 | Oggetto | Fase | Effetto |
 |---|---|---|
-| **jetpack** | movimento | Per questo movimento puoi abbinare **anche in diagonale** (oltre che ortogonalmente). |
-| **jump** | movimento | Per questo movimento puoi abbinare **solo** le caselle a **2 celle** ortogonali di distanza (salto; le celle a 1 non sono disponibili). Es. da [2,2] solo [2,4] e [4,2]. |
-| **hook** | attacco | Se colpisci la **pedina avversaria**, puoi spostarla di **1 casella ortogonale** (esclusa la centrale). |
-| **homing missile** | attacco | Ottieni i normali **punti** dell'attacco (figura o +5 pedina) **e** la carta abbinata è **rimossa dal gioco**: la cella diventa **Distrutta** (non più abbinabile né percorribile). Se la cella era occupata da una pedina, quella pedina viene **spostata** (il suo proprietario sceglie una casella ortogonale adiacente, esclusa la centrale; nessun bonus). Se in un clash una pedina è forzata a muoversi e ha attorno solo celle Distrutte, resta ferma. |
+| **jetpack** | movimento | **Costo: scarti 1 delle tue carte scelte** (rivelate) per usarlo — serve quindi avere almeno **2 carte scelte** disponibili. Per questo movimento puoi abbinare **anche in diagonale** (oltre che ortogonalmente). |
+| **jump** | movimento | **Costo: scarti 1 delle tue carte scelte** (rivelate) per usarlo — serve quindi avere almeno **2 carte scelte** disponibili. Per questo movimento puoi abbinare **solo** le caselle a **2 celle** ortogonali di distanza (salto; le celle a 1 non sono disponibili). Es. da [2,2] solo [2,4] e [4,2]. |
+| **hook** | attacco | Se colpisci la **pedina avversaria**, puoi spostarla di **1 casella in qualsiasi direzione** (ortogonale **o diagonale**, esclusa la centrale). |
+| **homing missile** | attacco | Ottieni i normali **punti** dell'attacco (figura o +5 pedina) **e** la carta abbinata è **rimossa dal gioco**: la cella diventa **Distrutta** (non più abbinabile né percorribile). Se la cella era occupata da una pedina, quella pedina viene **spostata** e a decidere dove è il **giocatore che ha giocato la carta** (il tiratore) — casella ortogonale adiacente, esclusa la centrale; nessun bonus. Se ha attorno solo celle Distrutte, resta ferma. |
 | **rush juice** | scelta carte | Questo round esegui **due azioni di movimento** e **rinunci** allo sparo. |
 | **combat juice** | scelta carte | Questo round esegui **due azioni di attacco** e **rinunci** al movimento. |
 | **timebomb** | scelta carte | Sposti il segnalino del **seme di turno** su un seme a scelta; il ciclo prosegue da lì (solo modalità rotazione). |
 | **elemental bomb** | attacco | **Rinunci all'azione di attacco.** Scegli una cella: il **seme** della cella bersaglio e di **tutte le celle ortogonali** diventa un **seme a tua scelta** (le celle distrutte/vuote non cambiano). |
-| **barrage** | attacco | **Rinunci all'azione di attacco.** Scegli una cella qualsiasi, poi una cella **ortogonalmente adiacente** ad essa (esclusa la **casella centrale** e le celle con una **pedina**): **distruggi entrambe** le celle (come *homing missile*; le pedine eventualmente presenti vengono ricollocate). |
-| **randomizer** | attacco | **Rinunci all'azione di attacco.** Usabile **solo se il mazzo ha ancora carte**. Scegli fino a **3 celle** della griglia (non la centrale): le loro carte tornano nel **mazzo**, si **mescola**, poi si pescano **altrettante** carte e si **ricollocano** (a scelta del giocatore) nelle celle svuotate. |
+| **barrage** | attacco | **Rinunci all'azione di attacco.** Scegli una cella qualsiasi, poi **altre due** celle **ortogonalmente adiacenti** a una qualsiasi di quelle già scelte (esclusa la **casella centrale** e le celle con una **pedina**): **distruggi tutte e tre** le celle (come *homing missile*; una pedina eventualmente presente sulla prima cella viene ricollocata). |
+| **randomizer** | attacco | **Rinunci all'azione di attacco.** Usabile **se mazzo o scarti hanno carte** (se il mazzo è vuoto si rimescolano gli scarti). Scegli fino a **3 celle** della griglia (non la centrale): le loro carte tornano nel **mazzo**, si **mescola**, poi si pescano **altrettante** carte e si **ricollocano** (a scelta del giocatore) nelle celle svuotate. |
+| **energy boost** | movimento o attacco | **Peschi 2 carte** dal mazzo e **puoi usarle in questa mano**. Se usi questo tool, a **fine turno scarti 2 carte extra**. (Se il mazzo è vuoto si rimescolano gli scarti.) |
+| **energy drain** | movimento o attacco | **Rubi una carta** dalla mano dell'**avversario** (la puoi usare in questa mano). |
 
 ---
 
@@ -225,9 +227,9 @@ condizioni di gioco. I poteri si azzerano a fine round.
 
 | Personaggio | Potere |
 |---|---|
-| **runner** | **Passivo.** Può **sempre abbinare le carte pari** (una casella scoperta di valore pari è abbinabile con qualsiasi carta della sua mano). |
-| **tactician** | **Attivo.** **Scartando un oggetto** attiva il potere: per il resto del turno usa **anche le carte non scelte** (tutte le carte in mano vengono scoperte e diventano utilizzabili). Se usa per un'azione una carta **non** scelta in fase di selezione, quella carta va **scartata** normalmente. Le carte **non scelte e non usate** **non** vanno negli scarti a fine turno; le carte **scelte** e non usate vanno invece scartate come di consueto. |
-| **fighter** | **Passivo/condizionale.** Se con la **prima azione di movimento del turno** abbina una **figura** o una **cella con la pedina avversaria**, allora **come seconda azione** effettua un **secondo movimento** al posto dell'azione di attacco (nel prototipo: ottiene subito una mossa extra e rinuncia all'attacco del turno). |
+| **runner** | **Passivo.** Solo in **fase di movimento** può abbinare le **carte pari tra di loro**: una **carta pari** in mano abbina una **casella scoperta di valore pari** (es. 2 con 4, 4 con 8, 2 con 6). |
+| **tactician** | **Attivo.** Attivabile **al massimo 2 volte per partita** (senza altri costi): per il resto del turno usa **anche le carte non scelte** (tutte le carte in mano vengono scoperte e diventano utilizzabili). Se usa per un'azione una carta **non** scelta in fase di selezione, quella carta va **scartata** normalmente. Le carte **non scelte e non usate** **non** vanno negli scarti a fine turno; le carte **scelte** e non usate vanno invece scartate come di consueto. |
+| **fighter** | **Passivo.** Solo in **fase di attacco** può abbinare le **carte pari tra di loro**: una **carta pari** in mano abbina una **casella scoperta di valore pari** (es. 2 con 4, 4 con 8, 2 con 6). |
 | **brawler** | **Attivo.** Se ha **3 carte disponibili** può **scartarle tutte e tre** per **abbinare qualsiasi cella** (di fatto rinuncia a un'azione, perché consuma tutte le carte). |
 
 *(Nota implementativa: se il modulo Oggetti non è attivo, il tactician non ha oggetti da scartare e

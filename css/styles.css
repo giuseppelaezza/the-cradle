@@ -245,6 +245,15 @@ body.setup .app { visibility: hidden; }
 .rs-dot { flex: 1 1 0; min-width: 0; border-radius: 6px; border: 2px solid var(--rc); background: transparent; box-sizing: border-box; }
 .rs-dot.on { background: var(--rc); }
 
+/* indicatore usi generico (rettangoli stondati pieni/vuoti, colore del giocatore) */
+.uses-dots { display: inline-flex; align-items: center; gap: 4px; }
+.uses-dot { width: 16px; height: 11px; border-radius: 3px; border: 2px solid var(--rc, var(--muted)); box-sizing: border-box; }
+.uses-dot.on { background: var(--rc, var(--muted)); }
+.pc-uses .uses-dot { width: 14px; height: 9px; }
+.power-ctl { display: inline-flex; align-items: center; gap: 8px; }
+.pc-reshuffle { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+.pc-reshuffle-lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+
 .hand-and-objects { display: flex; flex-direction: column; gap: 10px; }
 .obj-panel { border-top: 1px dashed var(--line); padding-top: 8px; }
 .obj-panel-title { color: var(--muted); font-size: 12px; margin-bottom: 6px; }

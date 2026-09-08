@@ -27,8 +27,9 @@
     // Avversario
     sheet.appendChild(fieldLabel('Avversario'));
     var opp = h('div', 'cfg-row');
-    opp.appendChild(radio('opp', 'Hot Seat', cfg.opponent === '2p', function () { cfg.opponent = '2p'; }));
-    opp.appendChild(radio('opp', 'VS CPU', cfg.opponent === 'cpu', function () { cfg.opponent = 'cpu'; }));
+    opp.appendChild(radio('opp', 'Hot Seat', cfg.opponent === '2p', function () { cfg.opponent = '2p'; renderConfig(); }));
+    opp.appendChild(radio('opp', 'VS CPU', cfg.opponent === 'cpu', function () { cfg.opponent = 'cpu'; renderConfig(); }));
+    opp.appendChild(radio('opp', 'CPU vs CPU', cfg.opponent === 'cpucpu', function () { cfg.opponent = 'cpucpu'; renderConfig(); }));
     sheet.appendChild(opp);
 
     // Modalità seme (dropdown)
@@ -92,7 +93,8 @@
     // Se la scelta corrente non è più valida (tactician in modalità fissa), ripiega su runner.
     if (!Characters.isSelectable(cfg[cfgKey], cfg.suitMode)) cfg[cfgKey] = 'runner';
     var wrap = h('div', 'cfg-row char-row');
-    wrap.appendChild(h('span', 'char-who', 'Giocatore ' + playerId + (cfg.opponent === 'cpu' && playerId === 'S' ? ' (CPU)' : '') + ':'));
+    var isCpuSlot = cfg.opponent === 'cpucpu' || (cfg.opponent === 'cpu' && playerId === 'S');
+    wrap.appendChild(h('span', 'char-who', 'Giocatore ' + playerId + (isCpuSlot ? ' (CPU)' : '') + ':'));
     var sel = h('select', 'cfg-select');
     Characters.ORDER.forEach(function (type) {
       var ch = Characters.get(type);

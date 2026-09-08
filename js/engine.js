@@ -83,11 +83,10 @@
       energyExtraDiscard: 0,       // scarti extra a fine turno dovuti a Energy Boost
       reshuffleLeft: 2,            // Modulo Reshuffle: usi rimasti
       reshuffleTotal: 2,           // Modulo Reshuffle: usi totali (da configurazione)
-      // Modulo "poteri personaggi" (§12): stato per-round dei poteri.
-      tacticianOpen: false,        // tactician: usa anche le carte non scelte
-      fighterFirstMoveDone: false, // fighter: la prima azione di movimento è già avvenuta
-      fighterBonusUsed: false,     // fighter: bonus (mossa extra) già concesso questo round
-      fighterQualified: false      // fighter: la prima mossa ha abbinato figura/pedina avversaria
+      // Modulo "poteri personaggi" (§12): stato dei poteri.
+      tacticianOpen: false,        // tactician: usa anche le carte non scelte (per-round)
+      tacticianTotal: 2,           // tactician: attivazioni totali per partita
+      tacticianLeft: 2             // tactician: attivazioni rimaste
     };
   }
 
@@ -222,11 +221,16 @@
   Game.prototype.belongingSuit = function (id) { return this.state.players[id].belongingSuit; };
 
   // Match tenendo conto dei poteri personaggio.
-  // Runner: abbina sempre le carte pari scoperte, ma SOLO in fase di movimento.
+  // Runner (in MOVIMENTO) e Fighter (in ATTACCO): abbinano le carte PARI tra di loro
+  // (una carta pari in mano abbina una casella scoperta di valore pari).
   Game.prototype._matches = function (playerId, card, cell) {
     var s = this.state, p = s.players[playerId];
     if (canMatch(card, cell, s.currentSuit, p.belongingSuit)) return true;
-    if (s.modules.powers && p.character === 'runner' && s.phase === 'move' && cell && !cell.destroyed && cell.card && !cell.faceDown && (cell.card.value % 2 === 0)) return true;
+    if (s.modules.powers && cell && !cell.destroyed && cell.card && !cell.faceDown &&
+        (card.value % 2 === 0) && (cell.card.value % 2 === 0)) {
+      if (p.character === 'runner' && s.phase === 'move') return true;
+      if (p.character === 'fighter' && s.phase === 'attack') return true;
+    }
     return false;
   };
 
@@ -294,18 +298,9 @@
     else this._beginAttackPhase();
   };
   Game.prototype._afterMoveAction = function (id) {
-    var s = this.state, p = s.players[id];
+    var s = this.state;
     s.actionsLeft -= 1;
     s.moveModifier = null;
-    // Potere fighter: se la prima mossa ha abbinato figura/pedina avversaria, ottiene una mossa
-    // extra ORA e rinuncia all'attacco del turno.
-    if (s.modules.powers && p.character === 'fighter' && p.fighterQualified && !p.fighterBonusUsed) {
-      p.fighterBonusUsed = true;
-      p.fighterQualified = false;
-      s.actionsLeft += 1;
-      p.pendingActions.attacks = 0;
-      this._log(id + ' (fighter): mossa bonus, rinuncia all\'attacco.');
-    }
     this._promptMove();
   };
 
@@ -337,11 +332,7 @@
     if (!card || !this._matches(id, card, dest)) throw new Error('Carta non valida per questa casella.');
     removeCard(s.players[id].hand, cardId);
 
-    // Potere fighter: qualifica sulla PRIMA azione di movimento del turno.
-    var isFighterFirst = s.modules.powers && s.players[id].character === 'fighter' && !s.players[id].fighterFirstMoveDone;
-
     if (dest.pawn === otherPlayer(id)) {
-      if (isFighterFirst) { s.players[id].fighterFirstMoveDone = true; s.players[id].fighterQualified = true; } // ha abbinato la pedina avversaria
       s.subPhase = 'clash-cards';
       s.pendingClash = { attackerId: id, defenderId: otherPlayer(id), x: x, y: y, moveCard: card,
                          attackerCardId: null, defenderCardId: null, whoChooses: id };
@@ -351,7 +342,6 @@
     }
 
     var info = this._applyArrival(id, dest, card);
-    if (isFighterFirst) { s.players[id].fighterFirstMoveDone = true; if (info.figureEliminated) s.players[id].fighterQualified = true; }
     this._chain = [this._step_afterMove(id)];
     if (info.figureEliminated) this._postFigureDraw(id);
     this._advanceChain();
@@ -360,7 +350,6 @@
 
   Game.prototype.passMove = function (id) {
     this._assertAction('move', id);
-    if (this.state.modules.powers && this.state.players[id].character === 'fighter') this.state.players[id].fighterFirstMoveDone = true;
     this._log(id + ' non muove (passa).');
     this._afterMoveAction(id);
   };
@@ -487,9 +476,11 @@
     return function () { self.state.pendingClash = null; self.state.subPhase = null; self._afterMoveAction(attackerId); };
   };
 
-  // Destinazioni di uno spostamento forzato: ortogonali, escluse centro/occupate/distrutte.
-  Game.prototype._relocationOptions = function (x, y) {
+  // Destinazioni di uno spostamento forzato: escluse centro/occupate/distrutte.
+  // diag=true aggiunge le diagonali (usato dall'hook, che sposta in tutte le direzioni).
+  Game.prototype._relocOptions = function (x, y, diag) {
     var s = this.state, out = [], nb = orthogonalNeighbors(x, y);
+    if (diag) nb = nb.concat(diagonalNeighbors(x, y));
     for (var i = 0; i < nb.length; i++) {
       var cx = nb[i][0], cy = nb[i][1], cell = s.grid[cx][cy];
       if (isCenter(cx, cy) || cell.pawn || cell.destroyed) continue;
@@ -497,10 +488,12 @@
     }
     return out;
   };
+  Game.prototype._relocationOptions = function (x, y) { return this._relocOptions(x, y, false); };
+  // Lo spostamento con hook è a 8 direzioni; clash/homing restano ortogonali.
   Game.prototype.relocationOptions = function () {
     var s = this.state;
-    if (s.subPhase === 'clash-reloc' && s.pendingClash) return this._relocationOptions(s.pendingClash.relocateFrom.x, s.pendingClash.relocateFrom.y);
-    if (s.subPhase === 'forced-reloc' && s.pendingForced) return this._relocationOptions(s.pendingForced.from.x, s.pendingForced.from.y);
+    if (s.subPhase === 'clash-reloc' && s.pendingClash) return this._relocOptions(s.pendingClash.relocateFrom.x, s.pendingClash.relocateFrom.y, false);
+    if (s.subPhase === 'forced-reloc' && s.pendingForced) return this._relocOptions(s.pendingForced.from.x, s.pendingForced.from.y, s.pendingForced.kind === 'hook');
     return [];
   };
 
@@ -623,10 +616,11 @@
       cell.card = null; cell.faceDown = false; cell.destroyed = true;
       self._log(id + ' HOMING MISSILE: distrugge la cella [' + cell.x + ',' + cell.y + '].');
       if (hadPawn) {
+        // Homing: è il TIRATORE a decidere dove spostare la pedina avversaria colpita.
         var opts = self._relocationOptions(cell.x, cell.y);
         if (opts.length) {
           self.state.subPhase = 'forced-reloc';
-          self.state.pendingForced = { kind: 'homing', pawnId: hadPawn, chooserId: hadPawn, from: { x: cell.x, y: cell.y }, optional: false };
+          self.state.pendingForced = { kind: 'homing', pawnId: hadPawn, chooserId: id, from: { x: cell.x, y: cell.y }, optional: false };
         } else { self._log('Nessuna destinazione: la pedina resta ferma.'); }
       }
     };
@@ -636,7 +630,7 @@
     var self = this;
     return function () {
       if (!(cell.pawn && cell.pawn !== id)) return;
-      var opts = self._relocationOptions(cell.x, cell.y);
+      var opts = self._relocOptions(cell.x, cell.y, true); // hook: 8 direzioni
       if (!opts.length) return;
       self.state.subPhase = 'forced-reloc';
       self.state.pendingForced = { kind: 'hook', pawnId: cell.pawn, chooserId: id, from: { x: cell.x, y: cell.y }, optional: true };
@@ -646,7 +640,7 @@
   Game.prototype.forcedRelocate = function (x, y) {
     var s = this.state, pf = s.pendingForced;
     if (!pf || s.subPhase !== 'forced-reloc') throw new Error('Nessuno spostamento forzato in corso.');
-    if (!this._relocationOptions(pf.from.x, pf.from.y).some(function (o) { return o.x === x && o.y === y; })) throw new Error('Destinazione non valida.');
+    if (!this._relocOptions(pf.from.x, pf.from.y, pf.kind === 'hook').some(function (o) { return o.x === x && o.y === y; })) throw new Error('Destinazione non valida.');
     this._forcedMove(pf.pawnId, x, y);
     s.pendingForced = null; s.subPhase = null;
     this._advanceChain();
@@ -672,6 +666,23 @@
   function objPhases(o) { var d = Objects.def(o.type); return (d && d.phases) ? d.phases : [o.phase]; }
   function objInPhase(o, phase) { return objPhases(o).indexOf(phase) !== -1; }
 
+  // Può pagare il costo extra di jetpack/jump? Serve almeno 2 carte SCELTE disponibili
+  // (una da scartare come costo + almeno una per il movimento).
+  Game.prototype._canPayToolCost = function (playerId) {
+    return this.availableRevealed(playerId).length >= 2;
+  };
+  // Costo di jetpack/jump: scarta una delle carte SCELTE (rivelate) — la più bassa.
+  Game.prototype._extraDiscardForTool = function (playerId) {
+    var p = this.state.players[playerId];
+    var avail = this.availableRevealed(playerId);
+    if (avail.length < 2) return;
+    var card = avail.slice().sort(function (a, b) { return a.value - b.value; })[0];
+    removeCard(p.hand, card.id);
+    var ri = p.revealedIds.indexOf(card.id); if (ri !== -1) p.revealedIds.splice(ri, 1);
+    this._discard(card);
+    this._log(playerId + ' scarta una carta scelta (' + card.value + card.suit[0].toUpperCase() + ') come costo dell\'oggetto.');
+  };
+
   Game.prototype.usableObjects = function (playerId) {
     var s = this.state, self = this;
     if (s.gameOver || !s.modules.objects || s.subPhase) return [];
@@ -687,6 +698,7 @@
         if (!objInPhase(o, s.phase)) return false;
         // Un modificatore già armato (jetpack/jump/hook/homing) blocca altri oggetti-modificatore, non gli "immediati".
         if (mod && o.type !== 'energy_boost' && o.type !== 'energy_drain') return false;
+        if ((o.type === 'jetpack' || o.type === 'jump') && !self._canPayToolCost(playerId)) return false; // serve una carta scelta extra da scartare
         if (o.type === 'randomizer' && s.deck.length === 0 && s.discard.length === 0) return false; // serve almeno una carta
         if (o.type === 'energy_boost' && s.deck.length === 0 && s.discard.length === 0) return false; // niente da pescare
         if (o.type === 'energy_drain' && s.players[otherPlayer(playerId)].hand.length === 0) return false; // niente da rubare
@@ -706,8 +718,8 @@
     this._log(playerId + ' usa ' + obj.type + '.');
 
     switch (obj.type) {
-      case 'jetpack': s.moveModifier = 'jetpack'; break;                 // armato per il movimento
-      case 'jump': s.moveModifier = 'jump'; break;
+      case 'jetpack': this._extraDiscardForTool(playerId); s.moveModifier = 'jetpack'; break; // costo: scarta una carta extra
+      case 'jump': this._extraDiscardForTool(playerId); s.moveModifier = 'jump'; break;
       case 'hook': s.attackModifier = 'hook'; break;                     // armato per l'attacco
       case 'homing_missile': s.attackModifier = 'homing'; break;
       case 'rush_juice': s.players[playerId].pendingActions = { moves: 2, attacks: 0 }; s.selectObjectUsed[playerId] = true; break;
@@ -734,6 +746,8 @@
           var pick = pool[Math.floor((this._rng || Math.random)() * pool.length)];
           removeCard(opp.hand, pick.id);
           var ri = opp.revealedIds.indexOf(pick.id); if (ri !== -1) opp.revealedIds.splice(ri, 1);
+          // Rimuovi la carta rubata anche dallo snapshot pubblico (preview della scheda): sparisce dalla mano avversaria.
+          opp.revealedCards = opp.revealedCards.filter(function (c) { return c && c.id !== pick.id; });
           me.hand.push(pick); me.revealedIds.push(pick.id);
           this._log(playerId + ' usa Energy Drain: ruba una carta dalla mano di ' + otherPlayer(playerId) + ' (usabile ora).');
         } else this._log(playerId + ' usa Energy Drain: l\'avversario non ha carte.');
@@ -741,7 +755,7 @@
       }
       // Oggetti d'attacco interattivi: avviano un sotto-flusso e "consumano" l'azione d'attacco.
       case 'elemental_bomb': s.subPhase = 'elemental-target'; s.pendingElemental = { playerId: playerId }; break;
-      case 'barrage': s.subPhase = 'barrage-first'; s.pendingBarrage = { playerId: playerId, first: null }; break;
+      case 'barrage': s.subPhase = 'barrage-first'; s.pendingBarrage = { playerId: playerId, first: null, second: null }; break;
       case 'randomizer': s.subPhase = 'randomizer-select'; s.pendingRandomizer = { playerId: playerId, chosen: [], drawn: null, placed: {} }; break;
     }
   };
@@ -805,21 +819,19 @@
   };
 
   // ================================================================== POTERI PERSONAGGIO (§12)
-  // Tactician: scartando un oggetto apre tutte le carte in mano (usa anche le non scelte).
+  // Tactician: apre tutte le carte in mano (usa anche le non scelte). Attivabile al massimo 2 volte per partita.
   Game.prototype.canActivatePower = function (playerId) {
     var s = this.state, p = s.players[playerId];
     if (!s.modules.powers || s.subPhase || p.character !== 'tactician' || p.tacticianOpen) return false;
-    if (!s.modules.objects || !p.objects.length) return false; // serve un oggetto da scartare
+    if (!(p.tacticianLeft > 0)) return false; // esaurite le attivazioni della partita
     return (s.phase === 'move' || s.phase === 'attack') && s.activePlayer === playerId && s.actionsLeft > 0;
   };
-  Game.prototype.activatePower = function (playerId, objectId) {
+  Game.prototype.activatePower = function (playerId) {
     if (!this.canActivatePower(playerId)) throw new Error('Potere non attivabile ora.');
     var p = this.state.players[playerId];
-    var obj = objectId ? findCard(p.objects, objectId) : p.objects[0];
-    if (!obj) throw new Error('Nessun oggetto da scartare.');
-    removeCard(p.objects, obj.id);
     p.tacticianOpen = true;
-    this._log(playerId + ' (tactician) scarta ' + obj.type + ': ora usa anche le carte non scelte.');
+    p.tacticianLeft -= 1;
+    this._log(playerId + ' (tactician) apre tutte le carte in mano (attivazioni rimaste: ' + p.tacticianLeft + ').');
   };
 
   // Brawler: scarta 3 carte disponibili per abbinare QUALSIASI cella (rinuncia a un'azione).
@@ -913,31 +925,61 @@
     var s = this.state;
     if (s.subPhase !== 'barrage-first') throw new Error('Nessun barrage in corso.');
     if (s.grid[x][y].destroyed) throw new Error('Cella non valida.');
-    s.pendingBarrage.first = { x: x, y: y }; s.subPhase = 'barrage-second';
+    s.pendingBarrage.first = { x: x, y: y };
+    // Se la prima cella non ha vicini validi, si risolve con la sola prima (fallback anti-blocco).
+    if (this._barrageNextOptions([s.pendingBarrage.first]).length === 0) this._barrageResolve();
+    else s.subPhase = 'barrage-second';
   };
-  Game.prototype.barrageSecondOptions = function () {
-    var s = this.state, out = [];
-    if (s.subPhase !== 'barrage-second' || !s.pendingBarrage.first) return out;
-    var f = s.pendingBarrage.first;
-    orthogonalNeighbors(f.x, f.y).forEach(function (d) {
-      var c = s.grid[d[0]][d[1]];
-      if (isCenter(d[0], d[1]) || c.pawn || c.destroyed) return; // no centro, no pedina, no distrutte
-      out.push({ x: d[0], y: d[1], key: cellKey(d[0], d[1]) });
+  // Celle valide adiacenti (ortogonali) a una qualsiasi delle celle già scelte (esclusi centro/pedina/distrutte/già scelte).
+  Game.prototype._barrageNextOptions = function (anchors) {
+    var s = this.state, out = [], seen = {};
+    anchors.forEach(function (a) { if (a) seen[cellKey(a.x, a.y)] = true; });
+    anchors.forEach(function (a) {
+      if (!a) return;
+      orthogonalNeighbors(a.x, a.y).forEach(function (d) {
+        var k = cellKey(d[0], d[1]), c = s.grid[d[0]][d[1]];
+        if (seen[k]) return;
+        if (isCenter(d[0], d[1]) || c.pawn || c.destroyed) return;
+        seen[k] = true; out.push({ x: d[0], y: d[1], key: k });
+      });
     });
     return out;
+  };
+  Game.prototype.barrageSecondOptions = function () {
+    var s = this.state;
+    if (s.subPhase !== 'barrage-second' || !s.pendingBarrage.first) return [];
+    return this._barrageNextOptions([s.pendingBarrage.first]);
   };
   Game.prototype.barrageSecond = function (x, y) {
     var s = this.state;
     if (s.subPhase !== 'barrage-second') throw new Error('Nessun barrage in corso.');
     if (!this.barrageSecondOptions().some(function (o) { return o.x === x && o.y === y; })) throw new Error('Seconda cella non valida.');
-    var f = s.pendingBarrage.first, pid = s.pendingBarrage.playerId;
-    var c1 = s.grid[f.x][f.y], c2 = s.grid[x][y], pawn1 = c1.pawn;
-    this._log(pid + ' usa Barrage: distrugge [' + f.x + ',' + f.y + '] e [' + x + ',' + y + '].');
-    c1.card = null; c1.faceDown = false; c1.destroyed = true;
-    c2.card = null; c2.faceDown = false; c2.destroyed = true;
+    s.pendingBarrage.second = { x: x, y: y };
+    // Se non esiste una terza cella valida, si risolve con le due (fallback anti-blocco).
+    if (this._barrageNextOptions([s.pendingBarrage.first, s.pendingBarrage.second]).length === 0) this._barrageResolve();
+    else s.subPhase = 'barrage-third';
+  };
+  Game.prototype.barrageThirdOptions = function () {
+    var s = this.state;
+    if (s.subPhase !== 'barrage-third' || !s.pendingBarrage.first || !s.pendingBarrage.second) return [];
+    return this._barrageNextOptions([s.pendingBarrage.first, s.pendingBarrage.second]);
+  };
+  Game.prototype.barrageThird = function (x, y) {
+    var s = this.state;
+    if (s.subPhase !== 'barrage-third') throw new Error('Nessun barrage in corso.');
+    if (!this.barrageThirdOptions().some(function (o) { return o.x === x && o.y === y; })) throw new Error('Terza cella non valida.');
+    s.pendingBarrage.third = { x: x, y: y };
+    this._barrageResolve();
+  };
+  Game.prototype._barrageResolve = function () {
+    var s = this.state, pb = s.pendingBarrage, pid = pb.playerId;
+    var cells = [pb.first, pb.second, pb.third].filter(Boolean);
+    var pawn1 = s.grid[pb.first.x][pb.first.y].pawn; // solo la 1ª può avere una pedina
+    this._log(pid + ' usa Barrage: distrugge ' + cells.map(function (a) { return '[' + a.x + ',' + a.y + ']'; }).join(', ') + '.');
+    cells.forEach(function (a) { var c = s.grid[a.x][a.y]; c.card = null; c.faceDown = false; c.destroyed = true; });
     s.pendingBarrage = null; s.subPhase = null;
     this._chain = [];
-    if (pawn1) this._chain.push(this._step_relocatePawn(pawn1, { x: f.x, y: f.y }));
+    if (pawn1) this._chain.push(this._step_relocatePawn(pawn1, { x: pb.first.x, y: pb.first.y }));
     this._chain.push(this._step_afterAttack(pid));
     this._advanceChain();
   };
@@ -1034,7 +1076,7 @@
       p.energyExtraDiscard = 0;
       p.pendingActions = { moves: 1, attacks: 1 };
       // Reset dei poteri personaggio a fine round.
-      p.tacticianOpen = false; p.fighterFirstMoveDone = false; p.fighterBonusUsed = false; p.fighterQualified = false;
+      p.tacticianOpen = false;
     });
     if (s.endTriggered || s.round === 9) { this._finishGame(); return; }
 

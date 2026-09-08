@@ -239,6 +239,19 @@
   function randomizableCount(game) { var n = 0; for (var x = 1; x <= 5; x++) for (var y = 1; y <= 5; y++) { var c = game.getCell(x, y); if (!(x === 3 && y === 3) && !c.destroyed && c.card) n++; } return n; }
   function elementalCount(game) { var n = 0; for (var x = 1; x <= 5; x++) for (var y = 1; y <= 5; y++) { var c = game.getCell(x, y); if (!c.destroyed && c.card) n++; } return n; }
 
+  // Tool "energetici" (energy boost / drain): usali come ripiego quando non c'è nessuna azione a punti,
+  // per rimpinguare/rinnovare la mano. `phase` = 'move' | 'attack'.
+  function chooseEnergy(game, id, phase) {
+    var s = game.state;
+    if (!game.usableObjects(id).length) return null;
+    var revealed = game.availableRevealed(id);
+    var best = phase === 'move' ? bestArrival(game, id, revealed, s.moveModifier).value : bestShotWith(game, id, revealed).value;
+    if (best > 0) return null; // non sprecare energia se puoi già segnare
+    var boost = ownObj(game, id, 'energy_boost'); if (boost) return { id: boost.id, type: 'energy_boost' };
+    var drain = ownObj(game, id, 'energy_drain'); if (drain) return { id: drain.id, type: 'energy_drain' };
+    return null;
+  }
+
   // Potere personaggio (brawler / tactician) se conviene, nella fase indicata.
   function choosePower(game, id, phase) {
     var s = game.state, p = s.players[id];
@@ -295,6 +308,7 @@
     if (s.subPhase === 'elemental-suit') { if (s.pendingElemental.playerId === id) game.elementalSuit(cpuElementalSuit(game, id)); return {}; }
     if (s.subPhase === 'barrage-first') { if (s.pendingBarrage.playerId === id) { var f = cpuBarrageFirst(game, id); game.barrageFirst(f.x, f.y); } return {}; }
     if (s.subPhase === 'barrage-second') { if (s.pendingBarrage.playerId === id) { var sec = cpuBarrageSecond(game, id); if (sec) game.barrageSecond(sec.x, sec.y); } return {}; }
+    if (s.subPhase === 'barrage-third') { if (s.pendingBarrage.playerId === id) { var th = game.barrageThirdOptions()[0]; if (th) game.barrageThird(th.x, th.y); } return {}; }
     if (s.subPhase === 'randomizer-select') { if (s.pendingRandomizer.playerId === id) { cpuRandomizerCells(game, id).forEach(function (c) { game.randomizerToggle(c.x, c.y); }); game.randomizerConfirm(); } return {}; }
     if (s.subPhase === 'randomizer-place') { if (s.pendingRandomizer.playerId === id) { var pr = s.pendingRandomizer; pr.chosen.forEach(function (ch, i) { if (pr.drawn[i]) game.randomizerPlace(pr.drawn[i].id, ch.x, ch.y); }); game.randomizerDone(); } return {}; }
     if (s.subPhase === 'object-discard') { if (s.pendingObjectDiscard.playerId === id) game.discardObject(id, chooseDiscard(game, id)); return {}; }
@@ -316,6 +330,7 @@
       if (pw && pw.kind === 'tactician') { game.activatePower(id); return {}; }
       if (pw && pw.kind === 'brawler') { game.brawlerAction(id, pw.x, pw.y); return {}; }
       var mo = chooseMoveObject(game, id); if (mo) { game.useObject(id, mo.id); return {}; }
+      var men = chooseEnergy(game, id, 'move'); if (men) { game.useObject(id, men.id); return {}; }
       var mv = chooseMove(game, id);
       if (mv.action === 'pass') game.passMove(id); else game.move(id, mv.x, mv.y, mv.cardId);
       return {};
@@ -326,6 +341,7 @@
       if (pw2 && pw2.kind === 'tactician') { game.activatePower(id); return {}; }
       if (pw2 && pw2.kind === 'brawler') { var cc = game.pawnCell(id), rb = { type: 'shoot', from: cc ? { x: cc.x, y: cc.y } : null, to: { x: pw2.x, y: pw2.y } }; game.brawlerAction(id, pw2.x, pw2.y); return rb; }
       var ao = chooseAttackObject(game, id); if (ao) { game.useObject(id, ao.id); return {}; }
+      var aen = chooseEnergy(game, id, 'attack'); if (aen) { game.useObject(id, aen.id); return {}; }
       var sh = chooseShot(game, id);
       if (sh.action === 'pass') { game.passShoot(id); return {}; }
       var sc = game.pawnCell(id), rs = { type: 'shoot', from: sc ? { x: sc.x, y: sc.y } : null, to: { x: sh.x, y: sh.y } };
