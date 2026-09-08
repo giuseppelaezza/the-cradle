@@ -230,7 +230,22 @@ condizioni di gioco. I poteri si azzerano a fine round.
 | **runner** | **Passivo.** Solo in **fase di movimento** può abbinare le **carte pari tra di loro**: una **carta pari** in mano abbina una **casella scoperta di valore pari** (es. 2 con 4, 4 con 8, 2 con 6). |
 | **tactician** | **Attivo.** Attivabile **al massimo 2 volte per partita** (senza altri costi): per il resto del turno usa **anche le carte non scelte** (tutte le carte in mano vengono scoperte e diventano utilizzabili). Se usa per un'azione una carta **non** scelta in fase di selezione, quella carta va **scartata** normalmente. Le carte **non scelte e non usate** **non** vanno negli scarti a fine turno; le carte **scelte** e non usate vanno invece scartate come di consueto. |
 | **fighter** | **Passivo.** Solo in **fase di attacco** può abbinare le **carte pari tra di loro**: una **carta pari** in mano abbina una **casella scoperta di valore pari** (es. 2 con 4, 4 con 8, 2 con 6). |
-| **brawler** | **Attivo.** Se ha **3 carte disponibili** può **scartarle tutte e tre** per **abbinare qualsiasi cella** (di fatto rinuncia a un'azione, perché consuma tutte le carte). |
+| **brawler** | **Attivo.** Attivabile **al massimo 3 volte per partita**: se ha **3 carte disponibili** può **scartarle tutte e tre** per **abbinare qualsiasi cella** (di fatto rinuncia a un'azione, perché consuma tutte le carte). |
 
-*(Nota implementativa: se il modulo Oggetti non è attivo, il tactician non ha oggetti da scartare e
-non può attivare il proprio potere.)*
+*(Nota implementativa: il numero di attivazioni per partita dei poteri attivi — tactician e brawler — è
+configurabile nel file `js/characters.js` tramite il campo `powerUses`, così da poter provare valori
+diversi in fase di test.)*
+
+## 13. Modulo Reshuffle
+
+Modulo opzionale (attivabile a inizio partita). Ogni giocatore dispone di un numero fisso di
+**reshuffle** per partita (configurabile a inizio partita: **1, 2 o 3**; default **2**).
+
+Durante la **propria fase di selezione**, prima di scegliere le carte, un giocatore può usare un
+reshuffle: sceglie **da 1 a n carte** della propria mano (dove *n* è il numero di carte in mano),
+**scarta** le carte scelte e **pesca un egual numero** di carte dal mazzo. Se durante la pescata il
+mazzo si esaurisce, gli **scarti vengono rimescolati** per formare un nuovo mazzo e completare la
+pescata delle carte mancanti.
+
+Ogni uso consuma un reshuffle; esauriti gli usi, il giocatore non può più rimescolare per il resto
+della partita.

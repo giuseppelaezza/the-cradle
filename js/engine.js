@@ -84,9 +84,12 @@
       reshuffleLeft: 2,            // Modulo Reshuffle: usi rimasti
       reshuffleTotal: 2,           // Modulo Reshuffle: usi totali (da configurazione)
       // Modulo "poteri personaggi" (§12): stato dei poteri.
+      // I totali vengono impostati in createGame dal personaggio assegnato (Characters.powerUses).
       tacticianOpen: false,        // tactician: usa anche le carte non scelte (per-round)
       tacticianTotal: 2,           // tactician: attivazioni totali per partita
-      tacticianLeft: 2             // tactician: attivazioni rimaste
+      tacticianLeft: 2,            // tactician: attivazioni rimaste
+      brawlerTotal: 3,             // brawler: attivazioni totali per partita
+      brawlerLeft: 3               // brawler: attivazioni rimaste
     };
   }
 
@@ -137,6 +140,9 @@
         var ch = Characters.get(type) || Characters.get('runner');
         players[id].character = ch.type;
         players[id].belongingSuit = ch.suit;
+        // Numero di attivazioni del potere per partita (configurabile in characters.js).
+        if (ch.type === 'tactician' && ch.powerUses != null) { players[id].tacticianTotal = players[id].tacticianLeft = ch.powerUses | 0; }
+        if (ch.type === 'brawler' && ch.powerUses != null) { players[id].brawlerTotal = players[id].brawlerLeft = ch.powerUses | 0; }
         if (modules.objects) players[id].objects.push(Objects.makeObjectCard(ch.startObject, true));
       });
     }
@@ -807,15 +813,34 @@
     var p = s.players[playerId];
     return p.reshuffleLeft > 0 && p.hand.length > 0;
   };
-  Game.prototype.reshuffleHand = function (playerId) {
+  // Reshuffle: si scelgono da 1 a n carte (n = carte in mano), le scelte vengono scartate e
+  // si pesca un egual numero di carte dal mazzo. Se il mazzo si esaurisce, gli scarti vengono
+  // rimescolati per pescare le carte mancanti (_drawCard gestisce il rimescolamento).
+  Game.prototype.reshuffleHand = function (playerId, cardIds) {
     if (!this.canReshuffle(playerId)) throw new Error('Reshuffle non disponibile ora.');
-    var s = this.state, p = s.players[playerId];
-    p.hand.forEach(function (c) { s.deck.push(c); });
-    p.hand = []; p.revealedIds = []; p.revealedCards = [];
-    Deck.shuffle(s.deck, this._rng || Math.random);
-    for (var i = 0; i < 6; i++) { var c = this._drawCard(); if (c) p.hand.push(c); }
+    var s = this.state, p = s.players[playerId], self = this;
+    // Normalizza/valida la selezione: 1..n carte distinte appartenenti alla mano.
+    var ids = Array.isArray(cardIds) ? cardIds.slice() : (cardIds != null ? [cardIds] : []);
+    var seen = {}, chosen = [];
+    ids.forEach(function (id) {
+      if (seen[id]) return;
+      var card = p.hand.filter(function (c) { return c.id === id; })[0];
+      if (card) { seen[id] = true; chosen.push(card); }
+    });
+    if (chosen.length < 1 || chosen.length > p.hand.length) throw new Error('Selezione reshuffle non valida (scegli da 1 a ' + p.hand.length + ' carte).');
+    var n = chosen.length;
+    // Scarta le carte scelte (rimuovendole anche dall\'eventuale stato rivelato).
+    chosen.forEach(function (c) {
+      removeCard(p.hand, c.id);
+      p.revealedIds = p.revealedIds.filter(function (rid) { return rid !== c.id; });
+      p.revealedCards = p.revealedCards.filter(function (rc) { return rc && rc.id !== c.id; });
+      self._discard(c);
+    });
+    // Pesca un egual numero di carte dal mazzo.
+    var drawn = 0;
+    for (var i = 0; i < n; i++) { var nc = this._drawCard(); if (nc) { p.hand.push(nc); drawn++; } }
     p.reshuffleLeft -= 1;
-    this._log(playerId + ' rimescola la mano nel mazzo e pesca ' + p.hand.length + ' carte (reshuffle rimasti: ' + p.reshuffleLeft + ').');
+    this._log(playerId + ' reshuffle: scarta ' + n + ' carte e ne pesca ' + drawn + ' (reshuffle rimasti: ' + p.reshuffleLeft + ').');
   };
 
   // ================================================================== POTERI PERSONAGGIO (§12)
@@ -838,6 +863,7 @@
   Game.prototype.canBrawler = function (playerId) {
     var s = this.state, p = s.players[playerId];
     if (!s.modules.powers || s.subPhase || p.character !== 'brawler') return false;
+    if (!(p.brawlerLeft > 0)) return false; // esaurite le attivazioni della partita
     if (s.activePlayer !== playerId || s.actionsLeft <= 0) return false;
     if (s.phase !== 'move' && s.phase !== 'attack') return false;
     return this.availableRevealed(playerId).length >= 3;
@@ -863,7 +889,8 @@
     if (!this.brawlerTargets(playerId).some(function (t) { return t.x === x && t.y === y; })) throw new Error('Bersaglio non valido.');
     var avail = this.availableRevealed(playerId).slice();
     avail.forEach(function (c) { removeCard(s.players[playerId].hand, c.id); self._discard(c); });
-    this._log(playerId + ' (brawler) scarta 3 carte per abbinare qualsiasi cella.');
+    s.players[playerId].brawlerLeft -= 1;
+    this._log(playerId + ' (brawler) scarta 3 carte per abbinare qualsiasi cella (attivazioni rimaste: ' + s.players[playerId].brawlerLeft + ').');
     var cell = s.grid[x][y];
     if (s.phase === 'move') {
       var info = this._applyArrival(playerId, cell, null); // moveCard null → nessun trophy

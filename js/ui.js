@@ -110,6 +110,7 @@
     var ui = {
       mode: opts.mode || '2p', cpuId: opts.cpuId || 'S', humanId: (opts.cpuId === 'N' ? 'S' : 'N'),
       cpuTimer: null, gate: null, chosen: [], selectingPlayer: null, clashChooser: null, armedCardId: null,
+      reshuffleMode: null, reshuffleSel: [], // scelta carte da scartare per il reshuffle
       // stato per le animazioni (diff tra render)
       lastPawns: null, lastFaceDown: null, lastRound: null, pendingShot: null, flashingEnd: false, tlSegs: null
     };
@@ -234,6 +235,7 @@
       if (p.character) {
         chCell.appendChild(h('span', 'pc-char-name', p.character));
         if (s.modules.powers && p.character === 'tactician') chCell.appendChild(usesDots(p.tacticianTotal, p.tacticianLeft, id, 'pc-uses'));
+        if (s.modules.powers && p.character === 'brawler') chCell.appendChild(usesDots(p.brawlerTotal, p.brawlerLeft, id, 'pc-uses'));
         chCell.appendChild(h('span', 'tooltip', characterPowerDesc(p.character)));
         bindTip(chCell);
       } else chCell.appendChild(h('span', 'muted', '—'));
@@ -688,8 +690,9 @@
       if (isCpu(next)) { thinking('🤖 Il computer sceglie le carte…'); return; }
       var who = ui.selectingPlayer;
       if (who !== next) {
+        ui.reshuffleMode = null; ui.reshuffleSel = [];
         if (ui.mode === 'cpu') { ui.selectingPlayer = next; ui.chosen = []; who = next; }
-        else { openGate('Passa il dispositivo al Giocatore ' + next, 'Sono ' + next + ', mostra le mie carte', function () { ui.selectingPlayer = next; ui.chosen = []; render(); }); return; }
+        else { openGate('Passa il dispositivo al Giocatore ' + next, 'Sono ' + next + ', mostra le mie carte', function () { ui.selectingPlayer = next; ui.chosen = []; ui.reshuffleMode = null; ui.reshuffleSel = []; render(); }); return; }
       }
       renderHand(s, who, 'select');
     }
@@ -738,7 +741,12 @@
         // (non scelte) hanno tutte lo stesso dorso, anche le figure.
         var cls = 'card';
         if (showFace) cls += ' ' + (isFig ? 'inv suit-bg-' + c.suit : 'suit-' + c.suit);
-        if (mode === 'select') { cls += ' selectable'; if (ui.chosen.indexOf(c.id) !== -1) cls += ' chosen'; }
+        var reshMode = mode === 'select' && ui.reshuffleMode === playerId;
+        if (mode === 'select') {
+          cls += ' selectable';
+          if (reshMode) { if (ui.reshuffleSel.indexOf(c.id) !== -1) cls += ' resh-sel'; }
+          else if (ui.chosen.indexOf(c.id) !== -1) cls += ' chosen';
+        }
         else {
           if (avail) { cls += ' selectable ' + (revealed ? 'revealed' : 'extra'); }
           else { cls += ' hidden-card'; }
@@ -755,7 +763,7 @@
           card.appendChild(tip); bindTip(card);
         }
         card.onclick = function () {
-          if (mode === 'select') toggleChosen(playerId, c.id);
+          if (mode === 'select') { if (reshMode) toggleReshuffle(playerId, c.id); else toggleChosen(playerId, c.id); }
           else if (avail) { ui.armedCardId = (ui.armedCardId === c.id) ? null : c.id; render(); }
         };
         body.appendChild(card);
@@ -781,8 +789,9 @@
       if (p.belongingSuit) { var sd = h('span', 'ai-seed bg-' + p.belongingSuit); sd.appendChild(suitIcon(p.belongingSuit, true)); sd.title = 'Seme di appartenenza: ' + SUIT_LABEL[p.belongingSuit]; wrap.appendChild(sd); }
       if (p.character) wrap.appendChild(h('span', 'ai-char', p.character));
       if (s.modules.powers && p.character) wrap.appendChild(h('span', 'ai-power', characterPowerDesc(p.character)));
-      // Tactician: attivazioni rimaste (rettangoli come i reshuffle).
+      // Attivazioni rimaste del potere attivo (rettangoli come i reshuffle).
       if (s.modules.powers && p.character === 'tactician') wrap.appendChild(usesDots(p.tacticianTotal, p.tacticianLeft, p.id, 'ai-uses'));
+      if (s.modules.powers && p.character === 'brawler') wrap.appendChild(usesDots(p.brawlerTotal, p.brawlerLeft, p.id, 'ai-uses'));
       return wrap;
     }
 
@@ -792,34 +801,58 @@
       else if (ui.chosen.length < game.selectCount(playerId)) ui.chosen.push(cardId);
       render();
     }
+    // Reshuffle: si scelgono da 1 a n carte da scartare (n = carte in mano).
+    function toggleReshuffle(playerId, cardId) {
+      var i = ui.reshuffleSel.indexOf(cardId);
+      if (i !== -1) ui.reshuffleSel.splice(i, 1);
+      else ui.reshuffleSel.push(cardId);
+      render();
+    }
 
     function handActions(s, playerId, mode) {
       var wrap = h('div', 'act-actions');
       if (mode === 'select') {
-        var need = game.selectCount(playerId);
-        wrap.appendChild(h('span', 'hint', 'Scegli ' + need + ' carte (' + ui.chosen.length + '/' + need + ')'));
-        var conf = confirmBtn('Conferma', playerId);
-        conf.disabled = ui.chosen.length !== need;
-        conf.onclick = function () { game.selectCards(playerId, ui.chosen.slice()); ui.selectingPlayer = null; ui.chosen = []; render(); };
-        wrap.appendChild(conf);
-        // Modulo Reshuffle: bottone + cerchi (usi rimasti = pieni, usati = solo contorno; colore del giocatore).
-        if (s.modules.reshuffle) {
-          var pr = s.players[playerId], total = pr.reshuffleTotal || 0, left = pr.reshuffleLeft || 0;
-          var ctl = h('div', 'reshuffle-ctl');
-          var rs = h('button', 'ghost rs-btn', 'Reshuffle');
-          rs.disabled = !(game.canReshuffle && game.canReshuffle(playerId));
-          rs.title = 'Rimescola la tua mano nel mazzo e pesca 6 carte.';
-          rs.onclick = function () { game.reshuffleHand(playerId); ui.chosen = []; render(); };
-          ctl.appendChild(rs);
-          var dots = h('div', 'rs-dots');
-          for (var di = 0; di < total; di++) {
-            var d = h('span', 'rs-dot' + (di < left ? ' on' : ''));
-            d.style.setProperty('--rc', PLAYER_COLOR[playerId]);
-            d.title = (di < left ? 'Reshuffle disponibile' : 'Reshuffle usato');
-            dots.appendChild(d);
+        var reshActive = s.modules.reshuffle && ui.reshuffleMode === playerId;
+        if (reshActive) {
+          // Modalità scelta carte da scartare (reshuffle): 1..n carte.
+          var k = ui.reshuffleSel.length;
+          wrap.appendChild(h('span', 'hint', 'Reshuffle: scegli le carte da scartare (' + k + '/' + s.players[playerId].hand.length + ')'));
+          var rconf = confirmBtn('Conferma reshuffle', playerId);
+          rconf.disabled = k < 1;
+          rconf.onclick = function () {
+            game.reshuffleHand(playerId, ui.reshuffleSel.slice());
+            ui.reshuffleMode = null; ui.reshuffleSel = []; ui.chosen = []; render();
+          };
+          wrap.appendChild(rconf);
+          var rcancel = h('button', 'ghost', 'Annulla');
+          rcancel.onclick = function () { ui.reshuffleMode = null; ui.reshuffleSel = []; render(); };
+          wrap.appendChild(rcancel);
+        } else {
+          var need = game.selectCount(playerId);
+          wrap.appendChild(h('span', 'hint', 'Scegli ' + need + ' carte (' + ui.chosen.length + '/' + need + ')'));
+          var conf = confirmBtn('Conferma', playerId);
+          conf.disabled = ui.chosen.length !== need;
+          conf.onclick = function () { game.selectCards(playerId, ui.chosen.slice()); ui.selectingPlayer = null; ui.chosen = []; render(); };
+          wrap.appendChild(conf);
+          // Modulo Reshuffle: bottone + indicatori (usi rimasti = pieni, usati = solo contorno; colore del giocatore).
+          if (s.modules.reshuffle) {
+            var pr = s.players[playerId], total = pr.reshuffleTotal || 0, left = pr.reshuffleLeft || 0;
+            var ctl = h('div', 'reshuffle-ctl');
+            var rs = h('button', 'ghost rs-btn', 'Reshuffle');
+            rs.disabled = !(game.canReshuffle && game.canReshuffle(playerId));
+            rs.title = 'Scarta da 1 a n carte scelte e pescane altrettante dal mazzo.';
+            rs.onclick = function () { ui.reshuffleMode = playerId; ui.reshuffleSel = []; ui.chosen = []; render(); };
+            ctl.appendChild(rs);
+            var dots = h('div', 'rs-dots');
+            for (var di = 0; di < total; di++) {
+              var d = h('span', 'rs-dot' + (di < left ? ' on' : ''));
+              d.style.setProperty('--rc', PLAYER_COLOR[playerId]);
+              d.title = (di < left ? 'Reshuffle disponibile' : 'Reshuffle usato');
+              dots.appendChild(d);
+            }
+            ctl.appendChild(dots);
+            wrap.appendChild(ctl);
           }
-          ctl.appendChild(dots);
-          wrap.appendChild(ctl);
         }
       } else {
         var word = s.phase === 'move' ? 'muovere' : 'attaccare';
@@ -1007,6 +1040,7 @@
     // ============================================================ UNDO / ripristino
     function resetUiTransient() {
       ui.armedCardId = null; ui.chosen = []; ui.selectingPlayer = null; ui.clashChooser = null;
+      ui.reshuffleMode = null; ui.reshuffleSel = [];
       ui.gate = null; ui.pendingShot = null; ui.brawlerMode = false; ui.selectedDrawn = null;
     }
     function afterRestore() {

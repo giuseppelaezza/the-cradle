@@ -425,8 +425,11 @@ console.log('# Poteri: runner (pari↔pari, move), tactician (apre carte), brawl
   sb.players.N.revealedIds = ['a', 'b', 'c']; sb.players.N.revealedCards = sb.players.N.hand.slice();
   sb.phase = 'move'; sb.subPhase = null; sb.activePlayer = 'N'; sb.actionsLeft = 1; sb.moveModifier = null;
   ok(gb.canBrawler('N'), 'brawler disponibile con 3 carte');
+  eq(sb.players.N.brawlerTotal, 3, 'brawler: 3 usi totali (da characters.js)');
+  eq(sb.players.N.brawlerLeft, 3, 'brawler: 3 usi iniziali');
   gb.brawlerAction('N', 2, 1);
   eq(sb.players.N.score, 2, 'brawler: figura 9 → +2'); eq(sb.players.N.trophies.length, 0, 'brawler: nessun trophy'); eq(sb.players.N.hand.length, 0, 'brawler: 3 carte scartate');
+  eq(sb.players.N.brawlerLeft, 2, 'brawler: usi decrementati (3→2)');
 })();
 
 // -------------------------------------------------------------------- Oggetti avanzati
@@ -498,15 +501,27 @@ console.log('# Rimescolo mazzo, Energy Boost/Drain, modulo Reshuffle');
   ok(!sd.players.S.hand.some(function (c) { return c.id === stolen.id; }), 'energy drain: la carta non è più nella mano avversaria');
   ok(!sd.players.S.revealedCards.some(function (c) { return c.id === stolen.id; }), 'energy drain: la carta non è più nella preview avversaria');
 
-  // Modulo Reshuffle: rimescola la mano nel mazzo e pesca 6 (2 usi per partita).
+  // Modulo Reshuffle: scarta 1..n carte scelte e pesca un egual numero (2 usi per partita).
   var gr = Engine.createGame({ rng: makeRng(13), firstPlayer: 'N', modules: { reshuffle: true } });
   var sr = gr.state;
   ok(gr.canReshuffle('N'), 'reshuffle disponibile in selezione');
-  var deckR = sr.deck.length;
-  gr.reshuffleHand('N');
-  eq(sr.players.N.hand.length, 6, 'reshuffle: mano riportata a 6');
+  var deckR = sr.deck.length, discR = sr.discard.length;
+  // Scarta 2 carte scelte → mano resta a 6, mazzo −2, scarti +2.
+  var toss = [sr.players.N.hand[0].id, sr.players.N.hand[2].id];
+  gr.reshuffleHand('N', toss);
+  eq(sr.players.N.hand.length, 6, 'reshuffle: mano resta a 6 (2 scartate, 2 pescate)');
+  ok(!sr.players.N.hand.some(function (c) { return toss.indexOf(c.id) !== -1; }), 'reshuffle: carte scelte non più in mano');
   eq(sr.players.N.reshuffleLeft, 1, 'reshuffle: usi decrementati');
-  eq(sr.deck.length, deckR, 'reshuffle: mazzo di lunghezza netta invariata (6 dentro, 6 fuori)');
+  eq(sr.deck.length, deckR - 2, 'reshuffle: mazzo −2 (2 pescate)');
+  eq(sr.discard.length, discR + 2, 'reshuffle: scarti +2 (2 scartate)');
+  // Selezione non valida (0 carte) → errore.
+  var threw = false; try { gr.reshuffleHand('N', []); } catch (e) { threw = true; }
+  ok(threw, 'reshuffle: selezione vuota rifiutata');
+  // Scarta 1 sola carta → mano resta 6, usi finiti.
+  gr.reshuffleHand('N', [sr.players.N.hand[1].id]);
+  eq(sr.players.N.hand.length, 6, 'reshuffle: 1 carta scartata e ripescata, mano resta 6');
+  eq(sr.players.N.reshuffleLeft, 0, 'reshuffle: usi esauriti');
+  ok(!gr.canReshuffle('N'), 'reshuffle: non più disponibile a usi esauriti');
 })();
 
 // --------------------------------------------------------------------

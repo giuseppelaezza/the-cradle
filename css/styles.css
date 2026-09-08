@@ -232,6 +232,7 @@ body.setup .app { visibility: hidden; }
 .card.hidden-card::after { content: ""; position: absolute; inset: 24%; border-radius: 8px; border: 2px solid rgba(255,255,255,.28); }
 .card.selectable { cursor: pointer; } .card.chosen { transform: translateY(-8px); box-shadow: 0 0 0 3px var(--highlight); }
 .card.armed { transform: translateY(-8px); box-shadow: 0 0 0 3px var(--warn); }
+.card.resh-sel { transform: translateY(-8px); box-shadow: 0 0 0 3px var(--danger); opacity: .82; }
 .act-actions { margin-top: 12px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .hint { color: var(--muted); font-size: 13px; }
 /* tasto conferma colorato col colore del giocatore (come la barra delle fasi) */

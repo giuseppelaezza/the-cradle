@@ -319,7 +319,11 @@
 
     // --- selezione ---
     if (s.phase === 'select' && s.selected[id] == null) {
-      if (game.canReshuffle && game.canReshuffle(id) && cpuShouldReshuffle(game, id)) { game.reshuffleHand(id); return {}; }
+      if (game.canReshuffle && game.canReshuffle(id) && cpuShouldReshuffle(game, id)) {
+        // Nessuna carta della mano è utile: scarta l'intera mano e ripesca.
+        game.reshuffleHand(id, game.state.players[id].hand.map(function (c) { return c.id; }));
+        return {};
+      }
       var so = chooseSelectObject(game, id);
       if (so) { game.useObject(id, so.id, so.params || {}); return {}; }
       game.selectCards(id, chooseSelection(game, id)); return {};
