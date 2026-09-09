@@ -17,7 +17,6 @@
   'use strict';
 
   var CENTER_X = 3, CENTER_Y = 3;
-  var OBJECT_LIMIT = 2; // oggetti non-iniziali posseduti contemporaneamente
 
   // ------------------------------------------------------------------ Geometria
   function cellKey(x, y) { return x + ',' + y; }
@@ -89,7 +88,9 @@
       tacticianTotal: 2,           // tactician: attivazioni totali per partita
       tacticianLeft: 2,            // tactician: attivazioni rimaste
       brawlerTotal: 3,             // brawler: attivazioni totali per partita
-      brawlerLeft: 3               // brawler: attivazioni rimaste
+      brawlerLeft: 3,              // brawler: attivazioni rimaste
+      runnerTotal: 2,             // runner: usi della passiva "colpisci figura in movimento"
+      runnerLeft: 2
     };
   }
 
@@ -109,6 +110,7 @@
                     objects: !!(opts.modules && opts.modules.objects),
                     powers: !!(opts.modules && opts.modules.powers),
                     reshuffle: !!(opts.modules && opts.modules.reshuffle) };
+    var altMatch = !!opts.altMatch; // Abbinamento Alternativo (regola addizionale)
 
     // 1-4. Mazzo, seme iniziale, asso centrale, griglia.
     var deck = Deck.shuffle(Deck.buildDeck(), rng);
@@ -137,18 +139,26 @@
     if (modules.characters) {
       ['N', 'S'].forEach(function (id) {
         var type = opts.characters && opts.characters[id];
+        // "random": personaggio scelto a caso per questo giocatore.
+        if (type === 'random') type = Characters.ORDER[Math.floor(rng() * Characters.ORDER.length)];
         var ch = Characters.get(type) || Characters.get('runner');
         players[id].character = ch.type;
         players[id].belongingSuit = ch.suit;
         // Numero di attivazioni del potere per partita (configurabile in characters.js).
         if (ch.type === 'tactician' && ch.powerUses != null) { players[id].tacticianTotal = players[id].tacticianLeft = ch.powerUses | 0; }
         if (ch.type === 'brawler' && ch.powerUses != null) { players[id].brawlerTotal = players[id].brawlerLeft = ch.powerUses | 0; }
-        if (modules.objects) players[id].objects.push(Objects.makeObjectCard(ch.startObject, true));
+        if (ch.type === 'runner' && ch.powerUses != null) { players[id].runnerTotal = players[id].runnerLeft = ch.powerUses | 0; }
+        // Oggetto/i iniziale/i (esclusi dal limite).
+        if (modules.objects) (ch.startObjects || []).forEach(function (t) { players[id].objects.push(Objects.makeObjectCard(t, true)); });
       });
     }
 
-    // Mazzo Oggetti (4 distinti a faccia in giù) solo se il modulo è attivo.
-    var objectDeck = modules.objects ? Objects.buildObjectDeck(rng, 4) : [];
+    // Mazzo Oggetti (2 copie di 5 tipi, o dei tipi scelti in configurazione) solo se il modulo è attivo.
+    var objectDeck = modules.objects ? Objects.buildObjectDeck(rng, opts.objectSelection) : [];
+    // Ruleset A (abbinamento alternativo): ogni giocatore pesca 1 oggetto extra a inizio partita.
+    if (modules.objects && altMatch) {
+      ['N', 'S'].forEach(function (id) { if (objectDeck.length) players[id].objects.push(objectDeck.shift()); });
+    }
 
     // 8. Pesca 6 carte a testa.
     for (var d = 0; d < 6; d++) { players.N.hand.push(deck.shift()); players.S.hand.push(deck.shift()); }
@@ -156,10 +166,11 @@
     var firstPlayer = opts.firstPlayer || (rng() < 0.5 ? 'N' : 'S');
 
     var state = {
-      deck: deck, objectDeck: objectDeck, discard: [],
+      deck: deck, objectDeck: objectDeck, discard: [], objectDiscard: [],
       grid: grid, centerInitialSuit: centerInitialSuit,
       suitMode: suitMode, currentSuit: centerInitialSuit,
-      modules: modules,
+      modules: modules, altMatch: altMatch,
+      trail: [],               // storico geometrico di movimenti/spari (per l'overlay "Mostra azioni")
       players: players, firstPlayer: firstPlayer,
       round: 1,
       phase: 'select',        // 'select'|'move'|'attack'|'end'
@@ -173,6 +184,9 @@
       pendingClash: null,
       pendingForced: null,    // {kind,pawnId,chooserId,from,optional} durante 'forced-reloc'
       pendingObjectDiscard: null,
+      pendingToolDiscard: null, // {playerId,modifier} durante 'tool-discard' (costo di jetpack/jump)
+      pendingRunner: null,    // {playerId,x,y} durante 'runner-figure' (passiva runner)
+      pendingAltMatch: null,  // {playerId,x,y,drawn?} durante 'altmatch-object'
       pendingTimebomb: null,
       pendingElemental: null, pendingBarrage: null, pendingRandomizer: null,
       gameOver: false, endTriggered: false, result: null, log: []
@@ -195,7 +209,33 @@
   Game.prototype._log = function (m) { this.state.log.push('R' + this.state.round + ' · ' + m); };
   // Le carte che escono dal gioco finiscono nella pila degli scarti.
   Game.prototype._discard = function (card) { if (card) this.state.discard.push(card); };
+  // Le carte Oggetto che escono dal gioco (usate, scartate oltre il limite, non scelte) vanno nella pila scarti Oggetti.
+  Game.prototype._discardObjectCard = function (obj) { if (obj) this.state.objectDiscard.push(obj); };
   Game.prototype.getCell = function (x, y) { return this.state.grid[x][y]; };
+  // Limite di oggetti non-iniziali posseduti contemporaneamente: 4 in Ruleset A, 2 in Ruleset B.
+  Game.prototype._objLimit = function () { return this.state.altMatch ? 4 : 2; };
+
+  // Registra un'azione geometrica (movimento pedina o sparo) per l'overlay "Mostra azioni".
+  Game.prototype._recordTrail = function (t, p, from, to) {
+    if (!from && !to) return;
+    this.state.trail.push({ t: t, p: p, from: from ? { x: from.x, y: from.y } : null, to: to ? { x: to.x, y: to.y } : null });
+  };
+
+  // Se il mazzo Oggetti è esaurito, rimescola la pila degli scarti Oggetti per riformarlo.
+  Game.prototype._reshuffleObjectDiscard = function () {
+    var s = this.state;
+    if (s.objectDeck.length === 0 && s.objectDiscard.length) {
+      s.objectDeck = Deck.shuffle(s.objectDiscard.slice(), this._rng || Math.random);
+      s.objectDiscard = [];
+      this._log('Mazzo Oggetti esaurito: ' + s.objectDeck.length + ' scarti Oggetti rimescolati.');
+    }
+  };
+  // Pesca una carta Oggetto dal mazzo, rimescolando gli scarti Oggetti se il mazzo è vuoto. null se non ce ne sono.
+  Game.prototype._drawObjectCard = function () {
+    var s = this.state;
+    if (s.objectDeck.length === 0) this._reshuffleObjectDiscard();
+    return s.objectDeck.length ? s.objectDeck.shift() : null;
+  };
 
   // Se il mazzo è esaurito, rimescola gli scarti per formare un nuovo mazzo (§ regola reshuffle).
   Game.prototype._reshuffleDiscardIntoDeck = function () {
@@ -234,7 +274,6 @@
     if (canMatch(card, cell, s.currentSuit, p.belongingSuit)) return true;
     if (s.modules.powers && cell && !cell.destroyed && cell.card && !cell.faceDown &&
         (card.value % 2 === 0) && (cell.card.value % 2 === 0)) {
-      if (p.character === 'runner' && s.phase === 'move') return true;
       if (p.character === 'fighter' && s.phase === 'attack') return true;
     }
     return false;
@@ -350,6 +389,8 @@
     var info = this._applyArrival(id, dest, card);
     this._chain = [this._step_afterMove(id)];
     if (info.figureEliminated) this._postFigureDraw(id);
+    if (info.centerObject) this._chain.unshift(this._step_altObject(id));
+    if (info.runnerFigure) this._chain.unshift(this._step_runnerFigure(id, info.runnerFigure.x, info.runnerFigure.y));
     this._advanceChain();
     return { type: 'moved' };
   };
@@ -364,7 +405,8 @@
   Game.prototype._applyArrival = function (id, cell, moveCard) {
     var s = this.state, p = s.players[id];
     var from = this.pawnCell(id); if (from) from.pawn = null;
-    var figureEliminated = false;
+    this._recordTrail('move', id, from, cell);
+    var figureEliminated = false, runnerFigure = false;
 
     // moveCard può essere null (potere brawler: le 3 carte sono già state scartate → nessun trophy).
     if (cell.faceDown) {
@@ -380,22 +422,35 @@
       if (moveCard) this._discard(moveCard);
       return { figureEliminated: false };
     }
-    var gotTrophy = false;
+    var gotTrophy = false, centerObject = false;
     if (isCenter(cell.x, cell.y)) {
       p.score += 5; p.matchedCenter = true; if (moveCard) p.trophies.push(moveCard); cell.faceDown = true; gotTrophy = true;
-      this._log(id + ' conquista il CENTRO: +5 (una tantum).');
+      // Ruleset A: conquistare il centro dà anche la scelta di 1 oggetto su 3.
+      if (s.altMatch && s.modules.objects) centerObject = true;
+      this._log(id + ' conquista il CENTRO: +5 (una tantum)' + (centerObject ? ', scelta oggetto.' : '.'));
     } else {
       if (Deck.isFigure(cell.card)) {
-        var pts = Deck.figurePoints(cell.card);
-        p.score += pts; p.figuresMatched += 1; if (moveCard) p.trophies.push(moveCard); cell.faceDown = true; gotTrophy = true; figureEliminated = true;
-        this._log(id + ' abbina la figura ' + cell.card.value + ' su [' + cell.x + ',' + cell.y + ']: +' + pts + '.');
+        if (s.altMatch) {
+          // Abbinamento alternativo: muovere su una figura NON la elimina. Passiva runner: può colpirla
+          // scartando 1 carta scelta extra (offerta come sotto-fase se ha usi e una carta disponibile).
+          if (s.modules.powers && p.character === 'runner' && p.runnerLeft > 0 && this.availableRevealed(id).length >= 1) {
+            runnerFigure = { x: cell.x, y: cell.y };
+            this._log(id + ' muove sulla figura ' + cell.card.value + ' su [' + cell.x + ',' + cell.y + '] (runner: può colpirla).');
+          } else {
+            this._log(id + ' muove sulla figura ' + cell.card.value + ' su [' + cell.x + ',' + cell.y + '] (nessun effetto).');
+          }
+        } else {
+          var pts = Deck.figurePoints(cell.card);
+          p.score += pts; p.figuresMatched += 1; if (moveCard) p.trophies.push(moveCard); cell.faceDown = true; gotTrophy = true; figureEliminated = true;
+          this._log(id + ' abbina la figura ' + cell.card.value + ' su [' + cell.x + ',' + cell.y + ']: +' + pts + '.');
+        }
       }
       if (isTargetCell(id, cell)) { p.score += 5; s.endTriggered = true; this._log(id + ' raggiunge la RIGA-BERSAGLIO: +5. Fine partita a fine round.'); }
     }
     cell.pawn = id;
     if (!gotTrophy && !isCenter(cell.x, cell.y) && !isTargetCell(id, cell)) this._log(id + ' muove su [' + cell.x + ',' + cell.y + '].');
     if (!gotTrophy && moveCard) this._discard(moveCard); // carte non-trophy → scarti
-    return { figureEliminated: figureEliminated };
+    return { figureEliminated: figureEliminated, centerObject: centerObject, runnerFigure: runnerFigure };
   };
 
   // ================================================================== CLASH
@@ -452,6 +507,8 @@
         this._step_finishClashMove(attackerId)
       ];
       if (info.figureEliminated) this._postFigureDraw(pc.attackerId);
+      if (info.centerObject) this._chain.unshift(this._step_altObject(pc.attackerId));
+      if (info.runnerFigure) this._chain.unshift(this._step_runnerFigure(pc.attackerId, info.runnerFigure.x, info.runnerFigure.y));
       this._advanceChain();
     } else {
       this._discard(pc.moveCard); // l'attaccante non arriva: la carta di movimento va agli scarti
@@ -523,6 +580,7 @@
   Game.prototype._forcedMove = function (pawnId, x, y) {
     var s = this.state, from = this.pawnCell(pawnId); if (from) from.pawn = null;
     var cell = s.grid[x][y]; cell.pawn = pawnId; // figura NON girata, nessun punto
+    this._recordTrail('move', pawnId, from, cell);
     this._log(pawnId + ' spinto su [' + x + ',' + y + '] (spostamento forzato, nessun punto).');
     if (isTargetCell(pawnId, cell)) { s.endTriggered = true; this._log(pawnId + ' finisce sulla RIGA-BERSAGLIO (forzato): fine partita a fine round.'); }
   };
@@ -530,8 +588,11 @@
   // ================================================================== ATTACK
   Game.prototype._beginAttackPhase = function () {
     this.state.phase = 'attack';
-    this._log('Fase di attacco; inizia ' + this.state.firstPlayer + '.');
-    this._beginAttackSegment(this.state.firstPlayer);
+    // Iniziativa divisa: nel movimento inizia il Primo Giocatore, in attacco inizia l'ALTRO
+    // (così ciascun giocatore è "reattivo" in esattamente una fase).
+    var attackLeader = otherPlayer(this.state.firstPlayer);
+    this._log('Fase di attacco; inizia ' + attackLeader + '.');
+    this._beginAttackSegment(attackLeader);
   };
   Game.prototype._beginAttackSegment = function (id) {
     var s = this.state;
@@ -545,8 +606,9 @@
     s.subPhase = null; // pronto ad attaccare; gli oggetti attack si usano dal pannello
   };
   Game.prototype._endAttackSegment = function () {
-    var s = this.state;
-    if (s.activePlayer === s.firstPlayer) this._beginAttackSegment(otherPlayer(s.firstPlayer));
+    var s = this.state, attackLeader = otherPlayer(s.firstPlayer);
+    // L'attacco inizia dall'ALTRO giocatore; poi tocca al Primo Giocatore; poi fine round.
+    if (s.activePlayer === attackLeader) this._beginAttackSegment(s.firstPlayer);
     else this._endRound();
   };
   Game.prototype._afterAttackAction = function (id) {
@@ -572,13 +634,15 @@
     var card = findCard(this.availableRevealed(id), cardId);
     if (!card || !this._matches(id, card, cell)) throw new Error('Carta non valida per l\'attacco.');
     removeCard(s.players[id].hand, cardId);
+    this._recordTrail('shot', id, this.pawnCell(id), cell);
     var mod = s.attackModifier;
     var info = this._applyShot(id, cell, card, mod === 'homing');
 
     var chain = [];
     if (mod === 'homing') chain.push(this._step_homing(id, cell));
     else if (mod === 'hook' && info.hitOpponentPawn) chain.push(this._step_hook(id, cell));
-    if (info.figureEliminated && this._drawObject(id) === 'over') chain.push(this._step_openDiscard(id));
+    if (info.altFigureObject) chain.push(this._step_altObject(id));
+    else if (info.figureEliminated && this._drawObject(id) === 'over') chain.push(this._step_openDiscard(id));
     chain.push(this._step_afterAttack(id));
     this._chain = chain;
     this._advanceChain();
@@ -598,6 +662,25 @@
       if (oppOnCell && !cell.destroyed) { p.score += 5; this._log(id + ' colpisce la pedina avversaria (carta coperta): +5.'); }
       if (shootCard) this._discard(shootCard);
       return { figureEliminated: false, hitOpponentPawn: oppOnCell && !cell.destroyed };
+    }
+    // Abbinamento alternativo (Ruleset A): attaccare gira SEMPRE la carta a faccia in giù.
+    // Su una figura (senza homing): punti della figura + 1 trofeo, poi scelta di 1 oggetto su 3.
+    if (this.state.altMatch && !isHoming) {
+      var isFigA = Deck.isFigure(cell.card);
+      var gainedA = 0, trophyA = false;
+      if (oppOnCell) gainedA += 5;
+      if (isFigA) {
+        gainedA += Deck.figurePoints(cell.card);
+        p.figuresMatched += 1;
+        if (shootCard) { p.trophies.push(shootCard); trophyA = true; }
+      }
+      p.score += gainedA;
+      cell.faceDown = true;
+      if (isFigA) this._log(id + ' colpisce la figura ' + cell.card.value + ' su [' + cell.x + ',' + cell.y + ']: +' + Deck.figurePoints(cell.card) + (oppOnCell ? ' +5 pedina' : '') + ', 1 trofeo, scelta oggetto.');
+      else if (oppOnCell) this._log(id + ' colpisce la pedina avversaria su [' + cell.x + ',' + cell.y + ']: +5 (carta girata a faccia in giù).');
+      else this._log(id + ' spara su [' + cell.x + ',' + cell.y + ']: carta girata a faccia in giù.');
+      if (!trophyA && shootCard) this._discard(shootCard);
+      return { figureEliminated: false, hitOpponentPawn: oppOnCell, altFigureObject: isFigA };
     }
     var gained = 0, trophy = false, figureEliminated = false;
     if (oppOnCell) gained += 5;
@@ -677,16 +760,27 @@
   Game.prototype._canPayToolCost = function (playerId) {
     return this.availableRevealed(playerId).length >= 2;
   };
-  // Costo di jetpack/jump: scarta una delle carte SCELTE (rivelate) — la più bassa.
-  Game.prototype._extraDiscardForTool = function (playerId) {
-    var p = this.state.players[playerId];
-    var avail = this.availableRevealed(playerId);
-    if (avail.length < 2) return;
-    var card = avail.slice().sort(function (a, b) { return a.value - b.value; })[0];
+  // Costo di jetpack/jump: il giocatore SCEGLIE quale carta scelta scartare (sotto-fase 'tool-discard').
+  Game.prototype._openToolDiscard = function (playerId, modifier) {
+    this.state.subPhase = 'tool-discard';
+    this.state.pendingToolDiscard = { playerId: playerId, modifier: modifier };
+  };
+  Game.prototype.toolDiscardOptions = function () {
+    var s = this.state, pt = s.pendingToolDiscard;
+    return (s.subPhase === 'tool-discard' && pt) ? this.availableRevealed(pt.playerId) : [];
+  };
+  Game.prototype.toolDiscardChoose = function (cardId) {
+    var s = this.state, pt = s.pendingToolDiscard;
+    if (s.subPhase !== 'tool-discard' || !pt) throw new Error('Nessuno scarto (costo oggetto) in corso.');
+    var p = s.players[pt.playerId];
+    var card = findCard(this.availableRevealed(pt.playerId), cardId);
+    if (!card) throw new Error('Carta non disponibile.');
     removeCard(p.hand, card.id);
     var ri = p.revealedIds.indexOf(card.id); if (ri !== -1) p.revealedIds.splice(ri, 1);
     this._discard(card);
-    this._log(playerId + ' scarta una carta scelta (' + card.value + card.suit[0].toUpperCase() + ') come costo dell\'oggetto.');
+    this._log(pt.playerId + ' scarta ' + card.value + card.suit[0].toUpperCase() + ' come costo dell\'oggetto.');
+    s.moveModifier = pt.modifier; // arma jetpack/jump per il movimento
+    s.pendingToolDiscard = null; s.subPhase = null;
   };
 
   Game.prototype.usableObjects = function (playerId) {
@@ -721,11 +815,12 @@
     if (!obj) throw new Error('Oggetto non utilizzabile ora.');
 
     removeCard(s.players[playerId].objects, objectId); // usato una volta
+    this._discardObjectCard(obj);                       // la carta Oggetto usata va nella pila scarti Oggetti
     this._log(playerId + ' usa ' + obj.type + '.');
 
     switch (obj.type) {
-      case 'jetpack': this._extraDiscardForTool(playerId); s.moveModifier = 'jetpack'; break; // costo: scarta una carta extra
-      case 'jump': this._extraDiscardForTool(playerId); s.moveModifier = 'jump'; break;
+      case 'jetpack': this._openToolDiscard(playerId, 'jetpack'); break; // costo: il giocatore sceglie la carta da scartare
+      case 'jump': this._openToolDiscard(playerId, 'jump'); break;
       case 'hook': s.attackModifier = 'hook'; break;                     // armato per l'attacco
       case 'homing_missile': s.attackModifier = 'homing'; break;
       case 'rush_juice': s.players[playerId].pendingActions = { moves: 2, attacks: 0 }; s.selectObjectUsed[playerId] = true; break;
@@ -738,9 +833,9 @@
       // Oggetti "energetici" (movimento o attacco): effetto immediato, non consumano l'azione né armano modificatori.
       case 'energy_boost': {
         var p = s.players[playerId], drew = [];
+        // Le 2 carte pescate sono "scelte" (rivelate): a fine turno si scartano con le altre carte scelte non usate.
         for (var eb = 0; eb < 2; eb++) { var c = this._drawCard(); if (c) { p.hand.push(c); p.revealedIds.push(c.id); drew.push(c); } }
-        p.energyExtraDiscard = (p.energyExtraDiscard || 0) + 2;
-        this._log(playerId + ' usa Energy Boost: pesca ' + drew.length + ' carte (usabili ora; 2 scarti extra a fine turno).');
+        this._log(playerId + ' usa Energy Boost: pesca ' + drew.length + ' carte (usabili ora; a fine turno si scartano con le carte scelte non usate).');
         break;
       }
       case 'energy_drain': {
@@ -778,11 +873,12 @@
   Game.prototype._drawObject = function (playerId) {
     var s = this.state;
     if (!s.modules.objects) return 'off';
+    if (s.objectDeck.length === 0) this._reshuffleObjectDiscard();
     if (s.objectDeck.length === 0) { this._log('Mazzo Oggetti vuoto: nessuna pesca.'); return 'empty'; }
     var obj = s.objectDeck.shift();
     s.players[playerId].objects.push(obj);
     this._log(playerId + ' elimina una figura e pesca un oggetto: ' + obj.type + '.');
-    return nonCharObjects(s.players[playerId]).length > OBJECT_LIMIT ? 'over' : 'ok';
+    return nonCharObjects(s.players[playerId]).length > this._objLimit() ? 'over' : 'ok';
   };
   // Variante usata nel movimento: pesca e, se oltre limite, inserisce lo scarto in cima alla catena.
   Game.prototype._postFigureDraw = function (playerId) {
@@ -798,8 +894,82 @@
     var obj = findCard(s.players[playerId].objects, objectId);
     if (!obj || obj.fromCharacter) throw new Error('Devi scartare un oggetto non-iniziale.');
     removeCard(s.players[playerId].objects, objectId);
+    this._discardObjectCard(obj);
     this._log(playerId + ' scarta l\'oggetto ' + obj.type + ' (limite oggetti).');
     s.pendingObjectDiscard = null; s.subPhase = null;
+    this._advanceChain();
+  };
+
+  // ================================================================== ABBINAMENTO ALTERNATIVO (Ruleset A)
+  // Quante carte Oggetto si pescano per la scelta: il tactician sceglie tra 4, gli altri tra 3.
+  Game.prototype._altObjectCount = function (playerId) {
+    return (this.state.modules.powers && this.state.players[playerId].character === 'tactician') ? 4 : 3;
+  };
+  // Pesca fino a N carte Oggetto e apre la scelta di 1 su N (dopo figura colpita / centro conquistato).
+  Game.prototype._openAltObject = function (playerId) {
+    var s = this.state, drawn = [], n = this._altObjectCount(playerId);
+    for (var i = 0; i < n; i++) { var o = this._drawObjectCard(); if (o) drawn.push(o); }
+    if (!drawn.length) { this._log(playerId + ': nessuna carta Oggetto disponibile da scegliere.'); return false; }
+    s.pendingAltMatch = { playerId: playerId, drawn: drawn };
+    s.subPhase = 'altmatch-object';
+    this._log(playerId + ' pesca ' + drawn.length + ' carte Oggetto: scegline una.');
+    return true;
+  };
+  Game.prototype._step_altObject = function (playerId) {
+    var self = this;
+    return function () { self._openAltObject(playerId); };
+  };
+
+  // ---- Passiva runner: colpire una figura muovendovi sopra (Ruleset A) ----
+  Game.prototype._step_runnerFigure = function (playerId, x, y) {
+    var self = this;
+    return function () {
+      if (self.availableRevealed(playerId).length < 1 || self.state.players[playerId].runnerLeft <= 0) return;
+      self.state.subPhase = 'runner-figure';
+      self.state.pendingRunner = { playerId: playerId, x: x, y: y };
+    };
+  };
+  Game.prototype.runnerFigureOptions = function () {
+    var s = this.state, pr = s.pendingRunner;
+    return (s.subPhase === 'runner-figure' && pr) ? this.availableRevealed(pr.playerId) : [];
+  };
+  Game.prototype.runnerFigureHit = function (cardId) {
+    var s = this.state, pr = s.pendingRunner;
+    if (s.subPhase !== 'runner-figure' || !pr) throw new Error('Nessuna scelta runner in corso.');
+    var p = s.players[pr.playerId], cell = s.grid[pr.x][pr.y];
+    var card = findCard(this.availableRevealed(pr.playerId), cardId);
+    if (!card) throw new Error('Carta non disponibile.');
+    removeCard(p.hand, cardId);
+    var ri = p.revealedIds.indexOf(cardId); if (ri !== -1) p.revealedIds.splice(ri, 1);
+    this._discard(card);
+    var pts = Deck.figurePoints(cell.card);
+    p.score += pts; p.figuresMatched += 1; cell.faceDown = true; p.runnerLeft -= 1;
+    this._log(pr.playerId + ' (runner) colpisce la figura ' + cell.card.value + ' in movimento: +' + pts + ' (usi rimasti ' + p.runnerLeft + ').');
+    var pid = pr.playerId;
+    s.pendingRunner = null; s.subPhase = null;
+    if (this._openAltObject(pid)) return; // scelta oggetto: la catena riprende dopo la scelta
+    this._advanceChain();
+  };
+  Game.prototype.runnerFigureSkip = function () {
+    var s = this.state, pr = s.pendingRunner;
+    if (s.subPhase !== 'runner-figure' || !pr) throw new Error('Nessuna scelta runner in corso.');
+    this._log(pr.playerId + ' (runner) non colpisce la figura.');
+    s.pendingRunner = null; s.subPhase = null;
+    this._advanceChain();
+  };
+  Game.prototype.altMatchPickObject = function (objectId) {
+    var s = this.state, pa = s.pendingAltMatch, self = this;
+    if (s.subPhase !== 'altmatch-object' || !pa || !pa.drawn) throw new Error('Nessuna scelta oggetto (abbinamento alternativo) in corso.');
+    var chosen = null, rest = [];
+    pa.drawn.forEach(function (o) { if (o.id === objectId && !chosen) chosen = o; else rest.push(o); });
+    if (!chosen) throw new Error('Oggetto non valido.');
+    rest.forEach(function (o) { self._discardObjectCard(o); }); // le carte non scelte finiscono negli scarti Oggetti
+    var pid = pa.playerId;
+    s.players[pid].objects.push(chosen);
+    this._log(pid + ' tiene l\'oggetto ' + chosen.type + ' e scarta le altre ' + rest.length + '.');
+    var over = nonCharObjects(s.players[pid]).length > this._objLimit();
+    s.pendingAltMatch = null; s.subPhase = null;
+    if (over) this._chain.unshift(this._step_openDiscard(pid));
     this._advanceChain();
   };
 
@@ -865,7 +1035,7 @@
     if (!s.modules.powers || s.subPhase || p.character !== 'brawler') return false;
     if (!(p.brawlerLeft > 0)) return false; // esaurite le attivazioni della partita
     if (s.activePlayer !== playerId || s.actionsLeft <= 0) return false;
-    if (s.phase !== 'move' && s.phase !== 'attack') return false;
+    if (s.phase !== 'move' && s.phase !== 'attack') return false; // brawler: in movimento o in attacco
     return this.availableRevealed(playerId).length >= 3;
   };
   Game.prototype.brawlerTargets = function (playerId) {
@@ -896,11 +1066,14 @@
       var info = this._applyArrival(playerId, cell, null); // moveCard null → nessun trophy
       this._chain = [this._step_afterMove(playerId)];
       if (info.figureEliminated) this._postFigureDraw(playerId);
+      if (info.centerObject) this._chain.unshift(this._step_altObject(playerId));
       this._advanceChain();
     } else {
+      this._recordTrail('shot', playerId, this.pawnCell(playerId), cell);
       var info2 = this._applyShot(playerId, cell, null, false);
       this._chain = [];
-      if (info2.figureEliminated && this._drawObject(playerId) === 'over') this._chain.push(this._step_openDiscard(playerId));
+      if (info2.altFigureObject) this._chain.push(this._step_altObject(playerId));
+      else if (info2.figureEliminated && this._drawObject(playerId) === 'over') this._chain.push(this._step_openDiscard(playerId));
       this._chain.push(this._step_afterAttack(playerId));
       this._advanceChain();
     }
@@ -982,9 +1155,7 @@
     if (s.subPhase !== 'barrage-second') throw new Error('Nessun barrage in corso.');
     if (!this.barrageSecondOptions().some(function (o) { return o.x === x && o.y === y; })) throw new Error('Seconda cella non valida.');
     s.pendingBarrage.second = { x: x, y: y };
-    // Se non esiste una terza cella valida, si risolve con le due (fallback anti-blocco).
-    if (this._barrageNextOptions([s.pendingBarrage.first, s.pendingBarrage.second]).length === 0) this._barrageResolve();
-    else s.subPhase = 'barrage-third';
+    this._barrageResolve(); // Barrage: solo 2 celle (prima + 1 adiacente).
   };
   Game.prototype.barrageThirdOptions = function () {
     var s = this.state;
@@ -1095,12 +1266,8 @@
         return true;
       });
       p.revealedIds = []; p.revealedCards = [];
-      // Scarti extra dovuti a Energy Boost (2 per uso).
-      var extra = p.energyExtraDiscard || 0;
-      var discarded = 0;
-      for (var e = 0; e < extra && p.hand.length; e++) { self._discard(p.hand.pop()); discarded++; }
-      if (discarded) self._log(id + ' scarta ' + discarded + ' carte extra (Energy Boost).');
-      p.energyExtraDiscard = 0;
+      // (Energy Boost: le carte pescate erano "scelte" e sono già state scartate qui sopra
+      //  con le altre carte scelte non usate; le carte NON scelte restano in mano.)
       p.pendingActions = { moves: 1, attacks: 1 };
       // Reset dei poteri personaggio a fine round.
       p.tacticianOpen = false;

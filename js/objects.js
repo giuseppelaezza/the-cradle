@@ -11,57 +11,75 @@
 })(typeof self !== 'undefined' ? self : this, function (Deck) {
   'use strict';
 
-  // I 7 oggetti: fase in cui sono utilizzabili + descrizione (tooltip).
+  // I 12 oggetti: fase (o fasi) di utilizzo, costo (se presente), effetto.
+  // `desc` è il testo del tooltip, derivato da costo+effetto (mantiene la compatibilità).
   var OBJECT_DEFS = {
     jetpack: {
       type: 'jetpack', phase: 'move', label: 'Jetpack',
-      desc: 'Movimento (costo: scarta 1 carta extra): per questo spostamento puoi abbinare anche in diagonale (oltre che ortogonalmente).'
+      cost: 'Scarta 1 carta scelta',
+      effect: 'Per questo spostamento puoi abbinare anche in diagonale (oltre che ortogonalmente).'
     },
     jump: {
       type: 'jump', phase: 'move', label: 'Jump',
-      desc: 'Movimento (costo: scarta 1 carta extra): per questo spostamento puoi abbinare SOLO le caselle a 2 celle ortogonali di distanza (salto).'
+      cost: 'Scarta 1 carta scelta',
+      effect: 'Per questo spostamento puoi abbinare SOLO le caselle a 2 celle ortogonali di distanza (salto).'
     },
     hook: {
       type: 'hook', phase: 'attack', label: 'Hook',
-      desc: 'Attacco: se colpisci la pedina avversaria, puoi spostarla di 1 casella in QUALSIASI direzione (ortogonale o diagonale, esclusa la centrale).'
+      cost: null,
+      effect: 'Se colpisci la pedina avversaria, puoi spostarla di 1 casella in qualsiasi direzione (ortogonale o diagonale, esclusa la centrale).'
     },
     homing_missile: {
       type: 'homing_missile', phase: 'attack', label: 'Homing Missile',
-      desc: 'Attacco: ottieni i normali punti E la carta colpita è rimossa dal gioco (cella Distrutta). Se la cella aveva una pedina, è il TIRATORE a decidere dove ricollocarla.'
+      cost: null,
+      effect: 'Ottieni i normali punti e la carta colpita è rimossa dal gioco (cella distrutta). Se la cella aveva una pedina, è il tiratore a decidere dove ricollocarla.'
     },
     rush_juice: {
       type: 'rush_juice', phase: 'select', label: 'Rush Juice',
-      desc: 'Scelta carte: questo round esegui DUE movimenti e rinunci all\'attacco.'
+      cost: 'Rinunci all\'attacco',
+      effect: 'Questo round esegui DUE movimenti.'
     },
     combat_juice: {
       type: 'combat_juice', phase: 'select', label: 'Combat Juice',
-      desc: 'Scelta carte: questo round esegui DUE attacchi e rinunci al movimento.'
+      cost: 'Rinunci al movimento',
+      effect: 'Questo round esegui DUE attacchi.'
     },
     timebomb: {
       type: 'timebomb', phase: 'select', label: 'Timebomb',
-      desc: 'Scelta carte: sposti il seme di turno su un seme a scelta; il ciclo prosegue da lì (solo modalità rotazione).'
+      cost: null,
+      effect: 'Sposti il seme di turno su un seme a scelta; il ciclo prosegue da lì (solo modalità rotazione).'
     },
     elemental_bomb: {
       type: 'elemental_bomb', phase: 'attack', label: 'Elemental Bomb',
-      desc: 'Attacco (rinunci all\'attacco): scegli una cella; il seme della cella e di tutte le celle ortogonali diventa un seme a tua scelta.'
+      cost: 'Rinunci all\'attacco',
+      effect: 'Scegli una cella; il seme della cella e di tutte le celle ortogonali diventa un seme a tua scelta.'
     },
     barrage: {
       type: 'barrage', phase: 'attack', label: 'Barrage',
-      desc: 'Attacco (rinunci all\'attacco): scegli una cella, poi due adiacenti ortogonali (non centrale, non con pedina; ogni nuova cella adiacente a una già scelta); distruggi tutte e tre (come homing missile).'
+      cost: 'Rinunci all\'attacco',
+      effect: 'Scegli una cella e una casella adiacente ortogonale (non la centrale, non con pedina): distruggi entrambe (come homing missile).'
     },
     randomizer: {
       type: 'randomizer', phase: 'attack', label: 'Randomizer',
-      desc: 'Attacco (rinunci all\'attacco, solo se mazzo o scarti hanno carte): scegli fino a 3 celle; le loro carte tornano nel mazzo, si mescola (se il mazzo è vuoto si rimescolano gli scarti), si pescano altrettante carte da ricollocare in quelle celle.'
+      cost: 'Rinunci all\'attacco',
+      effect: 'Scegli fino a 3 celle (serve almeno una carta nel mazzo o negli scarti): le loro carte tornano nel mazzo, si mescola, si pescano altrettante carte da ricollocare in quelle celle.'
     },
     energy_boost: {
       type: 'energy_boost', phase: 'move', phases: ['move', 'attack'], label: 'Energy Boost',
-      desc: 'Movimento o attacco: pesca 2 carte dal mazzo e puoi usarle in questa mano. Se usi questo tool scarti 2 carte extra alla fine del turno.'
+      cost: 'Scarta 2 carte extra a fine turno',
+      effect: 'Movimento o attacco: pesca 2 carte dal mazzo e puoi usarle in questa mano.'
     },
     energy_drain: {
       type: 'energy_drain', phase: 'move', phases: ['move', 'attack'], label: 'Energy Drain',
-      desc: 'Movimento o attacco: ruba una carta dalla mano dell\'avversario (la puoi usare in questa mano).'
+      cost: null,
+      effect: 'Movimento o attacco: ruba una carta dalla mano dell\'avversario (la puoi usare in questa mano).'
     }
   };
+  // Deriva il testo del tooltip da costo + effetto.
+  Object.keys(OBJECT_DEFS).forEach(function (k) {
+    var d = OBJECT_DEFS[k];
+    d.desc = (d.cost ? 'Costo: ' + d.cost + '. ' : '') + d.effect;
+  });
 
   var ALL_TYPES = ['jetpack', 'jump', 'hook', 'homing_missile', 'rush_juice', 'combat_juice', 'timebomb', 'elemental_bomb', 'barrage', 'randomizer', 'energy_boost', 'energy_drain'];
 
@@ -74,12 +92,21 @@
     return { id: 'obj-' + type + '-' + (_seq++), type: type, phase: d.phase, fromCharacter: !!fromCharacter };
   }
 
-  // Mazzo Oggetti: 4 oggetti DISTINTI scelti a caso tra i 7 (1 copia ciascuno), a faccia in giù.
-  function buildObjectDeck(rng, count) {
-    count = count || 4;
-    var pool = ALL_TYPES.slice();
-    Deck.shuffle(pool, rng);
-    return pool.slice(0, count).map(function (t) { return makeObjectCard(t, false); });
+  // Mazzo Oggetti: 2 COPIE di ciascun tipo scelto, a faccia in giù, mescolate.
+  // - selectedTypes assente/vuoto → 5 tipi casuali distinti (default).
+  // - selectedTypes = elenco di tipi → esattamente quei tipi (2 copie ciascuno).
+  function buildObjectDeck(rng, selectedTypes) {
+    var types;
+    if (selectedTypes && selectedTypes.length) {
+      types = selectedTypes.filter(function (t) { return !!OBJECT_DEFS[t]; });
+    } else {
+      var pool = ALL_TYPES.slice();
+      Deck.shuffle(pool, rng);
+      types = pool.slice(0, 5);
+    }
+    var deck = [];
+    types.forEach(function (t) { deck.push(makeObjectCard(t, false)); deck.push(makeObjectCard(t, false)); });
+    return Deck.shuffle(deck, rng);
   }
 
   return {

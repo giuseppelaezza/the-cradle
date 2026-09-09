@@ -179,9 +179,29 @@ console.log('# Modalità rotazione: il seme di turno avanza a fine round');
   eq(g.getCell(3, 3).card.suit, s.centerInitialSuit, 'centro asso del seme iniziale');
   // Gioca un round passando tutto.
   toMovePhase(g);
-  g.passMove('N'); g.passMove('S'); g.passShoot('N'); g.passShoot('S');
+  // Iniziativa divisa: movimento N→S, attacco S→N.
+  g.passMove('N'); g.passMove('S'); g.passShoot('S'); g.passShoot('N');
   eq(s.currentSuit, Deck.nextSuit(initial), 'seme di turno avanzato di 1');
   eq(s.centerInitialSuit, initial, 'seme iniziale invariato');
+})();
+
+// -------------------------------------------------------------------- Iniziativa divisa
+console.log('# Iniziativa divisa: movimento G1→G2, attacco G2→G1');
+(function () {
+  var g = Engine.createGame({ rng: makeRng(4), firstPlayer: 'N' });
+  var s = g.state;
+  toMovePhase(g);
+  eq(s.phase, 'move', 'inizia il movimento');
+  eq(s.activePlayer, 'N', 'movimento: inizia il Primo Giocatore (N)');
+  g.passMove('N');
+  eq(s.activePlayer, 'S', 'movimento: poi il secondo (S)');
+  g.passMove('S');
+  eq(s.phase, 'attack', 'poi la fase di attacco');
+  eq(s.activePlayer, 'S', 'attacco: inizia il SECONDO giocatore (S)');
+  g.passShoot('S');
+  eq(s.activePlayer, 'N', 'attacco: poi il Primo Giocatore (N)');
+  g.passShoot('N');
+  eq(s.round, 2, 'a fine attacco si passa al round successivo');
 })();
 
 // -------------------------------------------------------------------- Personaggi
@@ -192,7 +212,7 @@ console.log('# Personaggi: belongingSuit + oggetto iniziale');
   var s = g.state;
   eq(s.players.N.belongingSuit, 'spade', 'runner → spade');
   eq(s.players.S.belongingSuit, 'bastoni', 'fighter → bastoni');
-  eq(s.players.N.objects.length, 1, 'N ha oggetto iniziale');
+  eq(s.players.N.objects.length, 1, 'runner ha 1 oggetto iniziale (jetpack)');
   eq(s.players.N.objects[0].type, 'jetpack', 'runner → jetpack');
   ok(s.players.N.objects[0].fromCharacter, 'oggetto iniziale marcato fromCharacter');
   // Solo Personaggi (senza Oggetti): niente oggetto iniziale.
@@ -202,13 +222,20 @@ console.log('# Personaggi: belongingSuit + oggetto iniziale');
 })();
 
 // -------------------------------------------------------------------- Oggetti: mazzo + pesca a figura
-console.log('# Oggetti: mazzo 4 distinti; pesca a ogni figura eliminata (move e attack)');
+console.log('# Oggetti: mazzo 2 copie di 5 tipi; pesca a ogni figura eliminata (move e attack)');
 (function () {
   var g = Engine.createGame({ rng: makeRng(8), firstPlayer: 'N', modules: { characters: false, objects: true } });
   var s = g.state;
-  eq(s.objectDeck.length, 4, 'mazzo oggetti = 4');
+  eq(s.objectDeck.length, 10, 'mazzo oggetti = 10 (2 copie di 5 tipi)');
   var types = s.objectDeck.map(function (o) { return o.type; });
-  eq(new Set(types).size, 4, '4 oggetti distinti');
+  eq(new Set(types).size, 5, '5 tipi distinti');
+  // Ogni tipo compare esattamente 2 volte.
+  var counts = {}; types.forEach(function (t) { counts[t] = (counts[t] || 0) + 1; });
+  ok(Object.keys(counts).every(function (t) { return counts[t] === 2; }), 'ogni tipo ha 2 copie');
+  // Selezione oggetti: mazzo = 2 copie di ciascun tipo scelto.
+  var gs = Engine.createGame({ rng: makeRng(8), firstPlayer: 'N', modules: { characters: false, objects: true }, objectSelection: ['jetpack', 'hook'] });
+  eq(gs.state.objectDeck.length, 4, 'selezione oggetti: 2 tipi → 4 carte');
+  ok(gs.state.objectDeck.every(function (o) { return o.type === 'jetpack' || o.type === 'hook'; }), 'solo i tipi scelti');
   // Pesca su figura in movimento.
   g.getCell(2, 1).card = { id: 'x9', value: 9, suit: 'spade' }; g.getCell(2, 1).faceDown = false;
   s.players.N.hand = [{ id: 'h9', value: 9, suit: 'oro' }, { id: 'a', value: 2, suit: 'oro' }, { id: 'b', value: 3, suit: 'oro' }];
@@ -216,7 +243,7 @@ console.log('# Oggetti: mazzo 4 distinti; pesca a ogni figura eliminata (move e 
   s.phase = 'move'; s.subPhase = null; s.activePlayer = 'N'; s.actionsLeft = 1; s.moveModifier = null;
   g.move('N', 2, 1, 'h9');
   eq(s.players.N.objects.length, 1, 'pesca 1 oggetto abbattendo figura in movimento');
-  eq(s.objectDeck.length, 3, 'mazzo oggetti ridotto');
+  eq(s.objectDeck.length, 9, 'mazzo oggetti ridotto');
 })();
 
 // -------------------------------------------------------------------- Oggetti: limite 2 + scarto forzato
@@ -317,7 +344,9 @@ console.log('# Uso inline di un oggetto move (jetpack) durante il turno');
   ok(g.usableObjects('N').some(function (o) { return o.type === 'jetpack'; }), 'jetpack usabile nel proprio turno di movimento');
   ok(!g.usableObjects('S').length, 'S non può usare oggetti nel turno di N');
   g.useObject('N', 'jp');
-  eq(s.moveModifier, 'jetpack', 'jetpack armato');
+  eq(s.subPhase, 'tool-discard', 'jetpack: il giocatore sceglie quale carta scartare');
+  g.toolDiscardChoose(g.toolDiscardOptions()[0].id);
+  eq(s.moveModifier, 'jetpack', 'jetpack armato dopo lo scarto');
   eq(g.usableObjects('N').length, 0, 'un solo modificatore per azione');
 })();
 
@@ -361,20 +390,15 @@ console.log('# Undo: annulla l\'ultima azione e ripristino via log');
 })();
 
 // -------------------------------------------------------------------- Poteri personaggio
-console.log('# Poteri: runner (pari↔pari, move), tactician (apre carte), brawler (wildcard), fighter (pari↔pari, attack)');
+console.log('# Poteri: runner (nessun pari↔pari), tactician (apre carte), brawler (wildcard), fighter (pari↔pari, attack)');
 (function () {
-  // runner: in MOVIMENTO una carta PARI abbina una cella scoperta di valore PARI
+  // runner: NON ha più il potere di abbinare pari↔pari (rimosso).
   var g = Engine.createGame({ rng: makeRng(3), firstPlayer: 'N', modules: { characters: true, powers: true }, characters: { N: 'runner', S: 'brawler' } });
   var s = g.state;
   s.currentSuit = 'coppe'; s.players.N.belongingSuit = 'spade';
   var evenCell = { faceDown: false, destroyed: false, card: { value: 6, suit: 'bastoni' } };
   s.phase = 'move';
-  ok(g._matches('N', { value: 4, suit: 'oro' }, evenCell), 'runner (move): carta pari abbina cella pari');
-  ok(!g._matches('N', { value: 3, suit: 'oro' }, evenCell), 'runner (move): carta dispari NON abbina cella pari');
-  var oddCell = { faceDown: false, destroyed: false, card: { value: 7, suit: 'bastoni' } };
-  ok(!g._matches('N', { value: 4, suit: 'oro' }, oddCell), 'runner: carta pari NON abbina cella dispari');
-  s.phase = 'attack';
-  ok(!g._matches('N', { value: 4, suit: 'oro' }, evenCell), 'runner (attack): il potere pari NON è attivo in attacco');
+  ok(!g._matches('N', { value: 4, suit: 'oro' }, evenCell), 'runner: carta pari NON abbina più cella pari (potere rimosso)');
 
   // tactician: attiva potere (senza oggetto, max 2 volte per partita) → availableRevealed = tutta la mano
   var gt = Engine.createGame({ rng: makeRng(5), firstPlayer: 'N', modules: { characters: true, objects: true, powers: true }, characters: { N: 'tactician', S: 'runner' } });
@@ -401,9 +425,11 @@ console.log('# Poteri: runner (pari↔pari, move), tactician (apre carte), brawl
   sj.players.N.objects = [{ id: 'jp', type: 'jetpack', phase: 'move', fromCharacter: false }];
   ok(gj.usableObjects('N').some(function (o) { return o.id === 'jp'; }), 'jetpack usabile con 2 carte scelte');
   gj.useObject('N', 'jp');
-  eq(sj.moveModifier, 'jetpack', 'jetpack: modificatore armato');
+  eq(sj.subPhase, 'tool-discard', 'jetpack: il giocatore sceglie quale carta scartare');
+  gj.toolDiscardChoose('r1'); // il giocatore sceglie r1 (valore 2)
+  eq(sj.moveModifier, 'jetpack', 'jetpack: modificatore armato dopo lo scarto');
   eq(gj.availableRevealed('N').length, 1, 'jetpack: una carta scelta scartata come costo (resta 1)');
-  ok(sj.players.N.revealedIds.indexOf('r1') === -1, 'jetpack: scartata la carta scelta più bassa (2)');
+  ok(sj.players.N.revealedIds.indexOf('r1') === -1, 'jetpack: scartata la carta scelta dal giocatore (r1)');
   ok(sj.players.N.hand.some(function (c) { return c.id === 'x'; }), 'jetpack: la carta di riserva NON viene scartata');
 
   // fighter: in ATTACCO una carta PARI abbina una cella scoperta di valore PARI (in movimento no)
@@ -423,8 +449,10 @@ console.log('# Poteri: runner (pari↔pari, move), tactician (apre carte), brawl
   sb.grid[2][1].card = { id: 'f9', value: 9, suit: 'spade' }; sb.grid[2][1].faceDown = false; sb.grid[2][1].pawn = null;
   sb.players.N.hand = [{ id: 'a', value: 2, suit: 'oro' }, { id: 'b', value: 3, suit: 'oro' }, { id: 'c', value: 4, suit: 'oro' }];
   sb.players.N.revealedIds = ['a', 'b', 'c']; sb.players.N.revealedCards = sb.players.N.hand.slice();
-  sb.phase = 'move'; sb.subPhase = null; sb.activePlayer = 'N'; sb.actionsLeft = 1; sb.moveModifier = null;
-  ok(gb.canBrawler('N'), 'brawler disponibile con 3 carte');
+  // Brawler solo in ATTACCO; N deve essere il leader d'attacco (firstPlayer avversario) per non chiudere il round.
+  sb.firstPlayer = 'S'; sb.phase = 'attack'; sb.subPhase = null; sb.activePlayer = 'N'; sb.actionsLeft = 1; sb.attackModifier = null;
+  ok(gb.canBrawler('N'), 'brawler disponibile in attacco con 3 carte');
+  ok((function () { sb.phase = 'move'; var c = gb.canBrawler('N'); sb.phase = 'attack'; return c; })(), 'brawler disponibile anche in movimento');
   eq(sb.players.N.brawlerTotal, 3, 'brawler: 3 usi totali (da characters.js)');
   eq(sb.players.N.brawlerLeft, 3, 'brawler: 3 usi iniziali');
   gb.brawlerAction('N', 2, 1);
@@ -435,7 +463,9 @@ console.log('# Poteri: runner (pari↔pari, move), tactician (apre carte), brawl
 // -------------------------------------------------------------------- Oggetti avanzati
 console.log('# Oggetti avanzati: elemental bomb, barrage, randomizer');
 (function () {
-  function atk(g, id) { var s = g.state; s.firstPlayer = id; s.phase = 'attack'; s.subPhase = null; s.activePlayer = id; s.actionsLeft = 1; s.attackModifier = null; s.players[id].hand = []; s.players[id].revealedIds = []; s.players[id].revealedCards = []; }
+  // Iniziativa divisa: in attacco inizia l'ALTRO giocatore, quindi per far attaccare `id` per primo
+  // il Primo Giocatore deve essere l'avversario di `id`.
+  function atk(g, id) { var s = g.state; s.firstPlayer = (id === 'N' ? 'S' : 'N'); s.phase = 'attack'; s.subPhase = null; s.activePlayer = id; s.actionsLeft = 1; s.attackModifier = null; s.players[id].hand = []; s.players[id].revealedIds = []; s.players[id].revealedCards = []; }
   // elemental bomb
   var g = Engine.createGame({ rng: makeRng(2), firstPlayer: 'N', modules: { objects: true } });
   var s = g.state; s.players.N.objects = [{ id: 'eb', type: 'elemental_bomb', phase: 'attack', fromCharacter: false }]; atk(g, 'N');
@@ -447,9 +477,9 @@ console.log('# Oggetti avanzati: elemental bomb, barrage, randomizer');
   var s2 = g2.state; s2.players.N.objects = [{ id: 'br', type: 'barrage', phase: 'attack', fromCharacter: false }]; atk(g2, 'N');
   g2.useObject('N', 'br'); g2.barrageFirst(2, 2);
   ok(g2.barrageSecondOptions().length > 0, 'barrage: seconde celle disponibili'); g2.barrageSecond(2, 3);
-  eq(s2.subPhase, 'barrage-third', 'barrage: dopo la seconda si passa alla terza cella');
-  ok(g2.barrageThirdOptions().length > 0, 'barrage: terze celle disponibili'); g2.barrageThird(2, 4);
-  ok(g2.getCell(2, 2).destroyed && g2.getCell(2, 3).destroyed && g2.getCell(2, 4).destroyed, 'barrage: tutte e tre distrutte');
+  ok(s2.subPhase !== 'barrage-second', 'barrage: dopo la seconda cella si risolve (solo 2 celle)');
+  ok(g2.getCell(2, 2).destroyed && g2.getCell(2, 3).destroyed, 'barrage: le 2 celle distrutte');
+  ok(!g2.getCell(2, 4).destroyed, 'barrage: nessuna terza cella distrutta');
   // randomizer
   var g3 = Engine.createGame({ rng: makeRng(2), firstPlayer: 'N', modules: { objects: true } });
   var s3 = g3.state; s3.players.N.objects = [{ id: 'rz', type: 'randomizer', phase: 'attack', fromCharacter: false }]; atk(g3, 'N');
@@ -473,17 +503,24 @@ console.log('# Rimescolo mazzo, Energy Boost/Drain, modulo Reshuffle');
   eq(s.deck.length + (c ? 1 : 0), 2, 'drawCard: scarti trasferiti nel mazzo');
   eq(s.discard.length, 0, 'drawCard: scarti svuotati dopo il rimescolo');
 
-  // Energy Boost: pesca 2 carte usabili + 2 scarti extra a fine turno.
+  // Energy Boost: pesca 2 carte usabili (rivelate). A fine round si scartano con le altre carte scelte;
+  // le carte NON scelte restano in mano.
   var gb = Engine.createGame({ rng: makeRng(9), firstPlayer: 'N', modules: { objects: true } });
   var sb = gb.state; sb.phase = 'move'; sb.activePlayer = 'N'; sb.actionsLeft = 1; sb.moveModifier = null;
+  sb.players.N.hand = [{ id: 'r1', value: 2, suit: 'oro' }, { id: 'r2', value: 3, suit: 'oro' }, { id: 'r3', value: 4, suit: 'oro' },
+                       { id: 'u1', value: 5, suit: 'spade' }, { id: 'u2', value: 6, suit: 'spade' }, { id: 'u3', value: 7, suit: 'spade' }];
+  sb.players.N.revealedIds = ['r1', 'r2', 'r3']; sb.players.N.revealedCards = sb.players.N.hand.slice(0, 3);
   sb.players.N.objects = [{ id: 'eb', type: 'energy_boost', phase: 'move', fromCharacter: false }];
-  var handBefore = sb.players.N.hand.length;
   ok(gb.usableObjects('N').some(function (o) { return o.id === 'eb'; }), 'energy boost usabile in movimento');
   gb.useObject('N', 'eb');
-  eq(sb.players.N.hand.length, handBefore + 2, 'energy boost: +2 carte in mano');
-  eq(sb.players.N.energyExtraDiscard, 2, 'energy boost: 2 scarti extra segnati');
-  ok(sb.players.N.revealedIds.length >= 2, 'energy boost: carte pescate rese disponibili');
+  eq(sb.players.N.hand.length, 8, 'energy boost: +2 carte in mano (6→8)');
+  ok(sb.players.N.revealedIds.length === 5, 'energy boost: le 2 carte pescate sono rivelate (scelte)');
   eq(sb.actionsLeft, 1, 'energy boost: non consuma l\'azione');
+  // Simula la fine del round: si scartano tutte le carte scelte/rivelate, restano solo le 3 non scelte.
+  var nonChosen = sb.players.N.hand.filter(function (c) { return sb.players.N.revealedIds.indexOf(c.id) === -1; }).map(function (c) { return c.id; });
+  gb._endRound();
+  var kept = sb.players.N.hand.filter(function (c) { return nonChosen.indexOf(c.id) !== -1; });
+  eq(kept.length, 3, 'energy boost: a fine round restano le 3 carte NON scelte');
 
   // Energy Drain: ruba una carta dall\'avversario (rimossa da mano, revealedIds e preview).
   var gd = Engine.createGame({ rng: makeRng(11), firstPlayer: 'N', modules: { objects: true } });
@@ -522,6 +559,160 @@ console.log('# Rimescolo mazzo, Energy Boost/Drain, modulo Reshuffle');
   eq(sr.players.N.hand.length, 6, 'reshuffle: 1 carta scartata e ripescata, mano resta 6');
   eq(sr.players.N.reshuffleLeft, 0, 'reshuffle: usi esauriti');
   ok(!gr.canReshuffle('N'), 'reshuffle: non più disponibile a usi esauriti');
+})();
+
+// -------------------------------------------------------------------- Ruleset A (abbinamento alternativo)
+console.log('# Ruleset A: oggetto extra iniziale; movimento su figura senza effetti; attacco su figura → punti+trofeo+oggetto; centro → oggetto');
+(function () {
+  // Oggetto extra iniziale (Ruleset A): ogni giocatore 1; limite oggetti = 4.
+  var gi = Engine.createGame({ rng: makeRng(3), firstPlayer: 'N', modules: { characters: false, objects: true }, altMatch: true });
+  eq(gi.state.players.N.objects.length, 1, 'Ruleset A: N pesca 1 oggetto extra a inizio partita');
+  eq(gi.state.players.S.objects.length, 1, 'Ruleset A: S pesca 1 oggetto extra a inizio partita');
+  eq(gi._objLimit(), 4, 'Ruleset A: limite oggetti = 4');
+  var giB = Engine.createGame({ rng: makeRng(3), firstPlayer: 'N', modules: { characters: false, objects: true }, altMatch: false });
+  eq(giB.state.players.N.objects.length, 0, 'Ruleset B: nessun oggetto extra iniziale');
+  eq(giB._objLimit(), 2, 'Ruleset B: limite oggetti = 2');
+
+  // Movimento su figura: nessun punto, figura NON girata, nessun oggetto.
+  var g = Engine.createGame({ rng: makeRng(3), firstPlayer: 'N', modules: { characters: false, objects: true }, altMatch: true });
+  var s = g.state;
+  g.getCell(2, 1).card = { id: 'f10', value: 10, suit: 'spade' }; g.getCell(2, 1).faceDown = false;
+  s.players.N.hand = [{ id: 'h10', value: 10, suit: 'oro' }, { id: 'a', value: 2, suit: 'oro' }, { id: 'b', value: 3, suit: 'oro' }];
+  s.players.N.revealedIds = ['h10', 'a', 'b'];
+  s.phase = 'move'; s.subPhase = null; s.activePlayer = 'N'; s.actionsLeft = 1; s.moveModifier = null;
+  var objBefore = s.players.N.objects.length;
+  g.move('N', 2, 1, 'h10');
+  eq(s.players.N.score, 0, 'Ruleset A: muovere su figura non dà punti');
+  ok(!g.getCell(2, 1).faceDown, 'Ruleset A: figura non girata dal movimento');
+  eq(s.players.N.objects.length, objBefore, 'Ruleset A: nessun oggetto dal movimento su figura');
+
+  // Attacco su figura (9 → 2 punti): +2, +1 figura, +1 trofeo, apre la scelta di 1 oggetto su 3.
+  var g2 = Engine.createGame({ rng: makeRng(5), firstPlayer: 'N', modules: { characters: false, objects: true }, altMatch: true });
+  var s2 = g2.state;
+  g2.getCell(4, 1).card = { id: 'f9', value: 9, suit: 'spade' }; g2.getCell(4, 1).faceDown = false;
+  s2.players.N.hand = [{ id: 'h9', value: 9, suit: 'oro' }, { id: 'a', value: 2, suit: 'oro' }, { id: 'b', value: 3, suit: 'oro' }];
+  s2.players.N.revealedIds = ['h9', 'a', 'b'];
+  s2.phase = 'attack'; s2.subPhase = null; s2.activePlayer = 'N'; s2.actionsLeft = 1; s2.attackModifier = null;
+  var objB2 = s2.players.N.objects.length, deckB2 = s2.objectDeck.length;
+  g2.shoot('N', 4, 1, 'h9');
+  eq(s2.players.N.score, 2, 'Ruleset A: figura 9 in attacco → +2 punti');
+  eq(s2.players.N.figuresMatched, 1, 'Ruleset A: figura conteggiata');
+  eq(s2.players.N.trophies.length, 1, 'Ruleset A: +1 trofeo');
+  ok(g2.getCell(4, 1).faceDown, 'Ruleset A: attacco gira la carta a faccia in giù');
+  eq(s2.subPhase, 'altmatch-object', 'Ruleset A: figura in attacco apre la scelta di 1 oggetto su 3');
+  eq(s2.pendingAltMatch.drawn.length, 3, 'Ruleset A: pescate 3 carte Oggetto');
+  var keep = s2.pendingAltMatch.drawn[0].id;
+  g2.altMatchPickObject(keep);
+  eq(s2.players.N.objects.length, objB2 + 1, 'Ruleset A: tiene 1 oggetto');
+  eq(s2.objectDiscard.length, 2, 'Ruleset A: 2 carte Oggetto non scelte negli scarti Oggetti');
+  eq(s2.objectDeck.length, deckB2 - 3, 'Ruleset A: mazzo Oggetti −3');
+  eq(s2.subPhase, null, 'Ruleset A: scelta risolta');
+
+  // Attacco su NON figura → flip, nessuna scelta, nessun punto.
+  var g3 = Engine.createGame({ rng: makeRng(7), firstPlayer: 'N', modules: { characters: false, objects: false }, altMatch: true });
+  var s3 = g3.state;
+  g3.getCell(4, 1).card = { id: 'c4', value: 4, suit: 'spade' }; g3.getCell(4, 1).faceDown = false; g3.getCell(4, 1).pawn = null;
+  s3.players.N.hand = [{ id: 'h4', value: 4, suit: 'oro' }, { id: 'a', value: 2, suit: 'oro' }, { id: 'b', value: 3, suit: 'oro' }];
+  s3.players.N.revealedIds = ['h4', 'a', 'b'];
+  s3.phase = 'attack'; s3.subPhase = null; s3.activePlayer = 'N'; s3.actionsLeft = 1; s3.attackModifier = null;
+  g3.shoot('N', 4, 1, 'h4');
+  ok(g3.getCell(4, 1).faceDown, 'Ruleset A: attacco a non-figura gira comunque a faccia in giù');
+  eq(s3.players.N.score, 0, 'Ruleset A: non-figura nessun punto');
+  ok(s3.subPhase !== 'altmatch-object', 'Ruleset A: non-figura non apre la scelta oggetto');
+
+  // Movimento sul CENTRO → +5 e scelta di 1 oggetto su 3.
+  var g5 = Engine.createGame({ rng: makeRng(11), firstPlayer: 'N', modules: { characters: false, objects: true }, altMatch: true });
+  var s5 = g5.state;
+  g5.pawnCell('N').pawn = null; g5.getCell(3, 2).pawn = 'N';
+  var cc = g5.getCell(3, 3).card;
+  s5.players.N.hand = [{ id: 'hc', value: cc.value, suit: 'oro' }, { id: 'a', value: 2, suit: 'oro' }, { id: 'b', value: 3, suit: 'oro' }];
+  s5.players.N.revealedIds = ['hc', 'a', 'b'];
+  s5.phase = 'move'; s5.subPhase = null; s5.activePlayer = 'N'; s5.actionsLeft = 1; s5.moveModifier = null;
+  g5.move('N', 3, 3, 'hc');
+  eq(s5.players.N.matchedCenter, true, 'Ruleset A: centro conquistato');
+  eq(s5.players.N.score, 5, 'Ruleset A: centro +5');
+  eq(s5.subPhase, 'altmatch-object', 'Ruleset A: centro apre la scelta di 1 oggetto su 3');
+})();
+
+// -------------------------------------------------------------------- Scarti Oggetti + rimescolo
+console.log('# Scarti Oggetti: uso/scarto alimentano la pila; mazzo Oggetti esaurito → rimescolo');
+(function () {
+  var g = Engine.createGame({ rng: makeRng(2), firstPlayer: 'N', modules: { characters: false, objects: true } });
+  var s = g.state;
+  // Svuota il mazzo Oggetti, lascia una carta negli scarti Oggetti, e forza una pesca su figura.
+  s.objectDiscard = s.objectDeck.slice(); s.objectDeck = [];
+  g.getCell(2, 1).card = { id: 'z8', value: 8, suit: 'spade' }; g.getCell(2, 1).faceDown = false;
+  s.players.N.hand = [{ id: 'h8', value: 8, suit: 'oro' }, { id: 'a', value: 2, suit: 'oro' }, { id: 'b', value: 3, suit: 'oro' }];
+  s.players.N.revealedIds = ['h8', 'a', 'b'];
+  s.phase = 'move'; s.subPhase = null; s.activePlayer = 'N'; s.actionsLeft = 1; s.moveModifier = null;
+  g.move('N', 2, 1, 'h8');
+  eq(s.players.N.objects.length, 1, 'pesca dall\'insieme rimescolato degli scarti Oggetti');
+  ok(s.objectDeck.length >= 8, 'scarti Oggetti rimescolati nel mazzo (meno la carta pescata)');
+})();
+
+// -------------------------------------------------------------------- Runner passiva (Ruleset A)
+console.log('# Runner: muovendo su una figura (Ruleset A) può colpirla scartando 1 carta scelta; usi limitati');
+(function () {
+  var g = Engine.createGame({ rng: makeRng(3), firstPlayer: 'N', altMatch: true, modules: { characters: true, objects: true, powers: true }, characters: { N: 'runner', S: 'fighter' } });
+  var s = g.state;
+  eq(s.players.N.runnerLeft, 2, 'runner: 2 usi iniziali');
+  g.getCell(2, 1).card = { id: 'f10', value: 10, suit: 'spade' }; g.getCell(2, 1).faceDown = false; g.getCell(2, 1).pawn = null;
+  g.pawnCell('N').pawn = null; g.getCell(2, 2).pawn = 'N';
+  s.players.N.hand = [{ id: 'm10', value: 10, suit: 'oro' }, { id: 'x2', value: 2, suit: 'oro' }, { id: 'x3', value: 3, suit: 'oro' }];
+  s.players.N.revealedIds = ['m10', 'x2', 'x3'];
+  s.phase = 'move'; s.subPhase = null; s.activePlayer = 'N'; s.actionsLeft = 1; s.moveModifier = null;
+  g.move('N', 2, 1, 'm10'); // arriva sulla figura
+  eq(s.subPhase, 'runner-figure', 'runner: arrivo su figura apre la scelta');
+  ok(g.runnerFigureOptions().length >= 1, 'runner: carte scelte disponibili da scartare');
+  var scoreBefore = s.players.N.score;
+  g.runnerFigureHit('x2'); // colpisci scartando x2
+  eq(s.players.N.score - scoreBefore, 3, 'runner: figura 10 → +3');
+  eq(s.players.N.figuresMatched, 1, 'runner: figura conteggiata');
+  eq(s.players.N.runnerLeft, 1, 'runner: 1 uso consumato');
+  ok(g.getCell(2, 1).faceDown, 'runner: figura girata');
+  eq(s.subPhase, 'altmatch-object', 'runner: dopo il colpo si sceglie l\'oggetto');
+  eq(s.pendingAltMatch.drawn.length, 3, 'runner: 3 oggetti (non tactician)');
+
+  // Skip: non consuma l'uso.
+  var g2 = Engine.createGame({ rng: makeRng(5), firstPlayer: 'N', altMatch: true, modules: { characters: true, objects: true, powers: true }, characters: { N: 'runner', S: 'fighter' } });
+  var s2 = g2.state;
+  g2.getCell(2, 1).card = { id: 'f9', value: 9, suit: 'spade' }; g2.getCell(2, 1).faceDown = false; g2.getCell(2, 1).pawn = null;
+  g2.pawnCell('N').pawn = null; g2.getCell(2, 2).pawn = 'N';
+  s2.players.N.hand = [{ id: 'm9', value: 9, suit: 'oro' }, { id: 'y2', value: 2, suit: 'oro' }, { id: 'y3', value: 3, suit: 'oro' }];
+  s2.players.N.revealedIds = ['m9', 'y2', 'y3'];
+  s2.phase = 'move'; s2.subPhase = null; s2.activePlayer = 'N'; s2.actionsLeft = 1; s2.moveModifier = null;
+  g2.move('N', 2, 1, 'm9');
+  eq(s2.subPhase, 'runner-figure', 'runner: apre la scelta');
+  g2.runnerFigureSkip();
+  eq(s2.players.N.runnerLeft, 2, 'runner: skip non consuma l\'uso');
+  ok(!g2.getCell(2, 1).faceDown, 'runner: figura non girata dopo skip');
+})();
+
+// -------------------------------------------------------------------- Tactician: passiva figura + 4 oggetti
+console.log('# Tactician: +1 solo colpendo una figura; sceglie tra 4 oggetti');
+(function () {
+  var g = Engine.createGame({ rng: makeRng(7), firstPlayer: 'N', altMatch: true, modules: { characters: true, objects: true, powers: true }, characters: { N: 'tactician', S: 'fighter' } });
+  var s = g.state;
+  // Attacco su una NON-figura (4): niente +1.
+  g.getCell(4, 1).card = { id: 'c4', value: 4, suit: 'spade' }; g.getCell(4, 1).faceDown = false; g.getCell(4, 1).pawn = null;
+  s.players.N.hand = [{ id: 'h4', value: 4, suit: 'oro' }, { id: 'a', value: 2, suit: 'oro' }, { id: 'b', value: 3, suit: 'oro' }];
+  s.players.N.revealedIds = ['h4', 'a', 'b'];
+  s.firstPlayer = 'S'; s.phase = 'attack'; s.subPhase = null; s.activePlayer = 'N'; s.actionsLeft = 1; s.attackModifier = null;
+  var sc0 = s.players.N.score;
+  g.shoot('N', 4, 1, 'h4');
+  eq(s.players.N.score - sc0, 0, 'tactician: non-figura → nessun +1');
+  // Attacco su figura (9): +2 figura +1 passiva, poi scelta tra 4 oggetti.
+  var g2 = Engine.createGame({ rng: makeRng(7), firstPlayer: 'N', altMatch: true, modules: { characters: true, objects: true, powers: true }, characters: { N: 'tactician', S: 'fighter' } });
+  var s2 = g2.state;
+  g2.getCell(4, 1).card = { id: 'f9', value: 9, suit: 'spade' }; g2.getCell(4, 1).faceDown = false; g2.getCell(4, 1).pawn = null;
+  s2.players.N.hand = [{ id: 'h9', value: 9, suit: 'oro' }, { id: 'a', value: 2, suit: 'oro' }, { id: 'b', value: 3, suit: 'oro' }];
+  s2.players.N.revealedIds = ['h9', 'a', 'b'];
+  s2.firstPlayer = 'S'; s2.phase = 'attack'; s2.subPhase = null; s2.activePlayer = 'N'; s2.actionsLeft = 1; s2.attackModifier = null;
+  var sc2 = s2.players.N.score;
+  g2.shoot('N', 4, 1, 'h9');
+  eq(s2.players.N.score - sc2, 2, 'tactician: figura 9 → +2 (nessun bonus +1)');
+  eq(s2.subPhase, 'altmatch-object', 'tactician: scelta oggetto');
+  eq(s2.pendingAltMatch.drawn.length, 4, 'tactician: sceglie tra 4 oggetti');
 })();
 
 // --------------------------------------------------------------------

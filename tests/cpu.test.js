@@ -14,10 +14,13 @@ function makeRng(seed) { var s = seed >>> 0; return function () { s = (s * 16645
 // Determina quale giocatore deve agire adesso (per pilotare entrambi con Cpu.cpuAct).
 function whoActs(s, g) {
   if (s.subPhase === 'object-discard') return s.pendingObjectDiscard.playerId;
+      if (s.subPhase === 'tool-discard') return s.pendingToolDiscard && s.pendingToolDiscard.playerId;
+      if (s.subPhase === 'runner-figure') return s.pendingRunner && s.pendingRunner.playerId;
   if (s.subPhase === 'timebomb-suit') return s.pendingTimebomb.playerId;
   if (s.subPhase === 'elemental-target' || s.subPhase === 'elemental-suit') return s.pendingElemental.playerId;
   if (s.subPhase === 'barrage-first' || s.subPhase === 'barrage-second' || s.subPhase === 'barrage-third') return s.pendingBarrage.playerId;
   if (s.subPhase === 'randomizer-select' || s.subPhase === 'randomizer-place') return s.pendingRandomizer.playerId;
+  if (s.subPhase === 'altmatch-choice' || s.subPhase === 'altmatch-object') return s.pendingAltMatch.playerId;
   if (s.subPhase === 'clash-cards') return g.clashCurrentChooser();
   if (s.subPhase === 'clash-reloc') return s.pendingClash.relocatorId;
   if (s.subPhase === 'forced-reloc') return s.pendingForced.chooserId;
@@ -59,6 +62,13 @@ suite('Personaggi + Oggetti (rotazione)', function (seed) {
 });
 suite('Poteri + Personaggi + Oggetti (rotazione)', function (seed) {
   return { rng: makeRng(seed), suitMode: 'rotating', modules: { characters: true, objects: true, powers: true },
+           characters: { N: CHARS[seed % 4], S: CHARS[(seed + 1) % 4] } };
+});
+suite('Abbinamento alternativo + Oggetti', function (seed) {
+  return { rng: makeRng(seed), modules: { objects: true }, altMatch: true };
+});
+suite('Abbinamento alternativo + Personaggi + Oggetti (rotazione)', function (seed) {
+  return { rng: makeRng(seed), suitMode: 'rotating', altMatch: true, modules: { characters: true, objects: true, powers: true },
            characters: { N: CHARS[seed % 4], S: CHARS[(seed + 1) % 4] } };
 });
 

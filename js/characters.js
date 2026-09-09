@@ -18,18 +18,18 @@
   //   - Regola questo valore per testare bilanciamenti diversi.
   //   - null = potere PASSIVO / sempre attivo (nessun limite di attivazioni): runner e fighter.
   var CHARACTERS = {
-    runner:    { type: 'runner',    suit: 'spade',   startObject: 'jetpack',     label: 'Runner',
-                 powerUses: null,
-                 power: 'Potere: solo in fase di MOVIMENTO abbina le carte PARI tra di loro — una carta pari in mano abbina una casella scoperta di valore pari (es. 2 con 4, 4 con 8, 2 con 6).' },
-    brawler:   { type: 'brawler',   suit: 'coppe',   startObject: 'combat_juice', label: 'Brawler',
-                 powerUses: 3,
-                 power: 'Potere: fino a 3 volte per partita, se ha 3 carte disponibili può scartarle tutte e tre per abbinare QUALSIASI cella (rinuncia a un\'azione).' },
-    tactician: { type: 'tactician', suit: 'oro',     startObject: 'timebomb',    label: 'Tactician',
+    runner:    { type: 'runner',    suit: 'spade',   startObjects: ['jetpack'], label: 'Runner',
                  powerUses: 2,
-                 power: 'Potere: fino a 2 volte per partita usa anche le carte NON scelte in fase di selezione (tutte le carte in mano diventano utilizzabili per il turno).' },
-    fighter:   { type: 'fighter',   suit: 'bastoni', startObject: 'hook',        label: 'Fighter',
+                 power: 'Passiva: 2 volte a partita, muovendo su una figura può scartare 1 carta scelta extra per colpirla (ne ottiene i punti e la scelta di un oggetto).' },
+    brawler:   { type: 'brawler',   suit: 'coppe',   startObjects: ['barrage'], label: 'Brawler',
+                 powerUses: 3,
+                 power: 'Fino a 3 volte per partita, in movimento o in attacco, se ha 3 carte disponibili le scarta tutte per abbinare QUALSIASI cella (rinuncia all\'azione).' },
+    tactician: { type: 'tactician', suit: 'oro',     startObjects: ['timebomb'], label: 'Tactician',
+                 powerUses: 2,
+                 power: 'Fino a 2 volte per partita usa anche le carte NON scelte in fase di selezione. Passiva: quando sceglie un oggetto sceglie tra 4 invece che tra 3.' },
+    fighter:   { type: 'fighter',   suit: 'bastoni', startObjects: ['hook'], label: 'Fighter',
                  powerUses: null,
-                 power: 'Potere: solo in fase di ATTACCO abbina le carte PARI tra di loro — una carta pari in mano abbina una casella scoperta di valore pari (es. 2 con 4, 4 con 8, 2 con 6).' }
+                 power: 'In attacco abbina le carte PARI tra loro (una carta pari abbina una cella scoperta di valore pari).' }
   };
 
   var ORDER = ['runner', 'brawler', 'tactician', 'fighter'];

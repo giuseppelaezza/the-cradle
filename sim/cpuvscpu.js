@@ -31,10 +31,13 @@ function padL(s, n) { s = String(s); while (s.length < n) s = ' ' + s; return s;
 function engineActor(s, g) {
   if (s.gameOver) return null;
   if (s.subPhase === 'object-discard') return s.pendingObjectDiscard.playerId;
+      if (s.subPhase === 'tool-discard') return s.pendingToolDiscard && s.pendingToolDiscard.playerId;
+      if (s.subPhase === 'runner-figure') return s.pendingRunner && s.pendingRunner.playerId;
   if (s.subPhase === 'timebomb-suit') return s.pendingTimebomb.playerId;
   if (s.subPhase === 'elemental-target' || s.subPhase === 'elemental-suit') return s.pendingElemental && s.pendingElemental.playerId;
   if (s.subPhase === 'barrage-first' || s.subPhase === 'barrage-second' || s.subPhase === 'barrage-third') return s.pendingBarrage && s.pendingBarrage.playerId;
   if (s.subPhase === 'randomizer-select' || s.subPhase === 'randomizer-place') return s.pendingRandomizer && s.pendingRandomizer.playerId;
+  if (s.subPhase === 'altmatch-choice' || s.subPhase === 'altmatch-object') return s.pendingAltMatch && s.pendingAltMatch.playerId;
   if (s.subPhase === 'clash-cards') return g.clashCurrentChooser();
   if (s.subPhase === 'clash-reloc') return s.pendingClash.relocatorId;
   if (s.subPhase === 'forced-reloc') return s.pendingForced.chooserId;

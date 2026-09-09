@@ -25,10 +25,10 @@
   function arrivalValue(game, id, x, y) {
     var cell = game.getCell(x, y);
     if (!cell.card || cell.destroyed || cell.faceDown) return { pts: 0, endsGame: false };
-    var pts = 0, ends = false;
+    var alt = game.state.altMatch, pts = 0, ends = false;
     if (x === 3 && y === 3) pts += 5;
     else {
-      if (Deck.isFigure(cell.card)) pts += Deck.figurePoints(cell.card);
+      if (Deck.isFigure(cell.card) && !alt) pts += Deck.figurePoints(cell.card); // altMatch: muovere su figura non dà punti
       if (y === targetRow(id)) { pts += 5; ends = true; }
     }
     return { pts: pts, endsGame: ends };
@@ -38,7 +38,10 @@
     var opp = cell.pawn && cell.pawn !== id;
     if (cell.destroyed || !cell.card) return 0;
     if (cell.faceDown) return opp ? 5 : 0;
-    var pts = 0; if (opp) pts += 5; if (Deck.isFigure(cell.card)) pts += Deck.figurePoints(cell.card); return pts;
+    var pts = 0; if (opp) pts += 5;
+    // In entrambi i ruleset colpire una figura scoperta dà i suoi punti (in Ruleset A anche 1 oggetto a scelta).
+    if (Deck.isFigure(cell.card)) pts += Deck.figurePoints(cell.card);
+    return pts;
   }
   function maxValueCard(cards) { var b = null; cards.forEach(function (c) { if (!b || c.value > b.value || (c.value === b.value && Deck.SUIT_RANK[c.suit] > Deck.SUIT_RANK[b.suit])) b = c; }); return b; }
   function minValueCard(cards) { var b = null; cards.forEach(function (c) { if (!b || c.value < b.value || (c.value === b.value && Deck.SUIT_RANK[c.suit] < Deck.SUIT_RANK[b.suit])) b = c; }); return b; }
@@ -296,6 +299,11 @@
     var dead = opts.filter(function (o) { var c = game.getCell(o.x, o.y); return !c.pawn && c.card && !Deck.isFigure(c.card); });
     return (dead.length ? dead : opts).slice(0, 3);
   }
+  // Abbinamento alternativo (Ruleset A): scegli 1 oggetto tra i 3 pescati.
+  function cpuAltPickObject(game, id) {
+    var pa = game.state.pendingAltMatch;
+    if (pa && pa.drawn && pa.drawn.length) game.altMatchPickObject(pa.drawn[0].id);
+  }
 
   // Esegue UNA azione della CPU per il giocatore `id` in base allo stato corrente
   // (sotto-flussi oggetto, selezione, movimento, attacco, poteri). Ritorna un descrittore
@@ -308,10 +316,12 @@
     if (s.subPhase === 'elemental-suit') { if (s.pendingElemental.playerId === id) game.elementalSuit(cpuElementalSuit(game, id)); return {}; }
     if (s.subPhase === 'barrage-first') { if (s.pendingBarrage.playerId === id) { var f = cpuBarrageFirst(game, id); game.barrageFirst(f.x, f.y); } return {}; }
     if (s.subPhase === 'barrage-second') { if (s.pendingBarrage.playerId === id) { var sec = cpuBarrageSecond(game, id); if (sec) game.barrageSecond(sec.x, sec.y); } return {}; }
-    if (s.subPhase === 'barrage-third') { if (s.pendingBarrage.playerId === id) { var th = game.barrageThirdOptions()[0]; if (th) game.barrageThird(th.x, th.y); } return {}; }
+    if (s.subPhase === 'tool-discard') { if (s.pendingToolDiscard.playerId === id) { var lo = minValueCard(game.toolDiscardOptions()); if (lo) game.toolDiscardChoose(lo.id); } return {}; }
+    if (s.subPhase === 'runner-figure') { if (s.pendingRunner.playerId === id) { var rlo = minValueCard(game.runnerFigureOptions()); if (rlo) game.runnerFigureHit(rlo.id); else game.runnerFigureSkip(); } return {}; }
     if (s.subPhase === 'randomizer-select') { if (s.pendingRandomizer.playerId === id) { cpuRandomizerCells(game, id).forEach(function (c) { game.randomizerToggle(c.x, c.y); }); game.randomizerConfirm(); } return {}; }
     if (s.subPhase === 'randomizer-place') { if (s.pendingRandomizer.playerId === id) { var pr = s.pendingRandomizer; pr.chosen.forEach(function (ch, i) { if (pr.drawn[i]) game.randomizerPlace(pr.drawn[i].id, ch.x, ch.y); }); game.randomizerDone(); } return {}; }
     if (s.subPhase === 'object-discard') { if (s.pendingObjectDiscard.playerId === id) game.discardObject(id, chooseDiscard(game, id)); return {}; }
+    if (s.subPhase === 'altmatch-object') { if (s.pendingAltMatch.playerId === id) cpuAltPickObject(game, id); return {}; }
     if (s.subPhase === 'clash-cards') { if (game.clashCurrentChooser() === id) game.clashChoose(id, chooseClashCard(game, id)); return {}; }
     if (s.subPhase === 'clash-reloc') { if (s.pendingClash.relocatorId === id) { var r = chooseRelocation(game); if (r.skip) game.clashSkipRelocate(); else game.clashRelocate(r.x, r.y); } return {}; }
     if (s.subPhase === 'forced-reloc') { if (s.pendingForced.chooserId === id) { var fr = chooseForcedReloc(game); var o2 = game.relocationOptions(); if (fr.skip && s.pendingForced.optional) game.forcedRelocateSkip(); else if (o2.length) game.forcedRelocate(fr.x || o2[0].x, fr.y || o2[0].y); else game.forcedRelocateSkip(); } return {}; }

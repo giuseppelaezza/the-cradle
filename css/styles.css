@@ -17,7 +17,9 @@
   --pN: #b98a5e; --pS: #a06cd5;
   /* Carte */
   --card-bg: #ece7db; --card-line: #c9c3b4; --card-ink: #1c1c1c;
-  --cell: 92px; --card: 78px; --pile: 82px; --mini: 42px;
+  --cell: 68px; --card: 68px; --pile: 70px; --mini: 42px;
+  /* Dimensione uniforme delle "pillole" (stessa altezza e font in tutta la UI) */
+  --pill-h: 26px; --pill-font: 12.5px;
   --font-ui: 'ABCDiatype', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --font-num: 'ABCMaxi', 'ABCDiatype', system-ui, sans-serif;
 }
@@ -64,22 +66,23 @@ button.ghost { background: transparent; }
 /* fondo colorato → inchiostro bianco */
 .inverted .cface, .card.inv .cface, .mini.inv .cface { color: #fff; }
 /* carte a fondo chiaro (non figure): numero del colore del seme */
-.card.suit-oro .cnum, .cell.suit-oro:not(.inverted) .cnum, .mini.suit-oro .cnum { color: var(--oro); }
-.card.suit-spade .cnum, .cell.suit-spade:not(.inverted) .cnum, .mini.suit-spade .cnum { color: var(--spade); }
-.card.suit-bastoni .cnum, .cell.suit-bastoni:not(.inverted) .cnum, .mini.suit-bastoni .cnum { color: var(--bastoni); }
-.card.suit-coppe .cnum, .cell.suit-coppe:not(.inverted) .cnum, .mini.suit-coppe .cnum { color: var(--coppe); }
+.card.suit-oro .cnum, .cell.suit-oro:not(.inverted) .cnum, .mini.suit-oro .cnum, .pile.suit-oro .cnum { color: var(--oro); }
+.card.suit-spade .cnum, .cell.suit-spade:not(.inverted) .cnum, .mini.suit-spade .cnum, .pile.suit-spade .cnum { color: var(--spade); }
+.card.suit-bastoni .cnum, .cell.suit-bastoni:not(.inverted) .cnum, .mini.suit-bastoni .cnum, .pile.suit-bastoni .cnum { color: var(--bastoni); }
+.card.suit-coppe .cnum, .cell.suit-coppe:not(.inverted) .cnum, .mini.suit-coppe .cnum, .pile.suit-coppe .cnum { color: var(--coppe); }
 
-.app { max-width: none; margin: 0 auto; padding: 14px;
+.app { max-width: none; margin: 0 auto; padding: 8px;
   display: grid; grid-template-columns: 1fr 340px; align-items: start;
-  grid-template-areas: "hud log" "board log" "timeline log" "action log"; gap: 14px; }
+  grid-template-areas: "hud log" "board log" "timeline log" "action log"; gap: 8px; }
 /* Nella schermata di configurazione (overlay pieno) nascondiamo del tutto il campo dietro. */
 body.setup .app { visibility: hidden; }
 
 /* ---- HUD ---- */
-.hud { grid-area: hud; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
-.hud-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.hud { grid-area: hud; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 9px 12px; }
+.hud-top { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .hud-top .spacer { flex: 1; }
-.pill { display: inline-flex; align-items: center; gap: 5px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; font-size: 13px; color: var(--ink); }
+.hud-top button { padding: 5px 9px; font-size: 12.5px; }
+.pill { display: inline-flex; align-items: center; gap: 4px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 999px; padding: 3px 8px; font-size: 12px; color: var(--ink); }
 .pill b { color: var(--ink); }
 .pill b.suit-oro { color: var(--oro); } .pill b.suit-spade { color: #6a6aff; }
 .pill b.suit-coppe { color: var(--coppe); } .pill b.suit-bastoni { color: var(--bastoni); }
@@ -91,33 +94,38 @@ body.setup .app { visibility: hidden; }
 .seq-suit.cur.s-oro { background: var(--oro); } .seq-suit.cur.s-spade { background: var(--spade); }
 .seq-suit.cur.s-coppe { background: var(--coppe); } .seq-suit.cur.s-bastoni { background: var(--bastoni); }
 .seq-arrow { color: var(--muted); }
-.players { display: flex; gap: 12px; margin-top: 10px; }
+.players { display: flex; gap: 12px; margin-top: 8px; }
 /* Scheda giocatore */
-.pcard { flex: 1; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; display: flex; min-width: 0; }
+/* Altezza FISSA: la scheda non si ridimensiona in base al contenuto (recap carte, oggetti, ecc.). */
+.pcard { flex: 1; height: 146px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; display: flex; min-width: 0; }
 .pcard.active { border-color: var(--warn); box-shadow: 0 0 0 1px var(--warn) inset; }
-.pc-first { flex: 0 0 22px; display: flex; align-items: center; justify-content: center; border-right: 1px solid var(--line);
-  writing-mode: vertical-rl; text-transform: uppercase; letter-spacing: .08em; font-size: 10px; color: var(--muted); }
+.pc-first { flex: 0 0 22px; width: 22px; box-sizing: border-box; display: flex; align-items: center; justify-content: center;
+  border-right: 1px solid var(--line); color: var(--muted); overflow: hidden; }
+.pc-first-txt { writing-mode: vertical-rl; text-transform: uppercase; letter-spacing: .08em; font-size: 10px; white-space: nowrap; }
 .pc-first.on { background: #ffffff; color: #1a1a1a; font-weight: 700; }
 .pc-body { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-.pc-top { position: relative; display: flex; border-bottom: 1px solid var(--line); }
-.pc-seed { flex: 0 0 64px; display: flex; align-items: center; justify-content: center; border-right: 1px solid var(--line); }
-/* riquadro del seme del giocatore: rettangolo stondato del colore del seme, simbolo bianco */
-.seed-badge { display: inline-flex; align-items: center; justify-content: center; border-radius: 9px; }
-.pc-seed .seed-badge { width: 46px; height: 46px; }
-.pc-seed .seed-badge .suit-ic { width: 32px; height: 32px; }
-.seed-badge.bg-oro { background: var(--oro); } .seed-badge.bg-spade { background: var(--spade); }
-.seed-badge.bg-coppe { background: var(--coppe); } .seed-badge.bg-bastoni { background: var(--bastoni); }
-.pc-seed.empty { font-size: 26px; font-weight: 800; color: var(--muted); }
-.pc-main { flex: 1; min-width: 0; padding: 6px 10px; }
-.pc-name { font-size: 12px; color: var(--muted); }
-.pc-stats { display: flex; gap: 18px; align-items: baseline; margin-top: 2px; flex-wrap: wrap; }
-.pc-stat .pc-num { font-size: 26px; font-weight: 800; } .pc-stat .pc-unit { font-size: 12px; color: var(--muted); }
-.pc-cpu { position: absolute; top: 0; right: 0; font-size: 11px; font-weight: 700; padding: 2px 8px; border-left: 1px solid var(--line); border-bottom: 1px solid var(--line); border-bottom-left-radius: 6px; }
-.pc-bottom { display: flex; }
-.pc-bottom .pc-cell { flex: 1; min-width: 0; min-height: 40px; padding: 5px 8px; border-right: 1px solid var(--line); display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+/* Riga identità: seme · nome · personaggio come "pill" coerenti (come la barra di stato in alto). */
+.pc-top { position: relative; display: flex; flex-direction: column; justify-content: center; gap: 7px;
+  border-bottom: 1px solid var(--line); flex: 0 0 auto; padding: 8px 12px; }
+.pc-ident { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pc-chip { display: inline-flex; align-items: center; gap: 6px; background: var(--panel);
+  border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; font-size: 12.5px; line-height: 1; }
+.pc-seed-chip { padding: 4px; }
+.pc-seed-chip .suit-ic { width: 18px; height: 18px; }
+.pc-seed-chip.bg-oro { background: var(--oro); border-color: var(--oro); }
+.pc-seed-chip.bg-spade { background: var(--spade); border-color: var(--spade); }
+.pc-seed-chip.bg-coppe { background: var(--coppe); border-color: var(--coppe); }
+.pc-seed-chip.bg-bastoni { background: var(--bastoni); border-color: var(--bastoni); }
+.pc-seed-chip.empty { color: var(--muted); padding: 3px 10px; }
+.pc-name-chip { font-weight: 600; }
+.pc-char-chip { cursor: help; }
+.pc-char-name { text-transform: capitalize; font-weight: 700; }
+.pc-cpu-chip { margin-left: auto; font-weight: 700; color: var(--warn); border-color: var(--warn); }
+.pc-stats { display: flex; gap: 16px; align-items: baseline; flex-wrap: wrap; }
+.pc-stat .pc-num { font-size: 22px; font-weight: 800; } .pc-stat .pc-unit { font-size: 12px; color: var(--muted); }
+.pc-bottom { display: flex; flex: 1 1 auto; min-height: 0; border-top: 1px solid var(--line); }
+.pc-bottom .pc-cell { flex: 1; min-width: 0; padding: 5px 8px; border-right: 1px solid var(--line); display: flex; align-items: center; align-content: center; gap: 5px; flex-wrap: wrap; overflow-y: auto; }
 .pc-bottom .pc-cell:last-child { border-right: none; }
-.pc-char { position: relative; cursor: help; }
-.pc-char-name { font-weight: 700; text-transform: capitalize; }
 .muted { color: var(--muted); }
 /* Tooltip a posizione FISSA (posizionati via JS, mai tagliati). */
 .tooltip { display: none; position: fixed; z-index: 300; width: 260px; max-width: 92vw;
@@ -145,7 +153,7 @@ body.setup .app { visibility: hidden; }
 .obj.usable { background: #2f4a37; border-color: var(--good); color: #d7f5e2; }
 
 /* ---- Board ---- */
-.board-wrap { grid-area: board; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.board-wrap { grid-area: board; display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .side-label { color: var(--muted); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; }
 .grid { display: grid; grid-template-columns: repeat(5, var(--cell)); grid-template-rows: repeat(5, var(--cell)); gap: 6px;
   background: var(--panel); padding: 8px; border-radius: 12px; border: 1px solid var(--line); position: relative; }
@@ -181,9 +189,8 @@ body.setup .app { visibility: hidden; }
 .cell-ring { position: absolute; inset: 2px; border-radius: 7px; pointer-events: none; z-index: 1; }
 .cell-ring.N { box-shadow: inset 0 0 0 3px var(--pN); }
 .cell-ring.S { box-shadow: inset 0 0 0 3px var(--pS); }
-.cell.match-hint::before { content: ""; position: absolute; inset: 0; border-radius: 7px; background: rgba(20,20,20,.14);
-  box-shadow: inset 0 0 0 3px rgba(230,230,230,.95); pointer-events: none; z-index: 1; }
-.cell.inverted.match-hint::before { background: rgba(255,255,255,.22); }
+/* Abbinamento evidenziato: contorno bianco ALL'ESTERNO della cella (ben visibile anche su carte chiare). */
+.cell.match-hint { z-index: 6; box-shadow: 0 0 0 3px #fff, 0 0 0 5px rgba(0,0,0,.55); }
 @keyframes flipx { 0% { transform: scaleX(1); } 50% { transform: scaleX(0.05); } 100% { transform: scaleX(1); } }
 .cell.flipping { animation: flipx .42s ease; }
 
@@ -218,8 +225,20 @@ body.setup .app { visibility: hidden; }
   transition: transform .2s linear, opacity .22s ease; }
 
 /* ---- Action area ---- */
-.action-wrap { grid-area: action; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
-.act-head { font-weight: 700; margin-bottom: 10px; }
+.action-wrap { grid-area: action; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px; }
+.act-head { font-weight: 700; margin-bottom: 8px; }
+/* Intestazione mano: titolo + seme di appartenenza + personaggio (potere nel tooltip del nome). */
+.act-head-rich { display: flex; align-items: center; min-height: var(--pill-h); }
+/* contenitore reale delle pill dell'header mano: allineate e spaziate come la barra superiore */
+.ah-row { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.ah-title { font-weight: 700; }
+.ah-seed { flex: 0 0 auto; width: 26px; height: 26px; border-radius: 7px; display: inline-flex; align-items: center; justify-content: center; }
+.ah-seed .suit-ic { width: 17px; height: 17px; }
+.ah-seed.bg-oro { background: var(--oro); } .ah-seed.bg-spade { background: var(--spade); }
+.ah-seed.bg-coppe { background: var(--coppe); } .ah-seed.bg-bastoni { background: var(--bastoni); }
+.ah-char { position: relative; display: inline-flex; align-items: center; gap: 6px; cursor: help;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; font-weight: 400; }
+.ah-char-name { text-transform: capitalize; font-weight: 700; }
 .hand { display: flex; gap: 10px; flex-wrap: wrap; }
 .card { --cs: var(--card); width: var(--card); height: var(--card); border-radius: 9px; background: var(--card-bg); color: var(--card-ink);
   border: 2px solid var(--card-line); position: relative; overflow: hidden; }
@@ -240,11 +259,10 @@ body.setup .app { visibility: hidden; }
 
 /* controllo reshuffle: bottone + indicatori usi rimasti (rettangoli stondati), stessa larghezza totale del bottone.
    Gli indicatori sono alti quanto il bottone e riempiono la larghezza residua (entrano perfettamente per 1-3 usi). */
-.reshuffle-ctl { display: flex; align-items: stretch; gap: 8px; width: 100%; }
-.reshuffle-ctl .rs-btn { flex: 0 0 auto; }
-.rs-dots { flex: 1 1 auto; min-width: 0; display: flex; align-items: stretch; gap: 5px; }
-.rs-dot { flex: 1 1 0; min-width: 0; border-radius: 6px; border: 2px solid var(--rc); background: transparent; box-sizing: border-box; }
-.rs-dot.on { background: var(--rc); }
+/* Mulligan: bottone che prende lo spazio residuo + indicatori usi (larghi come nella preview). */
+.reshuffle-ctl { display: flex; align-items: center; gap: 8px; width: 100%; }
+.reshuffle-ctl .rs-btn { flex: 1 1 auto; }
+.reshuffle-ctl .uses-dots { flex: 0 0 auto; }
 
 /* indicatore usi generico (rettangoli stondati pieni/vuoti, colore del giocatore) */
 .uses-dots { display: inline-flex; align-items: center; gap: 4px; }
@@ -252,7 +270,7 @@ body.setup .app { visibility: hidden; }
 .uses-dot.on { background: var(--rc, var(--muted)); }
 .pc-uses .uses-dot { width: 14px; height: 9px; }
 .power-ctl { display: inline-flex; align-items: center; gap: 8px; }
-.pc-reshuffle { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+.pc-reshuffle { display: inline-flex; align-items: center; gap: 6px; margin-left: 4px; }
 .pc-reshuffle-lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
 
 .hand-and-objects { display: flex; flex-direction: column; gap: 10px; }
@@ -282,6 +300,12 @@ body.setup .app { visibility: hidden; }
 .obj-card.usable { cursor: pointer; background: #2f4a37; border-color: var(--good); color: #d7f5e2; }
 .obj-card.usable:hover { box-shadow: 0 0 0 2px var(--good); }
 .obj-card.disabled { opacity: .5; }
+/* pannello "Attiva Potere": carte potere (indicatore grigio/neutro, non verde) */
+.power-card { cursor: default; }
+.power-card.usable { cursor: pointer; background: var(--panel-2); border-color: var(--muted); color: var(--ink); }
+.power-card.usable:hover { box-shadow: 0 0 0 2px var(--muted); }
+.power-card.active { background: #6a6a6a; border-color: var(--ink); color: #fff; box-shadow: inset 0 0 0 1px rgba(255,255,255,.35); }
+.power-card .uses-dots { margin-top: 2px; }
 
 .obj-window { display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
 .obj-use { background: #2f4a37; border-color: var(--good); }
@@ -302,8 +326,10 @@ body.setup .app { visibility: hidden; }
 .schema .sq.center { background: transparent; border-color: #fff; }
 
 /* ---- Timeline del turno ---- */
-.timeline-wrap { grid-area: timeline; display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
-  background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; }
+/* Barra fasi: centrata sotto la griglia, larga quanto il contenuto (non fino ai bordi del container). */
+.timeline-wrap { grid-area: timeline; display: flex; align-items: center; justify-content: center; gap: 4px; flex-wrap: wrap;
+  width: fit-content; max-width: 100%; margin: 0 auto;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 9px 16px; }
 .timeline-wrap:empty { display: none; }
 .tl-seg { padding: 5px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 600;
   color: rgba(255,255,255,.55); background: transparent; transition: background-color .35s ease, color .35s ease, transform .35s ease; }
@@ -359,7 +385,10 @@ body.setup .app { visibility: hidden; }
 .overlay[hidden] { display: none; }
 .sheet { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 24px; max-width: 560px; width: 100%; }
 .sheet h2 { font-size: 18px; } .sheet p { color: var(--muted); } .sheet p.note { color: var(--warn); font-size: 12px; }
-.setup-logo { display: block; margin: 4px auto 6px; width: min(450px, 100%); height: auto; }
+/* Logo scalato per riempire tutta la larghezza dei testi + linea di divisione sotto (padding ridotto). */
+.setup-logo { display: block; margin: 0 auto 6px; width: 100%; height: auto; }
+.setup-divider { height: 1px; background: var(--line); margin: 0 0 8px; }
+body.setup .sheet { padding-top: 14px; }
 .setup-sub { text-align: left; color: var(--muted); font-size: 15px; margin: 0 0 8px; letter-spacing: .02em; }
 .big { font-size: 44px; margin: 8px 0; text-align: center; }
 .final-scores { display: flex; gap: 20px; justify-content: center; margin: 16px 0; }
@@ -372,7 +401,120 @@ body.setup .app { visibility: hidden; }
 .cfg-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
 .cfg-opt { display: inline-flex; align-items: center; gap: 4px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; cursor: pointer; }
 .cfg-select { font: inherit; color: var(--ink); background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
-.char-row { margin-bottom: 6px; } .char-who { width: 120px; color: var(--muted); }
+.char-who { display: block; color: var(--muted); font-weight: 700; margin-bottom: 5px; }
+.char-select { display: block; }
+.cfg-desc { color: var(--muted); font-size: 12px; margin: 4px 0 0; line-height: 1.4; }
+/* configuratore: layout a colonna con il pulsante Regolamento centrato sotto il rettangolo */
+body.setup .overlay { flex-direction: column; gap: 14px; }
+.config-rules-btn { min-width: 200px; }
+
+/* ---- Mazzo/scarti Oggetti (colonna sinistra) ---- */
+.obj-piles { padding-top: 8px; }
+.pile.obj-pile.deck { }
+.pile.obj-discard { display: flex; align-items: center; justify-content: center; background: #4a4436; border-color: #6a6047; cursor: pointer; }
+.pile.obj-discard.empty { background: #3a3a3a; border-style: dashed; border-color: #7a7a7a; }
+.pile.obj-discard:hover { border-color: var(--highlight); }
+.obj-pile-mark { font-size: 30px; }
+
+/* ---- Card oggetto (dimensione fissa, scrollabile): nome, costo, effetto, schema ---- */
+.obj-card-grid { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0; justify-content: center; }
+.obj-vcard { width: 150px; height: 196px; overflow-y: auto; background: #4a4436; border: 1px solid #6a6047; color: #ece3c4;
+  border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 6px; }
+.obj-vcard .ovc-name { font-weight: 800; font-size: 14px; }
+.obj-vcard .ovc-cost { display: flex; flex-direction: column; gap: 1px; background: rgba(0,0,0,.22); border-radius: 6px; padding: 4px 6px; }
+.obj-vcard .ovc-cost .ovc-lbl { font-size: 9px; text-transform: uppercase; letter-spacing: .06em; color: var(--warn); }
+.obj-vcard .ovc-cost .ovc-val { font-size: 11.5px; }
+.obj-vcard .ovc-effect { font-size: 11.5px; line-height: 1.35; }
+.obj-vcard .ovc-schema { margin-top: auto; }
+.obj-vcard.selectable { cursor: pointer; }
+.obj-vcard.selectable:hover { border-color: var(--highlight); }
+.obj-vcard.selected { border-color: var(--good); box-shadow: 0 0 0 2px var(--good) inset; background: #2f4a37; color: #d7f5e2; }
+.alt-obj { display: flex; flex-direction: column; gap: 10px; }
+.alt-obj-card { min-width: 120px; }
+.tools-foot { padding: 12px 20px; border-top: 1px solid var(--line); display: flex; justify-content: flex-end; }
+
+/* ---- Carte mano non scelte: ingrigite e non interattive ---- */
+.card.disabled-card { opacity: .4; cursor: default; }
+
+/* ---- Tooltip condizioni di abbinamento ---- */
+.tooltip.cond-tip { width: auto; max-width: 320px; }
+.cond-title { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 3px; }
+.cond-line { display: block; }
+.cond-suit { font-weight: 700; white-space: nowrap; }
+.cond-nomatch { color: var(--muted); }
+.cond-ic { display: inline-block; width: 13px; height: 13px; vertical-align: -2px; }
+/* semi leggibili su tooltip scuro */
+.cond-tip .suit-spade { color: #6a6aff; }
+.cond-tip .suit-ic.s-spade .si { fill: #6a6aff; }
+
+/* ---- Overlay "Mostra azioni" ---- */
+.actions-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 7; }
+
+/* ===================== PILLOLE UNIFORMI (stessa altezza e font ovunque) ===================== */
+.pill, .pc-chip, .tl-seg, .ah-title, .ah-char {
+  display: inline-flex; align-items: center; gap: 6px; height: var(--pill-h); box-sizing: border-box;
+  padding: 0 11px; font-size: var(--pill-font); line-height: 1; border-radius: 999px; }
+/* header della mano: titolo e personaggio come pillole (sfondo/bordo coerenti) */
+.ah-title, .ah-char { background: var(--panel-2); border: 1px solid var(--line); font-weight: 400; }
+.ah-title { font-weight: 700; }
+/* indicatori del seme: quadrato stondato all'altezza delle pillole (uniformi tra scheda e mano) */
+.pc-seed-chip, .ah-seed { display: inline-flex; align-items: center; justify-content: center;
+  height: var(--pill-h); width: var(--pill-h); padding: 0; border-radius: 8px; box-sizing: border-box; }
+.pc-seed-chip .suit-ic, .ah-seed .suit-ic { width: 17px; height: 17px; }
+.pc-seed-chip.empty { width: auto; padding: 0 10px; }
+/* barra fasi: forma a pillola */
+.timeline-wrap { border-radius: 999px; }
+
+/* font uniformi per etichette/testi ricorrenti */
+.hint, .obj-panel-title, .oc-desc, .ai-power, .pile-cap, .pc-reshuffle-lbl, .cond-title { font-size: 12px; }
+
+/* ---- Configuratore: descrizione personaggio, riga pulsanti, ecc. ---- */
+.char-block { margin-bottom: 10px; }
+/* Descrizione compatta: 3 riquadri affiancati (Seme · Oggetti · Abilità), sotto al dropdown. */
+.char-desc { display: flex; gap: 10px; margin: 6px 0 0; }
+.char-desc .cd-box { flex: 1 1 0; min-width: 0; }
+.char-desc .cd-label { font-size: 9.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-bottom: 3px; }
+.char-desc .cd-suit { width: 15px; height: 15px; flex: 0 0 auto; }
+/* 3 rettangoli uguali (Seme · Oggetti · Abilità) */
+.char-desc .cd-chip { display: flex; flex-direction: column; justify-content: center; min-height: 36px; box-sizing: border-box;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; margin-bottom: 3px; }
+.char-desc .cd-chip.cd-has-tip { cursor: help; }
+.char-desc .cd-chip.cd-has-tip:hover { border-color: var(--highlight); }
+.char-desc .cd-seme-chip { flex-direction: row; align-items: center; gap: 6px; }
+.char-desc .cd-chip-name { font-size: 11.5px; font-weight: 600; }
+.char-desc .cd-chip-sub { font-size: 9.5px; color: var(--muted); }
+.char-desc .cd-random { font-size: 12px; color: var(--muted); }
+/* tooltip del configuratore (posizione fissa via JS) */
+.cfg-tip { display: none; position: fixed; z-index: 400; width: 260px; max-width: 92vw;
+  background: #262626; color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px;
+  font-size: 12.5px; line-height: 1.4; box-shadow: 0 8px 24px rgba(0,0,0,.5); }
+.start-row { display: flex; gap: 10px; margin-top: 16px; }
+.start-row .start-main { flex: 0 0 68%; margin-top: 0; }
+.start-row .start-batch { flex: 1 1 auto; margin-top: 0; }
+
+/* ---- Log: separatore pieno tra i round ---- */
+.log-round-sep { height: 0; border-top: 1px solid var(--muted); margin: 5px 2px; }
+
+/* ---- Batch test: loader + risultati ---- */
+.batch-loader { z-index: 400; }
+.batch-loading { display: flex; flex-direction: column; align-items: center; gap: 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 28px 36px; }
+.batch-progress { font-size: 13px; color: var(--muted); }
+.ring-loader { width: 42px; height: 42px; border-radius: 50%; border: 4px solid var(--line); border-top-color: var(--highlight); animation: ring-spin .8s linear infinite; }
+@keyframes ring-spin { to { transform: rotate(360deg); } }
+.batch-content { padding: 12px 18px 8px; }
+.batch-section { border: 1px solid var(--line); border-radius: 10px; margin-bottom: 10px; overflow: hidden; }
+.batch-sec-head { display: flex; align-items: center; gap: 8px; padding: 9px 12px; cursor: pointer; background: var(--panel-2); user-select: none; }
+.batch-sec-head:hover { background: #5f5f5f; }
+.batch-sec-title { font-weight: 700; }
+.batch-sec-caret { transition: transform .18s ease; color: var(--muted); }
+.batch-section.collapsed .batch-sec-caret { transform: rotate(-90deg); }
+.batch-section.collapsed .batch-sec-body { display: none; }
+.batch-sec-body { padding: 6px 12px 10px; }
+.batch-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.batch-table td { padding: 4px 6px; border-bottom: 1px dashed var(--line); }
+.batch-table tr:last-child td { border-bottom: none; }
+.batch-table .bt-k { color: var(--muted); }
+.batch-table .bt-v { text-align: right; font-weight: 600; }
 
 @media (max-width: 940px) {
   .app { grid-template-columns: 1fr; grid-template-areas: "hud" "board" "timeline" "action" "log"; }

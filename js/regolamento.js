@@ -1,8 +1,210 @@
-/* Auto-generato da the-cradle-regolamento.md — NON modificare a mano; rigenera se il regolamento cambia. */
+/* Regolamento di The Cradle. Espone due versioni: window.CradleRegolamento.A e .B
+   (Ruleset A e Ruleset B). Scritto per essere letto al tavolo da chi gioca. */
 (function (root, factory) {
   if (typeof module !== "undefined" && module.exports) module.exports = factory();
   else root.CradleRegolamento = factory();
 })(typeof self !== "undefined" ? self : this, function () {
   "use strict";
-  return "# The Cradle — Regolamento\n\n## 1. Panoramica\n\n**The Cradle** è un gioco da tavolo per **2 giocatori** che si gioca con due mazzi di carte napoletane (40 carte ciascuno, valori 1–10).\n\nI giocatori si alternano nel **muovere la propria pedina** e nello **sparare** su una griglia 5×5 di carte, usando le carte della propria mano per **abbinare** (fare \"match\" con) le carte presenti sulla griglia.\n\n**Obiettivo:** totalizzare il maggior numero di punti nel momento in cui la partita termina.\n\nIl gioco base può essere ampliato con la **modalità seme a rotazione** (§9) e con due **moduli** opzionali: **Personaggi** (§10) e **Oggetti** (§11), attivabili a inizio partita.\n\n---\n\n## 2. Componenti\n\n- **Due mazzi** di carte napoletane (40 carte ciascuno, valori 1–10) — mescolati insieme formano il **mazzo** (80 carte totali).\n- **2 pedine** (una per giocatore).\n- **1 segnalino Primo Giocatore**.\n- *(Modulo Oggetti)* **carte Oggetto** e il relativo **mazzo Oggetti**.\n- *(Modulo Personaggi)* **carte Personaggio**.\n\n---\n\n## 3. Glossario dei termini\n\n| Termine | Significato |\n|---|---|\n| **Mazzo** | La pila da cui si pesca (i due mazzi mescolati insieme). |\n| **Griglia** | La disposizione 5×5 di carte scoperte. |\n| **Casella** | Una delle 25 posizioni della griglia. Ogni casella contiene una carta. |\n| **Pedina** | Il segnalino che rappresenta un giocatore sulla griglia. |\n| **Segnalino Primo Giocatore** | Il gettone che indica chi agisce per primo nel round corrente. |\n| **Abbinare (match)** | Scartare dalla mano una carta che corrisponde alla carta di una casella (per valore, per seme di turno o per seme di appartenenza — vedi §6, §10). |\n| **Valore** | Il numero della carta, da 1 a 10. |\n| **Figura** | Le carte di valore 8, 9 e 10. |\n| **Carta coperta** | Una figura (o la casella centrale) girata a faccia in giù: abbinabile **solo** dal seme di turno (o dal seme di appartenenza di un personaggio, §10) e **senza** punti. |\n| **Cella distrutta** | *(Modulo Oggetti)* Una casella la cui carta è stata rimossa dal gioco (homing missile): non è più abbinabile né percorribile. |\n| **Casella centrale** | La casella al centro della griglia, posizione [3,3]. Contiene sempre l'asso del seme iniziale. |\n| **Riga di partenza / Riga-bersaglio** | La riga di 5 caselle sul lato di ciascun giocatore; la riga di partenza di un giocatore è la riga-bersaglio dell'avversario. |\n| **Seme di turno** | Il seme che funge da jolly (vedi §6). In modalità fissa non cambia mai; in modalità rotazione avanza ogni round (§9). |\n| **Seme di appartenenza** | *(Modulo Personaggi)* Il seme personale di un personaggio: quel giocatore lo tratta come un secondo seme di turno tutto suo (§10). |\n| **Carte davanti al giocatore** | Le carte usate per abbinare una figura o la casella centrale non vanno negli scarti: si mettono scoperte davanti a chi le ha giocate. Servono per lo spareggio (§7). |\n\n---\n\n## 4. Preparazione\n\n**Prima di iniziare** si scelgono (schermata iniziale):\n- la **modalità seme**: *fissa* (default) o *a rotazione* (§9);\n- i **moduli** attivi: *Personaggi* e/o *Oggetti* (nessuno = gioco base).\n\nPoi:\n1. Mescola insieme i due mazzi da 40 carte per formare il **mazzo** (80 carte).\n2. Pesca la **prima carta** del mazzo: il suo **seme** è il **seme iniziale** (= seme di turno del primo round). Metti la carta da parte, fuori dal gioco.\n3. Cerca nel mazzo un **asso (1) del seme iniziale**: sarà la **carta centrale**.\n4. **Rimescola il mazzo**. Disponi una **griglia 5×5** di carte scoperte, con l'asso nella **casella centrale [3,3]** e le altre 24 caselle riempite dal mazzo.\n5. Le pedine: **N** su **[1,1]**, **S** su **[5,5]**. Coordinate **[x,y]**: [1,1] alto-sx, [5,5] basso-dx. Nord ha riga-bersaglio y=5; Sud ha riga-bersaglio y=1.\n6. *(Modulo Personaggi)* Ogni giocatore sceglie un **personaggio** (§10): ottiene il **seme di appartenenza** e, se è attivo anche il modulo Oggetti, l'**oggetto iniziale**.\n7. *(Modulo Oggetti)* Forma il **mazzo Oggetti**: 4 carte Oggetto distinte, scelte a caso tra tutti gli oggetti (1 copia ciascuna), a faccia in giù.\n8. Ogni giocatore pesca **6 carte** dal mazzo.\n9. Poni il mazzo accanto alla griglia. Determina a sorte il **Primo Giocatore**. `round=1`.\n\n```\n                 LATO NORD  (il giocatore Nord parte da [1,1])\n          [1,1][2,1][3,1][4,1][5,1]   <- riga di partenza Nord / bersaglio di Sud\n          [1,2][2,2][3,2][4,2][5,2]\n          [1,3][2,3][3,3][4,3][5,3]   [3,3] = casella centrale (asso del seme iniziale)\n          [1,4][2,4][3,4][4,4][5,4]\n          [1,5][2,5][3,5][4,5][5,5]   <- riga di partenza Sud / bersaglio di Nord\n                 LATO SUD  (il giocatore Sud parte da [5,5])\n```\n\n---\n\n## 5. Struttura del round (gioco base)\n\nOrdine: **Scelta delle carte → Fase di movimento → Fase di sparo → Fine del round**.\nOgni giocatore, in un round, può **muovere una sola volta** e **sparare una sola volta** (salvo effetti di oggetti, §11).\n*(Con il modulo Oggetti attivo, la struttura del round si estende come descritto in §11.4.)*\n\n### 5.1 Scelta delle carte\n- Ciascun giocatore sceglie **3 carte** dalla mano (segretamente), poi entrambi le **rivelano** contemporaneamente.\n- Le 3 carte rivelate restano **pubbliche e visibili** per tutto il round (mostrate in piccolo nella scheda del giocatore) e si aggiornano man mano che vengono usate.\n- Movimento, clash e sparo del round si effettuano usando queste 3 carte.\n\n### 5.2 Fase di movimento\nI giocatori muovono **a turno**, iniziando dal Primo Giocatore.\n- Si scarta una carta rivelata che abbina una casella **ortogonalmente adiacente** e vi si sposta la pedina. (Se nessuna carta rivelata abbina una casella adiacente → non si muove.)\n- **Effetti (movimento volontario):**\n  - **Casella centrale scoperta:** +5 (una tantum), la carta si copre, carta usata **davanti al giocatore**, pedina sopra.\n  - **Figura scoperta (8/9/10):** +punti (10→3, 9→2, 8→1), la figura si copre, carta usata **davanti al giocatore**, pedina sopra.\n  - **Riga-bersaglio:** +5 e la partita termina (§7). Se la casella è anche una figura, valgono entrambi gli effetti.\n  - **Carta coperta:** nessun punto, carta usata agli scarti, pedina sopra.\n  - **Carta 1-7 scoperta:** solo spostamento.\n- I bonus di casella centrale e riga-bersaglio (5 punti) si ottengono **solo con movimento volontario**, mai per spostamento forzato.\n\n**Clash** (destinazione occupata dall'altra pedina): l'attaccante (che ha già speso 1 carta per muovere) sceglie la carta del clash tra le **2** rivelate rimaste; il difensore tra le proprie rivelate disponibili (**3** se non ha ancora mosso, **2** se ha già mosso). Si rivelano; vince il **valore più alto**, poi il **seme** (oro > spade > coppe > bastoni), altrimenti **parità piena**. Le carte del clash vanno agli scarti.\n- **Vince l'attaccante:** si sposta sulla casella; il difensore ricolloca la propria pedina (§5.5).\n- **Vince il difensore:** resta; può (facoltativo) ricollocare l'attaccante (§5.5).\n- **Parità piena:** nessuno si muove.\n\n### 5.5 Spostamento forzato\nDestinazioni valide = caselle **ortogonalmente adiacenti** alla pedina da spostare, **escluse** la casella centrale, le caselle occupate e le **celle distrutte**. Nessun bonus. Se una pedina finisce su una **figura scoperta**, la figura **resta scoperta**. Se lo spostamento forzato porta sulla **riga-bersaglio**, la partita termina (ma niente +5). Se non esiste destinazione valida, la pedina resta ferma.\n\n### 5.3 Fase di sparo\nI giocatori sparano **a turno**, iniziando dal Primo Giocatore.\n- Si scarta una carta rivelata che abbina **una qualsiasi** casella della griglia.\n- **Effetti:** pedina avversaria → +5 (sulla **propria** pedina: nessun +5); figura scoperta → +punti, si copre, carta usata **davanti al giocatore**; **double kill** (pedina avversaria **e** figura scoperta sulla stessa casella) → **entrambi** i bonus; carta coperta o 1-7 senza pedina → nessun effetto.\n\n### 5.4 Fine del round\nOgni giocatore scarta le carte rivelate non usate (resta con le 3 non rivelate); si passa il segnalino Primo Giocatore; ciascuno pesca `min(3, carte nel mazzo)`. *(Modalità rotazione: il seme di turno avanza — §9.)*\n\n---\n\n## 6. Seme di turno (jolly)\n\nLe carte del **seme di turno** funzionano da jolly, in movimento e in sparo:\n- Una carta in mano del seme di turno abbina **qualsiasi** carta della griglia dello stesso seme, a prescindere dal valore.\n- Restano valide le normali regole di abbinamento per valore.\n- Le **carte coperte** sono abbinabili **solo** da carte del seme di turno — o del seme di appartenenza di un personaggio (§10) — senza punti; servono solo a potervi transitare/spostare sopra.\n\n---\n\n## 7. Fine della partita e punteggio\n\nTermina quando **una pedina raggiunge la riga-bersaglio** (movimento volontario o spostamento forzato): si completa il **round in corso**, poi si conta. Altrimenti dopo il **round 9** (il mazzo non si rimescola: dal round 9 si gioca con le carte rimaste). Vince chi ha **più punti**.\n\n**Spareggio** (in ordine): 1) chi ha **abbinato la casella centrale**; 2) chi ha **abbinato più figure**; 3) **patta**.\n\n---\n\n## 8. Riepilogo dei punti\n\n| Azione | Punti |\n|---|---|\n| Movimento volontario sulla casella centrale (una tantum) | 5 |\n| Movimento volontario sulla riga-bersaglio | 5 (termina la partita) |\n| Abbinare / colpire un 10 · 9 · 8 | 3 · 2 · 1 |\n| Sparare sulla pedina avversaria | 5 |\n\n---\n\n## 9. Modalità seme\n\nScelta a inizio partita (dropdown):\n- **Fissa (default):** il seme di turno è il seme iniziale e **non cambia mai**. In questa modalità il personaggio **tactician non è selezionabile** (il suo oggetto, timebomb, non avrebbe effetto).\n- **A rotazione:** il seme iniziale è deciso allo stesso modo (§4.2), ma **alla fine di ogni round** il seme di turno avanza nella sequenza **oro → spade → coppe → bastoni → oro** (loop). La casella centrale resta l'asso del **seme iniziale** (colore fisso); il jolly e l'abbinamento delle carte coperte seguono il **seme di turno corrente**.\n\n---\n\n## 10. Modulo Personaggi\n\n- Ogni giocatore sceglie un personaggio a inizio partita (si può scegliere **lo stesso** personaggio). Ogni personaggio dà un **seme di appartenenza**: quel giocatore lo tratta **come un secondo seme di turno personale e fisso** — abbina le carte di quel seme a qualsiasi valore **e** sblocca le **carte coperte** con carte di quel seme, esattamente come il seme di turno. È indipendente dal seme di turno della partita.\n- Se è attivo **anche** il modulo Oggetti, il personaggio fornisce un **oggetto iniziale** (§11), usabile una sola volta e **escluso** dal limite di 2 oggetti.\n- Se è attivo **solo** Personaggi (senza Oggetti): conta solo il seme di appartenenza (nessun oggetto).\n- Se è attivo **solo** Oggetti (senza Personaggi): nessun oggetto iniziale e nessun seme di appartenenza.\n\n| Personaggio | Seme di appartenenza | Oggetto iniziale | Note |\n|---|---|---|---|\n| **runner** | spade | jetpack | |\n| **brawler** | coppe | combat juice | |\n| **tactician** | oro | timebomb | non selezionabile in modalità seme fissa |\n| **fighter** | bastoni | hook | |\n\n---\n\n## 11. Modulo Oggetti\n\n### 11.1 Regole generali\n- Un oggetto è una carta con un'abilità unica; **una volta usato è scartato**.\n- Un oggetto è utilizzabile **solo nella fase indicata** e **prima** di eseguire l'azione relativa (vedi struttura del turno §11.4).\n- Gli oggetti si mostrano in una scheda **sotto la mano** del giocatore; al passaggio del mouse un **tooltip** ne spiega l'effetto. Un oggetto è **evidenziato solo quando è utilizzabile**.\n\n### 11.2 Come si ottengono\n- **Oggetto iniziale:** fornito dal personaggio (se entrambi i moduli sono attivi); usabile **una sola volta**, **escluso** dal limite.\n- **Dal mazzo Oggetti:** ogni volta che una **figura viene eliminata** (coperta con un match, sia in **movimento** sia in **sparo**, o distrutta), si pesca 1 oggetto dal mazzo Oggetti. Se il mazzo è vuoto, non si ottiene nulla.\n- **Mazzo Oggetti:** 4 carte distinte scelte a caso tra tutti gli oggetti (1 copia ciascuna), a faccia in giù.\n\n### 11.3 Limite\n- Non si possono possedere **più di 2 oggetti** contemporaneamente (l'oggetto iniziale del personaggio non conta). Acquisendone un terzo, se ne deve **scartare uno** (anche quello appena pescato).\n\n### 11.4 Struttura del turno (con modulo Oggetti)\n```\n- inizio turno\n- uso oggetto Primo Giocatore : scelta carte\n- uso oggetto Secondo Giocatore : scelta carte\n- scelta carte\n- rivela carte\n- uso oggetto Primo Giocatore : movimento\n- movimento Primo Giocatore\n- uso oggetto Secondo Giocatore : movimento\n- movimento Secondo Giocatore\n- uso oggetto Primo Giocatore : attacco\n- attacco Primo Giocatore\n- uso oggetto Secondo Giocatore : attacco\n- attacco Secondo Giocatore\n- i giocatori pescano 3 carte ciascuno\n- il seme di turno avanza alla posizione successiva (solo modalità rotazione)\n- fine turno\n```\n\n### 11.5 Elenco oggetti\n\n| Oggetto | Fase | Effetto |\n|---|---|---|\n| **jetpack** | movimento | **Costo: scarti 1 delle tue carte scelte** (rivelate) per usarlo — serve quindi avere almeno **2 carte scelte** disponibili. Per questo movimento puoi abbinare **anche in diagonale** (oltre che ortogonalmente). |\n| **jump** | movimento | **Costo: scarti 1 delle tue carte scelte** (rivelate) per usarlo — serve quindi avere almeno **2 carte scelte** disponibili. Per questo movimento puoi abbinare **solo** le caselle a **2 celle** ortogonali di distanza (salto; le celle a 1 non sono disponibili). Es. da [2,2] solo [2,4] e [4,2]. |\n| **hook** | attacco | Se colpisci la **pedina avversaria**, puoi spostarla di **1 casella in qualsiasi direzione** (ortogonale **o diagonale**, esclusa la centrale). |\n| **homing missile** | attacco | Ottieni i normali **punti** dell'attacco (figura o +5 pedina) **e** la carta abbinata è **rimossa dal gioco**: la cella diventa **Distrutta** (non più abbinabile né percorribile). Se la cella era occupata da una pedina, quella pedina viene **spostata** e a decidere dove è il **giocatore che ha giocato la carta** (il tiratore) — casella ortogonale adiacente, esclusa la centrale; nessun bonus. Se ha attorno solo celle Distrutte, resta ferma. |\n| **rush juice** | scelta carte | Questo round esegui **due azioni di movimento** e **rinunci** allo sparo. |\n| **combat juice** | scelta carte | Questo round esegui **due azioni di attacco** e **rinunci** al movimento. |\n| **timebomb** | scelta carte | Sposti il segnalino del **seme di turno** su un seme a scelta; il ciclo prosegue da lì (solo modalità rotazione). |\n| **elemental bomb** | attacco | **Rinunci all'azione di attacco.** Scegli una cella: il **seme** della cella bersaglio e di **tutte le celle ortogonali** diventa un **seme a tua scelta** (le celle distrutte/vuote non cambiano). |\n| **barrage** | attacco | **Rinunci all'azione di attacco.** Scegli una cella qualsiasi, poi **altre due** celle **ortogonalmente adiacenti** a una qualsiasi di quelle già scelte (esclusa la **casella centrale** e le celle con una **pedina**): **distruggi tutte e tre** le celle (come *homing missile*; una pedina eventualmente presente sulla prima cella viene ricollocata). |\n| **randomizer** | attacco | **Rinunci all'azione di attacco.** Usabile **se mazzo o scarti hanno carte** (se il mazzo è vuoto si rimescolano gli scarti). Scegli fino a **3 celle** della griglia (non la centrale): le loro carte tornano nel **mazzo**, si **mescola**, poi si pescano **altrettante** carte e si **ricollocano** (a scelta del giocatore) nelle celle svuotate. |\n| **energy boost** | movimento o attacco | **Peschi 2 carte** dal mazzo e **puoi usarle in questa mano**. Se usi questo tool, a **fine turno scarti 2 carte extra**. (Se il mazzo è vuoto si rimescolano gli scarti.) |\n| **energy drain** | movimento o attacco | **Rubi una carta** dalla mano dell'**avversario** (la puoi usare in questa mano). |\n\n---\n\n## 12. Modulo Poteri personaggio\n\nModulo opzionale (attivabile a inizio partita, richiede il modulo **Personaggi**). Ogni personaggio,\noltre al seme di appartenenza e all'oggetto iniziale, ottiene un **potere** che modifica le sue\ncondizioni di gioco. I poteri si azzerano a fine round.\n\n| Personaggio | Potere |\n|---|---|\n| **runner** | **Passivo.** Solo in **fase di movimento** può abbinare le **carte pari tra di loro**: una **carta pari** in mano abbina una **casella scoperta di valore pari** (es. 2 con 4, 4 con 8, 2 con 6). |\n| **tactician** | **Attivo.** Attivabile **al massimo 2 volte per partita** (senza altri costi): per il resto del turno usa **anche le carte non scelte** (tutte le carte in mano vengono scoperte e diventano utilizzabili). Se usa per un'azione una carta **non** scelta in fase di selezione, quella carta va **scartata** normalmente. Le carte **non scelte e non usate** **non** vanno negli scarti a fine turno; le carte **scelte** e non usate vanno invece scartate come di consueto. |\n| **fighter** | **Passivo.** Solo in **fase di attacco** può abbinare le **carte pari tra di loro**: una **carta pari** in mano abbina una **casella scoperta di valore pari** (es. 2 con 4, 4 con 8, 2 con 6). |\n| **brawler** | **Attivo.** Attivabile **al massimo 3 volte per partita**: se ha **3 carte disponibili** può **scartarle tutte e tre** per **abbinare qualsiasi cella** (di fatto rinuncia a un'azione, perché consuma tutte le carte). |\n\n*(Nota implementativa: il numero di attivazioni per partita dei poteri attivi — tactician e brawler — è\nconfigurabile nel file `js/characters.js` tramite il campo `powerUses`, così da poter provare valori\ndiversi in fase di test.)*\n\n## 13. Modulo Reshuffle\n\nModulo opzionale (attivabile a inizio partita). Ogni giocatore dispone di un numero fisso di\n**reshuffle** per partita (configurabile a inizio partita: **1, 2 o 3**; default **2**).\n\nDurante la **propria fase di selezione**, prima di scegliere le carte, un giocatore può usare un\nreshuffle: sceglie **da 1 a n carte** della propria mano (dove *n* è il numero di carte in mano),\n**scarta** le carte scelte e **pesca un egual numero** di carte dal mazzo. Se durante la pescata il\nmazzo si esaurisce, gli **scarti vengono rimescolati** per formare un nuovo mazzo e completare la\npescata delle carte mancanti.\n\nOgni uso consuma un reshuffle; esauriti gli usi, il giocatore non può più rimescolare per il resto\ndella partita.\n";
+
+  function build(rs) {
+    var A = rs === "A";
+    var s = [];
+
+    s.push("# The Cradle — Regolamento (" + rs + ")");
+
+    s.push(
+"## 1. In breve\n\n" +
+"The Cradle è un gioco per **2 giocatori** con due mazzi di carte napoletane (40 carte ciascuno, valori 1–10). " +
+"Sul tavolo si dispone una **griglia 5×5** di carte scoperte. A turno muovi la tua **pedina** e **spari**, giocando le carte della tua **mano** per **abbinare** le carte sulla griglia e segnare punti.\n\n" +
+"Ogni giocatore interpreta un **personaggio** (con un seme personale, un oggetto di partenza e un potere) e durante la partita raccoglie **oggetti**.\n\n" +
+"**Obiettivo:** avere più punti dell'avversario nel momento in cui la partita finisce.");
+
+    s.push(
+"## 2. Cosa serve\n\n" +
+"- **Due mazzi** napoletani (40 carte l'uno): mescolati insieme formano il **mazzo** (80 carte).\n" +
+"- **2 pedine** (una a testa).\n" +
+"- **1 segnalino Primo Giocatore**.\n" +
+"- Le **carte Personaggio**.\n" +
+"- Le **carte Oggetto**, che formano il **mazzo Oggetti**, e uno spazio per gli **scarti Oggetti**.");
+
+    s.push(
+"## 3. Come si abbina una carta (match)\n\n" +
+"**Abbinare** significa giocare dalla mano una carta che corrisponde alla carta di una casella. Una tua carta abbina una **casella scoperta** se:\n\n" +
+"- ha lo **stesso valore** della carta nella casella; **oppure**\n" +
+"- è del **seme di turno** o del tuo **seme personale** (funziona da **jolly**) **e** ha lo **stesso seme** della carta nella casella, a qualsiasi valore.\n\n" +
+"Una casella **coperta** (una figura girata a faccia in giù, o il centro dopo che è stato conquistato) si abbina **solo** con una carta jolly (seme di turno o tuo seme personale) e **non dà punti**: serve unicamente per potervi passare sopra.\n\n" +
+"Il **seme di turno** è un seme che fa da jolly per entrambi i giocatori: **cambia a ogni round** (§7). Il **seme personale** è il seme del tuo personaggio: è come un secondo seme di turno tutto tuo, e **non cambia mai**.\n\n" +
+"Le **figure** sono le carte di valore **8, 9 e 10**.");
+
+    // ---- Preparazione ----
+    var prep =
+"## 4. Preparazione\n\n" +
+"1. Mescola insieme i due mazzi: ottieni il **mazzo** (80 carte).\n" +
+"2. Pesca la **prima carta**: il suo **seme** è il **seme iniziale** (il seme di turno del 1° round). Mettila da parte, fuori dalla partita.\n" +
+"3. Cerca nel mazzo un **asso (1) del seme iniziale**: sarà la **carta centrale**.\n" +
+"4. Rimescola il mazzo. Disponi una **griglia 5×5** di carte scoperte, con l'**asso al centro [3,3]** e le altre 24 caselle pescate dal mazzo.\n" +
+"5. Piazza le pedine: **Nord** su **[1,1]**, **Sud** su **[5,5]**. La riga di 5 caselle sul lato di ciascun giocatore è la sua **riga di partenza**; la riga di partenza dell'avversario è la tua **riga-bersaglio** (Nord punta a y=5, Sud a y=1).\n" +
+"6. Ogni giocatore sceglie un **personaggio** (§8): riceve il suo **seme personale**, il suo **oggetto di partenza** e il suo **potere** (potete anche scegliere lo stesso personaggio).\n" +
+"7. Prepara il **mazzo Oggetti**: prendi **5 tipi** di oggetto (a caso, oppure concordati) e mettine **2 copie ciascuno** a faccia in giù. Tienilo vicino alla griglia, con accanto lo spazio per gli **scarti Oggetti**.\n";
+    if (A) prep +=
+"8. **Oggetto extra:** ogni giocatore pesca **1 oggetto** dal mazzo Oggetti, in aggiunta all'oggetto del personaggio.\n" +
+"9. Ogni giocatore pesca **6 carte** dal mazzo.\n" +
+"10. Sorteggia il **Primo Giocatore**. Si parte dal round 1.\n";
+    else prep +=
+"8. Ogni giocatore pesca **6 carte** dal mazzo.\n" +
+"9. Sorteggia il **Primo Giocatore**. Si parte dal round 1.\n";
+    prep +=
+"\n```\n" +
+"                 LATO NORD  (Nord parte da [1,1])\n" +
+"          [1,1][2,1][3,1][4,1][5,1]   <- partenza Nord / bersaglio di Sud\n" +
+"          [1,2][2,2][3,2][4,2][5,2]\n" +
+"          [1,3][2,3][3,3][4,3][5,3]   [3,3] = casella centrale (asso del seme iniziale)\n" +
+"          [1,4][2,4][3,4][4,4][5,4]\n" +
+"          [1,5][2,5][3,5][4,5][5,5]   <- partenza Sud / bersaglio di Nord\n" +
+"                 LATO SUD  (Sud parte da [5,5])\n" +
+"```";
+    s.push(prep);
+
+    // ---- Struttura del round ----
+    s.push(
+"## 5. Il round\n\n" +
+"Ogni round si svolge in quest'ordine: **Scelta delle carte → Movimento → Attacco → Fine del round**.\n" +
+"In un round ciascun giocatore **muove una volta** e **spara una volta** (salvo effetti di oggetti).\n\n" +
+"**Iniziativa divisa:** nella fase di **movimento** agisce per primo il **Primo Giocatore**, poi l'avversario; nella fase di **attacco** l'ordine si **inverte** (agisce per primo l'avversario del Primo Giocatore, poi il Primo Giocatore). In questo modo ciascun giocatore agisce per **secondo** — cioè con più informazioni — in esattamente una delle due fasi.");
+
+    s.push(
+"### 5.1 Scelta delle carte\n\n" +
+"Ognuno sceglie **in segreto 3 carte** dalla propria mano, poi entrambi le **rivelano** insieme e le tengono in vista. " +
+"Per tutto il round, per muovere, per il clash e per sparare si usano **solo queste 3 carte**.");
+
+    // Movimento (con parte specifica del ruleset)
+    var mov =
+"### 5.2 Movimento\n\n" +
+"I giocatori muovono **a turno**, a partire dal Primo Giocatore.\n\n" +
+"Gioca una carta rivelata che **abbina una casella ortogonalmente adiacente** e sposta lì la pedina. Se nessuna delle carte rivelate abbina una casella adiacente, **non muovi**.\n\n" +
+"**Effetti d'arrivo** (solo per movimento scelto da te, non per gli spostamenti forzati):\n\n";
+    if (A) mov +=
+"- **Casella centrale scoperta:** **+5** (una sola volta in tutta la partita); il centro si **copre**; la carta usata resta **scoperta davanti a te** (trofeo); la pedina ci sale sopra; **inoltre peschi 3 oggetti e ne tieni 1** (gli altri 2 vanno negli scarti Oggetti).\n" +
+"- **Figura scoperta (8/9/10):** **nessun effetto**. In questo regolamento muovere su una figura **non** la elimina, **non** dà punti e **non** dà oggetti: la figura **resta scoperta** e la pedina ci sale sopra.\n" +
+"- **Riga-bersaglio:** **+5** e la partita **termina** (§7).\n" +
+"- **Carta coperta:** nessun punto; la carta usata va agli **scarti**; la pedina ci sale sopra.\n" +
+"- **Carta 1–7 scoperta:** solo spostamento.\n";
+    else mov +=
+"- **Casella centrale scoperta:** **+5** (una sola volta in tutta la partita); il centro si **copre**; la carta usata resta **scoperta davanti a te** (trofeo); la pedina ci sale sopra.\n" +
+"- **Figura scoperta (8/9/10):** **+punti** (10 → 3, 9 → 2, 8 → 1); la figura si **copre**; la carta usata resta **davanti a te** (trofeo); la pedina ci sale sopra; **inoltre peschi 1 oggetto** dal mazzo Oggetti.\n" +
+"- **Riga-bersaglio:** **+5** e la partita **termina** (§7). Se la casella è anche una figura, valgono entrambi gli effetti.\n" +
+"- **Carta coperta:** nessun punto; la carta usata va agli **scarti**; la pedina ci sale sopra.\n" +
+"- **Carta 1–7 scoperta:** solo spostamento.\n";
+    mov +=
+"\nI **+5** del centro e della riga-bersaglio si ottengono **solo muovendo di tua scelta**, mai per spostamento forzato.\n\n" +
+"**Clash (la casella d'arrivo è occupata dall'altra pedina).** L'attaccante ha già speso 1 carta per muovere: sceglie la carta del clash tra le **2** carte rivelate che gli restano; il difensore la sceglie tra le proprie rivelate disponibili (**3** se non ha ancora mosso, **2** se ha già mosso). Si confrontano: vince il **valore più alto**; a parità di valore vince il **seme più forte** (oro > spade > coppe > bastoni); se anche il seme è pari è **parità piena**. Le carte del clash vanno agli scarti.\n\n" +
+"- **Vince l'attaccante:** avanza sulla casella; il **difensore** viene ricollocato (§5.4).\n" +
+"- **Vince il difensore:** resta dov'è; può, se vuole, ricollocare l'**attaccante** (§5.4).\n" +
+"- **Parità piena:** nessuno si sposta.";
+    s.push(mov);
+
+    // Attacco
+    var att =
+"### 5.3 Attacco (sparo)\n\n" +
+"I giocatori sparano **a turno**, ma qui parte per primo **l'avversario del Primo Giocatore** (iniziativa divisa, §5), poi tocca al Primo Giocatore. Gioca una carta rivelata che **abbina una casella qualsiasi** della griglia.\n\n";
+    if (A) att +=
+"**Attaccare una casella la gira sempre a faccia in giù** (anche se non è una figura). Effetti:\n\n" +
+"- **Pedina avversaria** sulla casella: **+5** (sparare sulla propria pedina non dà nulla).\n" +
+"- **Figura scoperta:** **+punti** (10 → 3, 9 → 2, 8 → 1) e **+1 trofeo** (la carta usata); **inoltre peschi 3 oggetti e ne tieni 1** (gli altri 2 vanno negli scarti Oggetti). La figura si copre.\n" +
+"- **Carta 1–7 scoperta:** si **copre**, nessun punto.\n" +
+"- **Casella già coperta / senza figura né pedina:** nessun effetto in più.\n";
+    else att +=
+"Effetti:\n\n" +
+"- **Pedina avversaria** sulla casella: **+5** (sparare sulla propria pedina non dà nulla).\n" +
+"- **Figura scoperta:** **+punti** (10 → 3, 9 → 2, 8 → 1); si **copre**; la carta usata è un **trofeo**; **inoltre peschi 1 oggetto**.\n" +
+"- **Doppia messa a segno:** se sulla stessa casella ci sono **pedina avversaria e figura scoperta**, ottieni **entrambi** i bonus.\n" +
+"- **Casella coperta o 1–7 senza pedina:** nessun effetto.\n";
+    s.push(att);
+
+    s.push(
+"### 5.4 Spostamento forzato\n\n" +
+"Alcune situazioni (clash perso, oggetti) costringono a spostare una pedina. Le destinazioni valide sono le caselle **ortogonalmente adiacenti** alla pedina, **escluse** la casella centrale, le caselle occupate e le caselle **distrutte**. Nessun bonus. " +
+"Se la pedina finisce su una figura scoperta, la figura **resta scoperta**. Se finisce sulla **riga-bersaglio**, la partita **termina** (ma senza +5). Se non esiste alcuna destinazione valida, la pedina **resta ferma**.");
+
+    s.push(
+"### 5.5 Fine del round\n\n" +
+"Ogni giocatore **scarta le carte rivelate non usate** (tiene le 3 non rivelate). Si passa il segnalino **Primo Giocatore** all'avversario. Ciascuno pesca fino a **3 carte** (finché il mazzo ne ha). Il **seme di turno avanza** (§7).");
+
+    s.push(
+"## 6. Trofei\n\n" +
+"Le carte usate per abbinare una **figura** o la **casella centrale** non vanno negli scarti: restano **scoperte davanti a te** come **trofei**. Contano per lo spareggio (§9).");
+
+    s.push(
+"## 7. Rotazione del seme di turno\n\n" +
+"Il seme iniziale (§4) è il seme di turno del primo round. **Alla fine di ogni round** il seme di turno avanza nella sequenza **oro → spade → coppe → bastoni → oro** (in loop). " +
+"La casella centrale resta sempre l'asso del **seme iniziale**; il jolly e l'abbinamento delle carte coperte seguono invece il **seme di turno corrente**.");
+
+    s.push(
+"## 8. Personaggi\n\n" +
+"Ogni giocatore ha un personaggio, che gli dà tre cose: un **seme personale** (jolly personale e fisso, come descritto in §3), un **oggetto di partenza** e un **potere**.\n\n" +
+"| Personaggio | Seme personale | Oggetti di partenza | Potere |\n" +
+"|---|---|---|---|\n" +
+"| **Runner** | spade | jetpack | **Passiva:** 2 volte a partita, muovendo su una figura può **scartare 1 carta scelta extra per colpirla** (ottiene i punti figura e la scelta di 1 oggetto). Se sulla casella c'è la pedina avversaria si fa **clash**: gli effetti valgono solo vincendo il clash (altrimenti l'uso non si consuma). |\n" +
+"| **Brawler** | coppe | barrage | **In movimento o in attacco**, fino a **3 volte per partita**: se hai **3 carte disponibili**, scartale tutte e tre per **abbinare una casella qualsiasi** (rinunci così a quell'azione). |\n" +
+"| **Tactician** | oro | timebomb | Fino a **2 volte per partita**: per il resto del turno puoi usare **anche le carte non scelte**. **Passiva:** quando sceglie un oggetto sceglie **tra 4** invece che tra 3. |\n" +
+"| **Fighter** | bastoni | hook | In **attacco** abbina le **carte pari fra loro** (una carta di valore pari abbina una casella scoperta di valore pari). |\n\n" +
+"Gli oggetti di partenza del personaggio si usano **una sola volta** e **non contano** nel limite oggetti (§9).");
+
+    // Oggetti
+    var ogg =
+"## 9. Oggetti\n\n" +
+"### 9.1 Come si ottengono\n\n";
+    if (A) ogg +=
+"- **Colpendo una figura in attacco** o **conquistando la casella centrale**: peschi **3 oggetti** dal mazzo Oggetti e ne **tieni 1**; gli altri 2 finiscono negli **scarti Oggetti**.\n" +
+"- **A inizio partita** ogni giocatore riceve **1 oggetto** (§4), oltre a quello del personaggio.\n";
+    else ogg +=
+"- **Eliminando una figura** (abbinandola in movimento o colpendola in attacco): peschi **1 oggetto** dal mazzo Oggetti.\n";
+    ogg +=
+"\nQuando il **mazzo Oggetti si esaurisce**, rimescola gli **scarti Oggetti** per riformarlo.\n\n" +
+"### 9.2 Limite e uso\n\n" +
+"- Puoi possedere al massimo **" + (A ? "4" : "2") + " oggetti** contemporaneamente (l'oggetto di partenza del personaggio **non** conta). Se superi il limite, devi **scartarne uno** (anche quello appena preso).\n" +
+"- Un oggetto si usa **una sola volta**, **nella fase indicata** e **prima** di eseguire l'azione a cui si riferisce.\n\n" +
+"### 9.3 Elenco degli oggetti\n\n" +
+"| Oggetto | Quando | Effetto |\n" +
+"|---|---|---|\n" +
+"| **jetpack** | movimento | Costo: **scarta 1 carta rivelata a tua scelta** (devi averne almeno 2). Per questo movimento puoi abbinare **anche in diagonale**. |\n" +
+"| **jump** | movimento | Costo: **scarta 1 carta rivelata a tua scelta** (almeno 2). Questo movimento raggiunge **solo** le caselle a **2 passi ortogonali** di distanza (salto). |\n" +
+"| **hook** | attacco | Se colpisci la **pedina avversaria**, spostala di **1 casella in qualsiasi direzione** (esclusa la centrale). |\n" +
+"| **homing missile** | attacco | Ottieni i normali punti dell'attacco **e rimuovi dal gioco** la carta colpita: la casella diventa **distrutta** (non più abbinabile né calpestabile). Una pedina eventualmente presente viene **spostata dal tiratore** su una casella adiacente. |\n" +
+"| **rush juice** | scelta carte | Questo round esegui **due movimenti** e **rinunci** all'attacco. |\n" +
+"| **combat juice** | scelta carte | Questo round esegui **due attacchi** e **rinunci** al movimento. |\n" +
+"| **timebomb** | scelta carte | Sposta il **seme di turno** su un seme a tua scelta; la rotazione prosegue da lì. |\n" +
+"| **elemental bomb** | attacco | Rinunci all'attacco. Scegli una casella: il **seme** suo e di **tutte le caselle ortogonali** diventa un **seme a tua scelta**. |\n" +
+"| **barrage** | attacco | Rinunci all'attacco. Scegli una casella e **una adiacente ortogonale** (non la centrale, non caselle con pedina): **distruggi entrambe** le caselle. |\n" +
+"| **randomizer** | attacco | Rinunci all'attacco. Scegli fino a **3 caselle** (non la centrale): le loro carte tornano nel mazzo, si mescola e si pescano **altrettante** carte da **ricollocare** in quelle caselle. |\n" +
+"| **energy boost** | movimento o attacco | Peschi **2 carte** e puoi usarle in questa mano; a fine turno queste carte si **scartano** con le altre carte scelte non usate (le carte non scelte restano). |\n" +
+"| **energy drain** | movimento o attacco | **Rubi 1 carta** dalla mano dell'avversario (puoi usarla in questa mano). |";
+    s.push(ogg);
+
+    s.push(
+"## 10. Fine della partita\n\n" +
+"La partita finisce quando **una pedina raggiunge la riga-bersaglio** (per movimento scelto o forzato): si completa il **round in corso**, poi si contano i punti. In ogni caso la partita non supera il **round 9** (dal round 9 non si rimescola: si gioca con le carte rimaste).\n\n" +
+"Vince chi ha **più punti**. In caso di parità, si applica lo **spareggio** in quest'ordine:\n\n" +
+"1. chi ha **conquistato la casella centrale**;\n" +
+"2. chi ha **più figure** a trofeo;\n" +
+"3. se ancora pari, la partita è **patta**.");
+
+    s.push(
+"## 11. Riepilogo dei punti\n\n" +
+"| Azione | Punti |\n" +
+"|---|---|\n" +
+"| Muovere sulla casella centrale (una sola volta) | 5 |\n" +
+"| Muovere sulla riga-bersaglio | 5 (termina la partita) |\n" +
+"| " + (A ? "Colpire in attacco" : "Abbinare o colpire") + " un 10 · 9 · 8 | 3 · 2 · 1 |\n" +
+"| Colpire la pedina avversaria | 5 |");
+
+    s.push(
+"## 12. Regola opzionale: Mulligan\n\n" +
+"Se concordata a inizio partita, ogni giocatore ha un numero fisso di **Mulligan** (1, 2 o 3; di norma 2). " +
+"Durante la **propria scelta delle carte**, prima di fissare le 3 carte, puoi usare un Mulligan: **scarti da 1 a tutte** le carte della tua mano e ne **peschi altrettante** dal mazzo (se il mazzo finisce, si rimescolano gli scarti). Ogni uso consuma un Mulligan.");
+
+    return s.join("\n\n");
+  }
+
+  return { A: build("A"), B: build("B") };
 });
