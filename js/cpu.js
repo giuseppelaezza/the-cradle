@@ -16,7 +16,11 @@
 })(typeof self !== 'undefined' ? self : this, function (Deck, Engine) {
   'use strict';
 
-  function targetRow(id) { return id === 'N' ? 5 : 1; }
+  // Dimensione della griglia corrente (5×5 o 4×4). Impostata a ogni cpuAct: la CPU
+  // esegue una singola azione in modo sincrono, quindi un valore a livello di modulo è sicuro.
+  var _SZ = 5;
+  function isCenterC(x, y) { return _SZ === 5 && x === 3 && y === 3; }
+  function targetRow(id) { return id === 'N' ? _SZ : 1; }
   function distToTarget(id, y) { return Math.abs(y - targetRow(id)); }
   function other(id) { return id === 'N' ? 'S' : 'N'; }
   function bel(game, id) { return game.state.players[id].belongingSuit; }
@@ -26,7 +30,7 @@
     var cell = game.getCell(x, y);
     if (!cell.card || cell.destroyed || cell.faceDown) return { pts: 0, endsGame: false };
     var alt = game.state.altMatch, pts = 0, ends = false;
-    if (x === 3 && y === 3) pts += 5;
+    if (isCenterC(x, y)) pts += 5;
     else {
       if (Deck.isFigure(cell.card) && !alt) pts += Deck.figurePoints(cell.card); // altMatch: muovere su figura non dà punti
       if (y === targetRow(id)) { pts += 5; ends = true; }
@@ -54,10 +58,10 @@
       var best = 0;
       if (pawn) [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(function (d) {
         var nx = pawn.x + d[0], ny = pawn.y + d[1];
-        if (nx < 1 || nx > 5 || ny < 1 || ny > 5) return;
+        if (nx < 1 || nx > _SZ || ny < 1 || ny > _SZ) return;
         if (Engine.canMatch(c, game.getCell(nx, ny), suit(game), bel(game, id))) best = Math.max(best, arrivalValue(game, id, nx, ny).pts);
       });
-      for (var x = 1; x <= 5; x++) for (var y = 1; y <= 5; y++)
+      for (var x = 1; x <= _SZ; x++) for (var y = 1; y <= _SZ; y++)
         if (Engine.canMatch(c, game.getCell(x, y), suit(game), bel(game, id))) best = Math.max(best, shotValue(game, id, x, y));
       var jolly = (c.suit === suit(game) || c.suit === bel(game, id)) ? 3 : 0;
       return { c: c, score: best * 10 + c.value + jolly };
@@ -71,16 +75,16 @@
     var s = game.state, moves = game.legalMoves(id);
     if (!moves.length) return { action: 'pass' };
     var pawn = game.pawnCell(id), me = s.players[id], opp = s.players[other(id)];
-    var oppBest = maxValueCard(game.availableRevealed(other(id)));
+    // Il clash si gioca con le carte della RISERVA (non scelte), non con quelle scelte.
+    var oppBest = maxValueCard(game.availableReserve(other(id)));
+    var myClashBest = maxValueCard(game.availableReserve(id));
     var best = null;
     moves.forEach(function (m) {
       var value, moveCardId;
       var matchCards = game.availableRevealed(id).filter(function (c) { return m.cardIds.indexOf(c.id) !== -1; });
       if (m.occupied) {
         var moveCard = minValueCard(matchCards); moveCardId = moveCard.id;
-        var clashPool = game.availableRevealed(id).filter(function (c) { return c.id !== moveCard.id; });
-        var myBest = maxValueCard(clashPool);
-        var favorable = myBest && (!oppBest || cpuBeats(myBest, oppBest, true));
+        var favorable = myClashBest && (!oppBest || cpuBeats(myClashBest, oppBest, true));
         value = favorable ? arrivalValue(game, id, m.x, m.y).pts + 2 : -100;
       } else {
         moveCardId = minValueCard(matchCards).id;
@@ -98,7 +102,7 @@
   function chooseClashCard(game, id) {
     var pc = game.state.pendingClash, choices = game.clashChoices(id);
     var cpuIsAttacker = pc.attackerId === id, oppId = cpuIsAttacker ? pc.defenderId : pc.attackerId;
-    var oppBest = maxValueCard(game.availableRevealed(oppId));
+    var oppBest = maxValueCard(game.availableReserve(oppId));
     var winners = choices.filter(function (c) { return oppBest ? cpuBeats(c, oppBest, cpuIsAttacker) : true; });
     return (winners.length ? minValueCard(winners) : minValueCard(choices)).id;
   }
@@ -162,7 +166,7 @@
   function bestArrival(game, id, cards, modifier) {
     var pc = game.pawnCell(id), best = { value: 0, x: null, y: null };
     if (!pc) return best;
-    Engine.moveDestinations(pc.x, pc.y, modifier || null).forEach(function (d) {
+    Engine.moveDestinations(pc.x, pc.y, modifier || null, _SZ).forEach(function (d) {
       var cell = game.getCell(d[0], d[1]);
       if (cell.pawn && cell.pawn !== id) return; // niente clash nella valutazione oggetti
       if (!cards.some(function (c) { return game._matches(id, c, cell); })) return;
@@ -174,7 +178,7 @@
   // Miglior valore di tiro con `cards`.
   function bestShotWith(game, id, cards) {
     var best = { value: 0, x: null, y: null, onPawn: false };
-    for (var x = 1; x <= 5; x++) for (var y = 1; y <= 5; y++) {
+    for (var x = 1; x <= _SZ; x++) for (var y = 1; y <= _SZ; y++) {
       var cell = game.getCell(x, y);
       if (!cards.some(function (c) { return game._matches(id, c, cell); })) continue;
       var v = shotValue(game, id, x, y);
@@ -202,9 +206,9 @@
       if (bestN >= 3 && bestSuit !== s.currentSuit) return { id: tb.id, type: 'timebomb', params: { suit: bestSuit } };
     }
     var cj = usable.filter(function (o) { return o.type === 'combat_juice'; })[0];
-    if (cj) { var figs = 0; for (var x = 1; x <= 5; x++) for (var y = 1; y <= 5; y++) { var c = game.getCell(x, y); if (!c.destroyed && c.card && !c.faceDown && Deck.isFigure(c.card)) figs++; } if (figs >= 2) return { id: cj.id, type: 'combat_juice' }; }
+    if (cj) { var figs = 0; for (var x = 1; x <= _SZ; x++) for (var y = 1; y <= _SZ; y++) { var c = game.getCell(x, y); if (!c.destroyed && c.card && !c.faceDown && Deck.isFigure(c.card)) figs++; } if (figs >= 2) return { id: cj.id, type: 'combat_juice' }; }
     var rj = usable.filter(function (o) { return o.type === 'rush_juice'; })[0];
-    if (rj) { var pc = game.pawnCell(id), sc = 0; if (pc) Engine.orthogonalNeighbors(pc.x, pc.y).forEach(function (d) { var cell = game.getCell(d[0], d[1]); if (cell.pawn && cell.pawn !== id) return; if (p.hand.some(function (cc) { return game._matches(id, cc, cell); }) && arrivalValue(game, id, d[0], d[1]).pts > 0) sc++; }); if (sc >= 2) return { id: rj.id, type: 'rush_juice' }; }
+    if (rj) { var pc = game.pawnCell(id), sc = 0; if (pc) Engine.orthogonalNeighbors(pc.x, pc.y, _SZ).forEach(function (d) { var cell = game.getCell(d[0], d[1]); if (cell.pawn && cell.pawn !== id) return; if (p.hand.some(function (cc) { return game._matches(id, cc, cell); }) && arrivalValue(game, id, d[0], d[1]).pts > 0) sc++; }); if (sc >= 2) return { id: rj.id, type: 'rush_juice' }; }
     return null;
   }
 
@@ -233,14 +237,14 @@
   }
   // C'è almeno una coppia (cella, cella-adiacente-valida) per il barrage?
   function validSecond(game, x, y) {
-    return Engine.orthogonalNeighbors(x, y).some(function (d) { var c = game.getCell(d[0], d[1]); return !(d[0] === 3 && d[1] === 3) && !c.pawn && !c.destroyed; });
+    return Engine.orthogonalNeighbors(x, y, _SZ).some(function (d) { var c = game.getCell(d[0], d[1]); return !isCenterC(d[0], d[1]) && !c.pawn && !c.destroyed; });
   }
   function barragePairExists(game) {
-    for (var x = 1; x <= 5; x++) for (var y = 1; y <= 5; y++) if (!game.getCell(x, y).destroyed && validSecond(game, x, y)) return true;
+    for (var x = 1; x <= _SZ; x++) for (var y = 1; y <= _SZ; y++) if (!game.getCell(x, y).destroyed && validSecond(game, x, y)) return true;
     return false;
   }
-  function randomizableCount(game) { var n = 0; for (var x = 1; x <= 5; x++) for (var y = 1; y <= 5; y++) { var c = game.getCell(x, y); if (!(x === 3 && y === 3) && !c.destroyed && c.card) n++; } return n; }
-  function elementalCount(game) { var n = 0; for (var x = 1; x <= 5; x++) for (var y = 1; y <= 5; y++) { var c = game.getCell(x, y); if (!c.destroyed && c.card) n++; } return n; }
+  function randomizableCount(game) { var n = 0; for (var x = 1; x <= _SZ; x++) for (var y = 1; y <= _SZ; y++) { var c = game.getCell(x, y); if (!isCenterC(x, y) && !c.destroyed && c.card) n++; } return n; }
+  function elementalCount(game) { var n = 0; for (var x = 1; x <= _SZ; x++) for (var y = 1; y <= _SZ; y++) { var c = game.getCell(x, y); if (!c.destroyed && c.card) n++; } return n; }
 
   // Tool "energetici" (energy boost / drain): usali come ripiego quando non c'è nessuna azione a punti,
   // per rimpinguare/rinnovare la mano. `phase` = 'move' | 'attack'.
@@ -281,7 +285,7 @@
   }
   function cpuElementalTarget(game, id) {
     var opts = game.elementalTargetOptions(), best = opts[0], bn = -1;
-    opts.forEach(function (o) { var n = 0; Engine.orthogonalNeighbors(o.x, o.y).forEach(function (d) { var c = game.getCell(d[0], d[1]); if (!c.destroyed && c.card) n++; }); if (n > bn) { bn = n; best = o; } });
+    opts.forEach(function (o) { var n = 0; Engine.orthogonalNeighbors(o.x, o.y, _SZ).forEach(function (d) { var c = game.getCell(d[0], d[1]); if (!c.destroyed && c.card) n++; }); if (n > bn) { bn = n; best = o; } });
     return best;
   }
   function cpuElementalSuit(game, id) { return game.state.players[id].belongingSuit || game.state.currentSuit; }
@@ -310,6 +314,7 @@
   // {type:'shoot', from, to} quando spara/attacca-brawler (per l'animazione della UI).
   function cpuAct(game, id) {
     var s = game.state;
+    _SZ = s.gridSize || 5;
     // --- sotto-flussi / interrupt ---
     if (s.subPhase === 'timebomb-suit') { if (s.pendingTimebomb.playerId === id) game.timebombChoose(cpuTimebombSuit(game, id)); return {}; }
     if (s.subPhase === 'elemental-target') { if (s.pendingElemental.playerId === id) { var t = cpuElementalTarget(game, id); game.elementalTarget(t.x, t.y); } return {}; }

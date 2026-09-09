@@ -126,22 +126,28 @@ console.log('# Riga-bersaglio: fine partita a fine round (cella normale, coperta
   ok(s2.endTriggered, 'spostamento forzato sulla riga-bersaglio: endTriggered');
 })();
 
-// -------------------------------------------------------------------- Clash attaccante 2 / difensore 3
-console.log('# Clash: attaccante 2, difensore 3; vittoria attaccante + ricollocazione');
+// -------------------------------------------------------------------- Clash con carte di riserva
+console.log('# Clash: si sceglie tra le carte di RISERVA (non scelte); vittoria attaccante + ricollocazione');
 (function () {
   var g = Engine.createGame({ rng: makeRng(11), firstPlayer: 'N' });
   var s = g.state;
   g.pawnCell('S').pawn = null; g.getCell(2, 1).pawn = 'S'; g.getCell(2, 1).card = { id: 'c21', value: 4, suit: 'coppe' }; g.getCell(2, 1).faceDown = false;
-  s.players.N.hand = [{ id: 'n4', value: 4, suit: 'oro' }, { id: 'n9', value: 9, suit: 'oro' }, { id: 'n2', value: 2, suit: 'oro' }];
-  s.players.S.hand = [{ id: 's3', value: 3, suit: 'bastoni' }, { id: 's1', value: 1, suit: 'bastoni' }, { id: 's2', value: 2, suit: 'bastoni' }];
-  s.players.N.revealedIds = ['n4', 'n9', 'n2']; s.players.S.revealedIds = ['s3', 's1', 's2'];
+  // Mano = 3 carte scelte (rivelate) + 3 carte di riserva (non scelte).
+  s.players.N.hand = [{ id: 'n4', value: 4, suit: 'oro' }, { id: 'nA', value: 5, suit: 'oro' }, { id: 'nB', value: 6, suit: 'oro' },
+                      { id: 'r9', value: 9, suit: 'oro' }, { id: 'r2', value: 2, suit: 'oro' }, { id: 'r3', value: 3, suit: 'oro' }];
+  s.players.S.hand = [{ id: 'sX', value: 7, suit: 'bastoni' }, { id: 'sY', value: 8, suit: 'bastoni' }, { id: 'sZ', value: 9, suit: 'bastoni' },
+                      { id: 's3', value: 3, suit: 'bastoni' }, { id: 's1', value: 1, suit: 'bastoni' }, { id: 's2', value: 2, suit: 'bastoni' }];
+  s.players.N.revealedIds = ['n4', 'nA', 'nB']; s.players.S.revealedIds = ['sX', 'sY', 'sZ'];
   s.phase = 'move'; s.subPhase = null; s.activePlayer = 'N'; s.actionsLeft = 1; s.moveModifier = null;
   eq(g.move('N', 2, 1, 'n4').type, 'clash', 'clash avviato');
-  eq(g.clashChoices('N').length, 2, 'attaccante 2 carte');
-  eq(g.clashChoices('S').length, 3, 'difensore 3 carte');
-  g.clashChoose('N', 'n9'); g.clashChoose('S', 's3');
+  eq(g.clashChoices('N').length, 3, 'attaccante sceglie tra le 3 carte di riserva');
+  eq(g.clashChoices('S').length, 3, 'difensore sceglie tra le 3 carte di riserva');
+  ok(!g.clashChoices('N').some(function (c) { return c.id === 'nA'; }), 'le carte scelte NON sono tra le opzioni del clash');
+  ok(g.clashChoices('N').some(function (c) { return c.id === 'r9'; }), 'le carte di riserva SONO tra le opzioni del clash');
+  g.clashChoose('N', 'r9'); g.clashChoose('S', 's3'); // 9 > 3 → attaccante vince
   eq(s.subPhase, 'clash-reloc', 'difensore ricolloca');
   eq(g.getCell(2, 1).pawn, 'N', 'attaccante entra');
+  ok(s.discard.some(function (c) { return c.id === 'r9'; }) && s.discard.some(function (c) { return c.id === 's3'; }), 'le carte di riserva usate nel clash sono scartate');
   var opts = g.relocationOptions(); ok(opts.length > 0, 'opzioni ricollocazione'); g.clashRelocate(opts[0].x, opts[0].y);
   eq(s.subPhase, null, 'clash concluso');
 })();
@@ -713,6 +719,155 @@ console.log('# Tactician: +1 solo colpendo una figura; sceglie tra 4 oggetti');
   eq(s2.players.N.score - sc2, 2, 'tactician: figura 9 → +2 (nessun bonus +1)');
   eq(s2.subPhase, 'altmatch-object', 'tactician: scelta oggetto');
   eq(s2.pendingAltMatch.drawn.length, 4, 'tactician: sceglie tra 4 oggetti');
+})();
+
+// -------------------------------------------------------------------- Ruleset C
+console.log('# Ruleset C: centro/riga senza punti (scelta oggetto), controllo centro a fine turno, pesca fino a 6');
+(function () {
+  // Centro: nessun punto, matchedCenter, scelta oggetto.
+  var g = Engine.createGame({ rng: makeRng(3), firstPlayer: 'N', ruleset: 'C', modules: { objects: true } });
+  var s = g.state;
+  g.pawnCell('N').pawn = null; g.getCell(3, 2).pawn = 'N';
+  var cc = g.getCell(3, 3).card;
+  s.players.N.hand = [{ id: 'hc', value: cc.value, suit: 'oro' }, { id: 'a', value: 2, suit: 'oro' }, { id: 'b', value: 3, suit: 'oro' }];
+  s.players.N.revealedIds = ['hc', 'a', 'b'];
+  s.phase = 'move'; s.subPhase = null; s.activePlayer = 'N'; s.actionsLeft = 1; s.moveModifier = null;
+  var sc0 = s.players.N.score;
+  g.move('N', 3, 3, 'hc');
+  eq(s.players.N.score - sc0, 0, 'Ruleset C: centro nessun punto');
+  eq(s.players.N.matchedCenter, true, 'Ruleset C: centro conquistato (tiebreak)');
+  eq(s.subPhase, 'altmatch-object', 'Ruleset C: centro apre la scelta oggetto');
+
+  // Riga avversaria: nessun punto, nessuna fine partita, scelta oggetto una tantum.
+  var g2 = Engine.createGame({ rng: makeRng(5), firstPlayer: 'N', ruleset: 'C', modules: { objects: true } });
+  var s2 = g2.state;
+  s2.grid[1][1].pawn = null; s2.grid[1][4].pawn = 'N';
+  s2.grid[1][5].card = { id: 't', value: 5, suit: s2.currentSuit }; s2.grid[1][5].faceDown = false; s2.grid[1][5].destroyed = false;
+  s2.players.N.hand = [{ id: 'nj', value: 5, suit: s2.currentSuit }, { id: 'a', value: 2, suit: 'oro' }, { id: 'b', value: 3, suit: 'oro' }];
+  s2.players.N.revealedIds = ['nj', 'a', 'b'];
+  s2.phase = 'move'; s2.subPhase = null; s2.activePlayer = 'N'; s2.actionsLeft = 1; s2.moveModifier = null;
+  var sc2 = s2.players.N.score;
+  g2.move('N', 1, 5, 'nj');
+  eq(s2.players.N.score - sc2, 0, 'Ruleset C: riga avversaria nessun punto');
+  eq(s2.endTriggered, false, 'Ruleset C: riga avversaria non termina la partita');
+  eq(s2.players.N.targetObjectUsed, true, 'Ruleset C: uso una tantum registrato');
+  eq(s2.subPhase, 'altmatch-object', 'Ruleset C: riga avversaria apre la scelta oggetto');
+  eq(s2.pendingAltMatch.drawn.length, 3, 'Ruleset C: scelta tra 3 oggetti');
+  g2.altMatchPickObject(s2.pendingAltMatch.drawn[0].id);
+  // Seconda volta: già usata, niente oggetto.
+  s2.grid[1][5].pawn = null; s2.grid[1][4].pawn = 'N'; s2.grid[1][5].card = { id: 't2', value: 5, suit: s2.currentSuit }; s2.grid[1][5].faceDown = false;
+  s2.players.N.hand.push({ id: 'nj2', value: 5, suit: s2.currentSuit }); s2.players.N.revealedIds.push('nj2');
+  s2.phase = 'move'; s2.subPhase = null; s2.activePlayer = 'N'; s2.actionsLeft = 1;
+  g2.move('N', 1, 5, 'nj2');
+  ok(s2.subPhase !== 'altmatch-object', 'Ruleset C: seconda volta niente oggetto');
+
+  // Controllo del centro a fine turno: +3 sul centro, +1 adiacente ortogonale.
+  var g3 = Engine.createGame({ rng: makeRng(2), firstPlayer: 'N', ruleset: 'C' });
+  var s3 = g3.state;
+  g3.pawnCell('N').pawn = null; g3.getCell(3, 3).pawn = 'N';       // N sul centro
+  g3.pawnCell('S').pawn = null; g3.getCell(3, 4).pawn = 'S';       // S adiacente
+  var scN = s3.players.N.score, scS = s3.players.S.score;
+  g3._endRound();
+  eq(s3.players.N.score - scN, 3, 'Ruleset C: pedina sul centro a fine turno +3');
+  eq(s3.players.S.score - scS, 1, 'Ruleset C: pedina adiacente al centro a fine turno +1');
+})();
+
+// -------------------------------------------------------------------- Bonus vittoria clash (+5)
+console.log('# Bonus vittoria clash: +5 all\'attaccante e +5 al difensore che vince');
+(function () {
+  // Attaccante vince → +5 all'attaccante (carte del clash prese dalla riserva).
+  var g = Engine.createGame({ rng: makeRng(11), firstPlayer: 'N' });
+  var s = g.state;
+  g.pawnCell('S').pawn = null; g.getCell(2, 1).pawn = 'S'; g.getCell(2, 1).card = { id: 'c21', value: 4, suit: 'coppe' }; g.getCell(2, 1).faceDown = false;
+  s.players.N.hand = [{ id: 'n4', value: 4, suit: 'oro' }, { id: 'nA', value: 5, suit: 'oro' }, { id: 'nB', value: 6, suit: 'oro' }, { id: 'r9', value: 9, suit: 'oro' }, { id: 'r2', value: 2, suit: 'oro' }];
+  s.players.S.hand = [{ id: 'sX', value: 7, suit: 'bastoni' }, { id: 'sY', value: 8, suit: 'bastoni' }, { id: 'sZ', value: 9, suit: 'bastoni' }, { id: 's3', value: 3, suit: 'bastoni' }];
+  s.players.N.revealedIds = ['n4', 'nA', 'nB']; s.players.S.revealedIds = ['sX', 'sY', 'sZ'];
+  s.phase = 'move'; s.subPhase = null; s.activePlayer = 'N'; s.actionsLeft = 1; s.moveModifier = null;
+  var scN0 = s.players.N.score;
+  g.move('N', 2, 1, 'n4');
+  g.clashChoose('N', 'r9'); g.clashChoose('S', 's3'); // 9 > 3 → attaccante vince
+  eq(s.players.N.score - scN0, 5, 'clash: attaccante vincente +5');
+
+  // Difensore vince → +5 al difensore.
+  var g2 = Engine.createGame({ rng: makeRng(11), firstPlayer: 'N' });
+  var s2 = g2.state;
+  g2.pawnCell('S').pawn = null; g2.getCell(2, 1).pawn = 'S'; g2.getCell(2, 1).card = { id: 'd21', value: 4, suit: 'coppe' }; g2.getCell(2, 1).faceDown = false;
+  s2.players.N.hand = [{ id: 'n4', value: 4, suit: 'oro' }, { id: 'nA', value: 5, suit: 'oro' }, { id: 'nB', value: 6, suit: 'oro' }, { id: 'r2', value: 2, suit: 'oro' }];
+  s2.players.S.hand = [{ id: 'sX', value: 7, suit: 'bastoni' }, { id: 'sY', value: 8, suit: 'bastoni' }, { id: 'sZ', value: 6, suit: 'bastoni' }, { id: 's9', value: 9, suit: 'bastoni' }];
+  s2.players.N.revealedIds = ['n4', 'nA', 'nB']; s2.players.S.revealedIds = ['sX', 'sY', 'sZ'];
+  s2.phase = 'move'; s2.subPhase = null; s2.activePlayer = 'N'; s2.actionsLeft = 1; s2.moveModifier = null;
+  var scS0 = s2.players.S.score;
+  g2.move('N', 2, 1, 'n4');
+  g2.clashChoose('N', 'r2'); g2.clashChoose('S', 's9'); // 2 < 9 → difensore vince
+  eq(s2.players.S.score - scS0, 5, 'clash: difensore vincente +5');
+})();
+
+// -------------------------------------------------------------------- Ruleset C 4×4 (celle bonus)
+console.log('# Ruleset C 4×4: griglia 4×4, niente centro, +2 sulle celle bonus a fine turno');
+(function () {
+  var g = Engine.createGame({ rng: makeRng(4), firstPlayer: 'N', ruleset: 'C', gridSize: 4 });
+  var s = g.state;
+  eq(s.gridSize, 4, '4×4: gridSize = 4');
+  ok(!s.grid[5], '4×4: nessuna colonna 5');
+  eq(g.pawnCell('N').x + ',' + g.pawnCell('N').y, '1,1', '4×4: N parte da [1,1]');
+  eq(g.pawnCell('S').x + ',' + g.pawnCell('S').y, '4,4', '4×4: S parte da [4,4]');
+  ok(!Engine.isCenter(3, 3, 4), '4×4: [3,3] non è centro');
+  ok(Engine.isBonusCell(2, 2, 4) && Engine.isBonusCell(3, 3, 4) && Engine.isBonusCell(2, 3, 4) && Engine.isBonusCell(3, 2, 4), '4×4: le 4 celle centrali sono bonus');
+  ok(!Engine.isBonusCell(1, 1, 4) && !Engine.isBonusCell(2, 1, 4), '4×4: le celle esterne non sono bonus');
+
+  // Fine turno: N su cella bonus +2, S fuori dalle bonus nessun bonus.
+  g.pawnCell('N').pawn = null; g.getCell(2, 2).pawn = 'N';
+  g.pawnCell('S').pawn = null; g.getCell(1, 1).pawn = 'S';
+  var scN = s.players.N.score, scS = s.players.S.score;
+  g._endRound();
+  eq(s.players.N.score - scN, 2, '4×4: pedina su cella bonus a fine turno +2');
+  eq(s.players.S.score - scS, 0, '4×4: pedina fuori dalle celle bonus nessun punto');
+})();
+
+// -------------------------------------------------------------------- Pesca fino a 6 + energy drain
+console.log('# Pesca fino a 6 a inizio turno; energy drain solo tra le carte scelte avversarie');
+(function () {
+  var g = Engine.createGame({ rng: makeRng(8), firstPlayer: 'N' });
+  var s = g.state;
+  s.players.N.revealedIds = s.players.N.hand.slice(0, 3).map(function (c) { return c.id; });
+  s.players.S.revealedIds = s.players.S.hand.slice(0, 3).map(function (c) { return c.id; });
+  g._endRound();
+  eq(s.players.N.hand.length, 6, 'pesca fino a 6 a inizio turno (N)');
+  eq(s.players.S.hand.length, 6, 'pesca fino a 6 a inizio turno (S)');
+
+  var g2 = Engine.createGame({ rng: makeRng(11), firstPlayer: 'N', modules: { objects: true } });
+  var s2 = g2.state; s2.phase = 'attack'; s2.activePlayer = 'N'; s2.actionsLeft = 1; s2.attackModifier = null;
+  s2.players.N.objects = [{ id: 'ed', type: 'energy_drain', phase: 'attack', fromCharacter: false }];
+  s2.players.S.revealedIds = []; s2.players.S.revealedCards = [];
+  ok(!g2.usableObjects('N').some(function (o) { return o.id === 'ed'; }), 'energy drain NON usabile se l\'avversario non ha carte scelte');
+  var oppCard = s2.players.S.hand[0];
+  s2.players.S.revealedIds = [oppCard.id]; s2.players.S.revealedCards = [oppCard];
+  ok(g2.usableObjects('N').some(function (o) { return o.id === 'ed'; }), 'energy drain usabile con una carta scelta avversaria');
+  g2.useObject('N', 'ed');
+  ok(s2.players.N.hand.some(function (c) { return c.id === oppCard.id; }), 'energy drain: ruba la carta scelta avversaria');
+  ok(!s2.players.S.hand.some(function (c) { return c.id === oppCard.id; }), 'energy drain: la carta lascia la mano avversaria');
+})();
+
+// -------------------------------------------------------------------- Struttura del turno (1221 vs 1212)
+console.log('# Struttura del turno: ordine di attacco 1-2-2-1 vs 1-2-1-2');
+(function () {
+  // 1221: attacco G2 → G1.
+  var g1 = Engine.createGame({ rng: makeRng(7), firstPlayer: 'N', turnMode: '1221' });
+  toMovePhase(g1); var s1 = g1.state;
+  g1.passMove(s1.activePlayer); g1.passMove(s1.activePlayer);
+  eq(s1.phase, 'attack', '1221: fase di attacco raggiunta');
+  eq(s1.activePlayer, 'S', '1221: attacca per primo G2 (S)');
+  g1.passShoot(s1.activePlayer);
+  eq(s1.activePlayer, 'N', '1221: poi attacca G1 (N)');
+
+  // 1212: attacco G1 → G2.
+  var g2 = Engine.createGame({ rng: makeRng(7), firstPlayer: 'N', turnMode: '1212' });
+  toMovePhase(g2); var s2 = g2.state;
+  g2.passMove(s2.activePlayer); g2.passMove(s2.activePlayer);
+  eq(s2.phase, 'attack', '1212: fase di attacco raggiunta');
+  eq(s2.activePlayer, 'N', '1212: attacca per primo G1 (N)');
+  g2.passShoot(s2.activePlayer);
+  eq(s2.activePlayer, 'S', '1212: poi attacca G2 (S)');
 })();
 
 // --------------------------------------------------------------------

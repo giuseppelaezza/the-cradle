@@ -1,5 +1,5 @@
-/* Regolamento di The Cradle. Espone due versioni: window.CradleRegolamento.A e .B
-   (Ruleset A e Ruleset B). Scritto per essere letto al tavolo da chi gioca. */
+/* Regolamento di The Cradle. Espone tre versioni: window.CradleRegolamento.A/.B/.C
+   (Ruleset A, B e C). Scritto per essere letto al tavolo da chi gioca. */
 (function (root, factory) {
   if (typeof module !== "undefined" && module.exports) module.exports = factory();
   else root.CradleRegolamento = factory();
@@ -7,7 +7,7 @@
   "use strict";
 
   function build(rs) {
-    var A = rs === "A";
+    var A = rs === "A", C = rs === "C", ALT = A || C; // A e C condividono le regole "alternative" su figure/oggetti
     var s = [];
 
     s.push("# The Cradle — Regolamento (" + rs + ")");
@@ -46,7 +46,7 @@
 "5. Piazza le pedine: **Nord** su **[1,1]**, **Sud** su **[5,5]**. La riga di 5 caselle sul lato di ciascun giocatore è la sua **riga di partenza**; la riga di partenza dell'avversario è la tua **riga-bersaglio** (Nord punta a y=5, Sud a y=1).\n" +
 "6. Ogni giocatore sceglie un **personaggio** (§8): riceve il suo **seme personale**, il suo **oggetto di partenza** e il suo **potere** (potete anche scegliere lo stesso personaggio).\n" +
 "7. Prepara il **mazzo Oggetti**: prendi **5 tipi** di oggetto (a caso, oppure concordati) e mettine **2 copie ciascuno** a faccia in giù. Tienilo vicino alla griglia, con accanto lo spazio per gli **scarti Oggetti**.\n";
-    if (A) prep +=
+    if (ALT) prep +=
 "8. **Oggetto extra:** ogni giocatore pesca **1 oggetto** dal mazzo Oggetti, in aggiunta all'oggetto del personaggio.\n" +
 "9. Ogni giocatore pesca **6 carte** dal mazzo.\n" +
 "10. Sorteggia il **Primo Giocatore**. Si parte dal round 1.\n";
@@ -83,20 +83,22 @@
 "I giocatori muovono **a turno**, a partire dal Primo Giocatore.\n\n" +
 "Gioca una carta rivelata che **abbina una casella ortogonalmente adiacente** e sposta lì la pedina. Se nessuna delle carte rivelate abbina una casella adiacente, **non muovi**.\n\n" +
 "**Effetti d'arrivo** (solo per movimento scelto da te, non per gli spostamenti forzati):\n\n";
-    if (A) mov +=
-"- **Casella centrale scoperta:** **+5** (una sola volta in tutta la partita); il centro si **copre**; la carta usata resta **scoperta davanti a te** (trofeo); la pedina ci sale sopra; **inoltre peschi 3 oggetti e ne tieni 1** (gli altri 2 vanno negli scarti Oggetti).\n" +
-"- **Figura scoperta (8/9/10):** **nessun effetto**. In questo regolamento muovere su una figura **non** la elimina, **non** dà punti e **non** dà oggetti: la figura **resta scoperta** e la pedina ci sale sopra.\n" +
-"- **Riga-bersaglio:** **+5** e la partita **termina** (§7).\n" +
-"- **Carta coperta:** nessun punto; la carta usata va agli **scarti**; la pedina ci sale sopra.\n" +
-"- **Carta 1–7 scoperta:** solo spostamento.\n";
-    else mov +=
-"- **Casella centrale scoperta:** **+5** (una sola volta in tutta la partita); il centro si **copre**; la carta usata resta **scoperta davanti a te** (trofeo); la pedina ci sale sopra.\n" +
-"- **Figura scoperta (8/9/10):** **+punti** (10 → 3, 9 → 2, 8 → 1); la figura si **copre**; la carta usata resta **davanti a te** (trofeo); la pedina ci sale sopra; **inoltre peschi 1 oggetto** dal mazzo Oggetti.\n" +
-"- **Riga-bersaglio:** **+5** e la partita **termina** (§7). Se la casella è anche una figura, valgono entrambi gli effetti.\n" +
-"- **Carta coperta:** nessun punto; la carta usata va agli **scarti**; la pedina ci sale sopra.\n" +
-"- **Carta 1–7 scoperta:** solo spostamento.\n";
+    // Centro / figura / riga variano per ruleset.
+    mov += (C
+      ? "- **Casella centrale scoperta:** **nessun punto**; il centro si **copre**; la carta usata resta **davanti a te** (trofeo); **scegli 1 oggetto tra 3** (gli altri 2 negli scarti).\n"
+      : "- **Casella centrale scoperta:** **+5** (una sola volta in tutta la partita); il centro si **copre**; la carta usata resta **davanti a te** (trofeo)" + (A ? "; **scegli 1 oggetto tra 3** (gli altri 2 negli scarti)" : "") + ".\n");
+    mov += (ALT
+      ? "- **Figura scoperta (8/9/10):** **nessun effetto**: non la elimini, non dà punti né oggetti; resta scoperta e ci sali sopra (il Runner può colpirla con la sua passiva).\n"
+      : "- **Figura scoperta (8/9/10):** **+punti** (10 → 3, 9 → 2, 8 → 1); si **copre**; la carta usata resta **davanti a te** (trofeo); **inoltre peschi 1 oggetto**.\n");
+    mov += (C
+      ? "- **Riga avversaria:** **non** termina la partita e **non** dà punti; **una volta a partita** dà la **scelta di 1 oggetto**.\n"
+      : "- **Riga-bersaglio:** **+5** e la partita **termina** (§10).\n");
     mov +=
-"\nI **+5** del centro e della riga-bersaglio si ottengono **solo muovendo di tua scelta**, mai per spostamento forzato.\n\n" +
+"- **Carta coperta:** nessun punto; la carta usata va agli **scarti**; la pedina ci sale sopra.\n" +
+"- **Carta 1–7 scoperta:** solo spostamento.\n";
+    mov += (C
+      ? "\nIn **Ruleset C** il **controllo del centro** si conta a **fine turno** (§5.5); centro e riga avversaria danno i loro effetti solo con **movimento scelto**, mai per spostamento forzato.\n\n"
+      : "\nI **+5** del centro e della riga-bersaglio si ottengono **solo muovendo di tua scelta**, mai per spostamento forzato.\n\n") +
 "**Clash (la casella d'arrivo è occupata dall'altra pedina).** L'attaccante ha già speso 1 carta per muovere: sceglie la carta del clash tra le **2** carte rivelate che gli restano; il difensore la sceglie tra le proprie rivelate disponibili (**3** se non ha ancora mosso, **2** se ha già mosso). Si confrontano: vince il **valore più alto**; a parità di valore vince il **seme più forte** (oro > spade > coppe > bastoni); se anche il seme è pari è **parità piena**. Le carte del clash vanno agli scarti.\n\n" +
 "- **Vince l'attaccante:** avanza sulla casella; il **difensore** viene ricollocato (§5.4).\n" +
 "- **Vince il difensore:** resta dov'è; può, se vuole, ricollocare l'**attaccante** (§5.4).\n" +
@@ -107,7 +109,7 @@
     var att =
 "### 5.3 Attacco (sparo)\n\n" +
 "I giocatori sparano **a turno**, ma qui parte per primo **l'avversario del Primo Giocatore** (iniziativa divisa, §5), poi tocca al Primo Giocatore. Gioca una carta rivelata che **abbina una casella qualsiasi** della griglia.\n\n";
-    if (A) att +=
+    if (ALT) att +=
 "**Attaccare una casella la gira sempre a faccia in giù** (anche se non è una figura). Effetti:\n\n" +
 "- **Pedina avversaria** sulla casella: **+5** (sparare sulla propria pedina non dà nulla).\n" +
 "- **Figura scoperta:** **+punti** (10 → 3, 9 → 2, 8 → 1) e **+1 trofeo** (la carta usata); **inoltre peschi 3 oggetti e ne tieni 1** (gli altri 2 vanno negli scarti Oggetti). La figura si copre.\n" +
@@ -124,11 +126,12 @@
     s.push(
 "### 5.4 Spostamento forzato\n\n" +
 "Alcune situazioni (clash perso, oggetti) costringono a spostare una pedina. Le destinazioni valide sono le caselle **ortogonalmente adiacenti** alla pedina, **escluse** la casella centrale, le caselle occupate e le caselle **distrutte**. Nessun bonus. " +
-"Se la pedina finisce su una figura scoperta, la figura **resta scoperta**. Se finisce sulla **riga-bersaglio**, la partita **termina** (ma senza +5). Se non esiste alcuna destinazione valida, la pedina **resta ferma**.");
+"Se la pedina finisce su una figura scoperta, la figura **resta scoperta**. " + (C ? "In Ruleset C la riga avversaria non ha effetto sul forzato. " : "Se finisce sulla **riga-bersaglio**, la partita **termina** (ma senza +5). ") + "Se non esiste alcuna destinazione valida, la pedina **resta ferma**.");
 
     s.push(
 "### 5.5 Fine del round\n\n" +
-"Ogni giocatore **scarta le carte rivelate non usate** (tiene le 3 non rivelate). Si passa il segnalino **Primo Giocatore** all'avversario. Ciascuno pesca fino a **3 carte** (finché il mazzo ne ha). Il **seme di turno avanza** (§7).");
+(C ? "**Controllo del centro:** a fine turno ogni giocatore guadagna **+1** se la sua pedina è su una casella **adiacente ortogonale** al centro, **+3** se è **sul centro**.\n\n" : "") +
+"Ogni giocatore **scarta le carte rivelate non usate** (tiene le carte non rivelate). Si passa il segnalino **Primo Giocatore** all'avversario. Ciascuno **pesca fino ad avere 6 carte** in mano. Il **seme di turno avanza** (§7).");
 
     s.push(
 "## 6. Trofei\n\n" +
@@ -154,7 +157,7 @@
     var ogg =
 "## 9. Oggetti\n\n" +
 "### 9.1 Come si ottengono\n\n";
-    if (A) ogg +=
+    if (ALT) ogg +=
 "- **Colpendo una figura in attacco** o **conquistando la casella centrale**: peschi **3 oggetti** dal mazzo Oggetti e ne **tieni 1**; gli altri 2 finiscono negli **scarti Oggetti**.\n" +
 "- **A inizio partita** ogni giocatore riceve **1 oggetto** (§4), oltre a quello del personaggio.\n";
     else ogg +=
@@ -162,7 +165,7 @@
     ogg +=
 "\nQuando il **mazzo Oggetti si esaurisce**, rimescola gli **scarti Oggetti** per riformarlo.\n\n" +
 "### 9.2 Limite e uso\n\n" +
-"- Puoi possedere al massimo **" + (A ? "4" : "2") + " oggetti** contemporaneamente (l'oggetto di partenza del personaggio **non** conta). Se superi il limite, devi **scartarne uno** (anche quello appena preso).\n" +
+"- Puoi possedere al massimo **" + (ALT ? "4" : "2") + " oggetti** contemporaneamente (l'oggetto di partenza del personaggio **non** conta). Se superi il limite, devi **scartarne uno** (anche quello appena preso).\n" +
 "- Un oggetto si usa **una sola volta**, **nella fase indicata** e **prima** di eseguire l'azione a cui si riferisce.\n\n" +
 "### 9.3 Elenco degli oggetti\n\n" +
 "| Oggetto | Quando | Effetto |\n" +
@@ -178,12 +181,14 @@
 "| **barrage** | attacco | Rinunci all'attacco. Scegli una casella e **una adiacente ortogonale** (non la centrale, non caselle con pedina): **distruggi entrambe** le caselle. |\n" +
 "| **randomizer** | attacco | Rinunci all'attacco. Scegli fino a **3 caselle** (non la centrale): le loro carte tornano nel mazzo, si mescola e si pescano **altrettante** carte da **ricollocare** in quelle caselle. |\n" +
 "| **energy boost** | movimento o attacco | Peschi **2 carte** e puoi usarle in questa mano; a fine turno queste carte si **scartano** con le altre carte scelte non usate (le carte non scelte restano). |\n" +
-"| **energy drain** | movimento o attacco | **Rubi 1 carta** dalla mano dell'avversario (puoi usarla in questa mano). |";
+"| **energy drain** | movimento o attacco | **Rubi 1 carta** tra le **carte scelte** dell'avversario (puoi usarla in questa mano; se non ne ha, non è utilizzabile). |";
     s.push(ogg);
 
     s.push(
 "## 10. Fine della partita\n\n" +
-"La partita finisce quando **una pedina raggiunge la riga-bersaglio** (per movimento scelto o forzato): si completa il **round in corso**, poi si contano i punti. In ogni caso la partita non supera il **round 9** (dal round 9 non si rimescola: si gioca con le carte rimaste).\n\n" +
+(C
+ ? "La partita dura sempre **9 round**: raggiungere la riga avversaria **non** la termina. Al termine del round 9 si contano i punti.\n\n"
+ : "La partita finisce quando **una pedina raggiunge la riga-bersaglio** (per movimento scelto o forzato): si completa il **round in corso**, poi si contano i punti. In ogni caso la partita non supera il **round 9** (dal round 9 non si rimescola: si gioca con le carte rimaste).\n\n") +
 "Vince chi ha **più punti**. In caso di parità, si applica lo **spareggio** in quest'ordine:\n\n" +
 "1. chi ha **conquistato la casella centrale**;\n" +
 "2. chi ha **più figure** a trofeo;\n" +
@@ -193,9 +198,10 @@
 "## 11. Riepilogo dei punti\n\n" +
 "| Azione | Punti |\n" +
 "|---|---|\n" +
-"| Muovere sulla casella centrale (una sola volta) | 5 |\n" +
-"| Muovere sulla riga-bersaglio | 5 (termina la partita) |\n" +
-"| " + (A ? "Colpire in attacco" : "Abbinare o colpire") + " un 10 · 9 · 8 | 3 · 2 · 1 |\n" +
+(C
+ ? "| Fine turno: pedina adiacente ortogonale al centro | 1 |\n| Fine turno: pedina sul centro | 3 |\n"
+ : "| Muovere sulla casella centrale (una sola volta) | 5 |\n| Muovere sulla riga-bersaglio | 5 (termina la partita) |\n") +
+"| " + (ALT ? "Colpire in attacco" : "Abbinare o colpire") + " un 10 · 9 · 8 | 3 · 2 · 1 |\n" +
 "| Colpire la pedina avversaria | 5 |");
 
     s.push(
@@ -206,5 +212,5 @@
     return s.join("\n\n");
   }
 
-  return { A: build("A"), B: build("B") };
+  return { A: build("A"), B: build("B"), C: build("C") };
 });

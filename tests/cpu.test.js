@@ -71,6 +71,19 @@ suite('Abbinamento alternativo + Personaggi + Oggetti (rotazione)', function (se
   return { rng: makeRng(seed), suitMode: 'rotating', altMatch: true, modules: { characters: true, objects: true, powers: true },
            characters: { N: CHARS[seed % 4], S: CHARS[(seed + 1) % 4] } };
 });
+suite('Ruleset C + Personaggi + Oggetti (rotazione)', function (seed) {
+  return { rng: makeRng(seed), suitMode: 'rotating', ruleset: 'C', modules: { characters: true, objects: true, powers: true },
+           characters: { N: CHARS[seed % 4], S: CHARS[(seed + 1) % 4] } };
+});
+suite('Ruleset C 4×4 (celle bonus) + Personaggi + Oggetti', function (seed) {
+  return { rng: makeRng(seed), suitMode: 'rotating', ruleset: 'C', gridSize: 4, modules: { characters: true, objects: true, powers: true },
+           characters: { N: CHARS[seed % 4], S: CHARS[(seed + 1) % 4] } };
+});
+suite('Ruleset C 4×4 (base)', function (seed) { return { rng: makeRng(seed), ruleset: 'C', gridSize: 4 }; });
+suite('Struttura turno 1-2-1-2 + Personaggi + Oggetti', function (seed) {
+  return { rng: makeRng(seed), suitMode: 'rotating', turnMode: '1212', modules: { characters: true, objects: true, powers: true },
+           characters: { N: CHARS[seed % 4], S: CHARS[(seed + 1) % 4] } };
+});
 
 console.log('\n=== Risultato CPU: ' + passed + ' passati, ' + failed + ' falliti ===');
 process.exit(failed ? 1 : 0);

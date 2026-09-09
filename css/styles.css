@@ -156,7 +156,7 @@ body.setup .app { visibility: hidden; }
 .board-wrap { grid-area: board; display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .side-label { color: var(--muted); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; }
 .grid { display: grid; grid-template-columns: repeat(5, var(--cell)); grid-template-rows: repeat(5, var(--cell)); gap: 6px;
-  background: var(--panel); padding: 8px; border-radius: 12px; border: 1px solid var(--line); position: relative; }
+  background: var(--panel); padding: 8px; border-radius: 12px; border: 1px solid var(--line); position: relative; isolation: isolate; }
 .cell { --cs: var(--cell); position: relative; border-radius: 9px; background: var(--card-bg); border: 2px solid var(--card-line);
   overflow: hidden; user-select: none; }
 .cell .coord { position: absolute; top: 3px; left: 50%; transform: translateX(-50%); font-size: 9px; color: #8a8378; z-index: 4; }
@@ -168,11 +168,35 @@ body.setup .app { visibility: hidden; }
 .cell.facedown .cface { visibility: hidden; }
 .cell.facedown::after { content: ""; position: absolute; inset: 22%; border-radius: 8px; border: 2px solid rgba(255,255,255,.28); }
 .cell.center { outline: 2px solid #fff; outline-offset: -4px; }
+/* Ruleset C: outline che evidenzia centro + celle ortogonali (croce magenta, quadrato giallo).
+   Forme piene dietro le celle: sporgono oltre i bordi e riempiono i gap → effetto contorno. */
+.grid.center-hl-on .cell.center { outline: none; }
+.center-hl { position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  --c: calc(var(--cell) + 6px); --m: 5px; }
+.center-hl .chl { position: absolute; border-radius: 11px; }
+.center-hl .chl-cross-h, .center-hl .chl-cross-v { background: #ec38c8; }
+.center-hl .chl-cross-h {
+  left: calc(8px + var(--c) - var(--m)); top: calc(8px + 2*var(--c) - var(--m));
+  width: calc(3*var(--cell) + 12px + 2*var(--m)); height: calc(var(--cell) + 2*var(--m)); }
+.center-hl .chl-cross-v {
+  left: calc(8px + 2*var(--c) - var(--m)); top: calc(8px + var(--c) - var(--m));
+  width: calc(var(--cell) + 2*var(--m)); height: calc(3*var(--cell) + 12px + 2*var(--m)); }
+.center-hl .chl-square { background: #ffd21f;
+  left: calc(8px + 2*var(--c) - var(--m)); top: calc(8px + 2*var(--c) - var(--m));
+  width: calc(var(--cell) + 2*var(--m)); height: calc(var(--cell) + 2*var(--m)); }
+/* Griglia 4×4: quadrato giallo attorno alle 4 celle bonus centrali (blocco 2×2). */
+.center-hl .chl-bonus { background: #ffd21f;
+  left: calc(8px + var(--c) - var(--m)); top: calc(8px + var(--c) - var(--m));
+  width: calc(2*var(--cell) + 6px + 2*var(--m)); height: calc(2*var(--cell) + 6px + 2*var(--m)); }
 /* Linee "meta": tra 1ª-2ª riga e 4ª-5ª (colori dei giocatori). */
 /* linea alta 2px centrata esattamente nel gap di 6px (top intero, niente translate → niente sub-pixel) */
 .grid::before, .grid::after { content: ""; position: absolute; left: 8px; right: 8px; height: 2px; border-radius: 2px; pointer-events: none; z-index: 3; }
 .grid::before { top: calc(10px + var(--cell)); background: var(--pN); }        /* gap 1ª-2ª riga */
 .grid::after { top: calc(28px + 4 * var(--cell)); background: var(--pS); }      /* gap 4ª-5ª riga */
+/* Variante 4×4: la riga "home" di S è la 4ª → la linea bassa va nel gap 3ª-4ª. */
+.grid.size-4::after { top: calc(22px + 3 * var(--cell)); }
+/* La dimensione della cella 4×4 su desktop è calcolata in JS (fitLayout) per riempire
+   l'altezza della finestra; qui resta solo il fallback per il layout mobile (sotto). */
 /* celle distrutte */
 .cell.destroyed { background: #2a2a2a; border-style: dotted; border-color: #5a3a3a; display: flex; align-items: center; justify-content: center; }
 .cell.destroyed .destroyed-mark { font-size: 30px; color: #8a4a4a; }
@@ -519,4 +543,5 @@ body.setup .overlay { flex-direction: column; gap: 14px; }
 @media (max-width: 940px) {
   .app { grid-template-columns: 1fr; grid-template-areas: "hud" "board" "timeline" "action" "log"; }
   :root { --cell: 60px; --card: 64px; --pile: 64px; }
+  .grid.size-4 { --cell: 76px; } /* 4×4: scala proporzionata al passo ridotto */
 }

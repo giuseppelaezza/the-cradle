@@ -22,7 +22,7 @@
   var PLAYER_COLOR = { N: 'var(--pN)', S: 'var(--pS)' };
   var PLAYER_TEXT = { N: '#1a1a1a', S: '#ffffff' };
   // Preferenze di visualizzazione condivise (persistono tra partite nella stessa sessione).
-  var VIEW = { showMatches: true, showLabels: false, cardDouble: false, showConditions: true, showActions: false };
+  var VIEW = { showMatches: true, showLabels: false, cardDouble: false, showConditions: true, showActions: false, centerHighlight: true };
   // Colori RGB dei giocatori per l'overlay "Mostra azioni" (scuriti in base all'età dell'azione).
   var PLAYER_RGB = { N: [185, 138, 94], S: [160, 108, 213] };
 
@@ -249,7 +249,7 @@
       var opts = h('button', 'ghost', '⚙️ Opzioni');
       opts.onclick = openOptionsDialog;
       top.appendChild(opts);
-      var rsLetter = s.altMatch ? 'A' : 'B';
+      var rsLetter = s.ruleset || (s.altMatch ? 'A' : 'B');
       var rules = h('button', 'ghost', '📖 Regolamento (' + rsLetter + ')');
       rules.onclick = function () { openRulesDialog(rsLetter); };
       top.appendChild(rules);
@@ -426,6 +426,12 @@
       dom.sideTop.textContent = VIEW.showLabels ? 'Nord' : '';
       dom.sideBottom.textContent = VIEW.showLabels ? 'Sud' : '';
       dom.board.innerHTML = '';
+      var N = s.gridSize || 5;
+      // Ruleset C: outline che evidenzia il centro (5×5) o le celle bonus (4×4). Opzione attivabile.
+      var centerHL = s.ruleset === 'C' && VIEW.centerHighlight;
+      dom.board.className = 'grid size-' + N + (s.ruleset === 'C' ? ' ruleset-c' : '') + (centerHL ? ' center-hl-on' : '');
+      dom.board.style.gridTemplateColumns = 'repeat(' + N + ', var(--cell))';
+      dom.board.style.gridTemplateRows = 'repeat(' + N + ', var(--cell))';
       var selectable = currentSelectableCells(s);
       var relocKeys = {}, pick = {}, chosenKeys = {}, dropKeys = {};
       if (s.subPhase === 'clash-reloc' || s.subPhase === 'forced-reloc') game.relocationOptions().forEach(function (o) { relocKeys[o.key] = true; });
@@ -439,14 +445,17 @@
       // Tooltip condizioni sulle celle: solo durante il turno umano di movimento/attacco.
       var cellTipOn = !s.gameOver && !ui.gate && !s.subPhase && (s.phase === 'move' || s.phase === 'attack') && !isCpu(s.activePlayer);
 
-      for (var y = 1; y <= 5; y++) for (var x = 1; x <= 5; x++) {
+      for (var y = 1; y <= N; y++) for (var x = 1; x <= N; x++) {
         var cell = game.getCell(x, y), key = x + ',' + y;
         var placedCard = null;
         if (rz && rz.placed[key]) { for (var pi = 0; pi < rz.drawn.length; pi++) if (rz.drawn[pi].id === rz.placed[key]) placedCard = rz.drawn[pi]; }
         var shownCard = placedCard || cell.card;
         var isPending = !cell.destroyed && !shownCard;                       // cella svuotata (randomizer)
         var isFig = shownCard && isFigureVal(shownCard.value);
-        var invert = !!shownCard && !(cell.faceDown && !placedCard) && (isCenter(x, y) || isFig);
+        // In ruleset C la carta centrale resta a fondo bianco (non invertita): il centro
+        // è messo in risalto dagli outline, non dal fondo colorato. Le figure restano invertite.
+        var centerInvert = isCenter(x, y) && s.ruleset !== 'C';
+        var invert = !!shownCard && !(cell.faceDown && !placedCard) && (centerInvert || isFig);
         var cls = 'cell';
         if (cell.destroyed) cls += ' destroyed';
         else if (isPending) cls += ' pending';
@@ -456,8 +465,9 @@
           if (invert) cls += ' inverted suit-bg-' + shownCard.suit;
         }
         if (isCenter(x, y)) cls += ' center';
+        if (isBonusCell(x, y)) cls += ' bonus-cell';
         if (y === 1) cls += ' target-n';
-        if (y === 5) cls += ' target-s';
+        if (y === N) cls += ' target-s';
         if (selectable[key] || pick[key]) cls += ' selectable';
         if (relocKeys[key]) cls += ' reloc';
         if (chosenKeys[key]) cls += ' chosen-cell';
@@ -482,6 +492,20 @@
         if (cellTipOn && !cell.destroyed && cell.card) attachCellConditionTip(c, s.activePlayer, cell);
         (function (xx, yy) { c.onclick = function () { onCellClick(xx, yy); }; })(x, y);
         dom.board.appendChild(c);
+      }
+      // Overlay (dietro le celle): forme piene che sporgono come outline.
+      // 5×5: croce magenta (centro + ortogonali) + quadrato giallo (centro).
+      // 4×4: quadrato giallo attorno alle 4 celle bonus centrali.
+      if (centerHL) {
+        var hl = h('div', 'center-hl');
+        if (N === 4) {
+          hl.appendChild(h('span', 'chl chl-bonus'));
+        } else {
+          hl.appendChild(h('span', 'chl chl-cross-h'));
+          hl.appendChild(h('span', 'chl chl-cross-v'));
+          hl.appendChild(h('span', 'chl chl-square'));
+        }
+        dom.board.appendChild(hl);
       }
     }
 
@@ -650,6 +674,14 @@
       gBoard.appendChild(optCheck('Mostra etichette',
         'Mostra le etichette Nord/Sud e le coordinate delle caselle.',
         VIEW.showLabels, function (v) { VIEW.showLabels = v; }));
+      // Solo per il Ruleset C: outline che evidenzia il centro / le celle bonus.
+      if (game.state && game.state.ruleset === 'C') {
+        var hlDesc = game.state.gridSize === 4
+          ? 'Disegna un outline giallo attorno alle 4 celle bonus centrali.'
+          : 'Disegna un outline attorno alla cella centrale (giallo) e alle sue quattro celle ortogonali (magenta).';
+        gBoard.appendChild(optCheck('Evidenzia il centro (Ruleset C)', hlDesc,
+          VIEW.centerHighlight, function (v) { VIEW.centerHighlight = v; }));
+      }
       content.appendChild(gBoard);
 
       box.appendChild(content);
@@ -661,20 +693,41 @@
     }
 
     // ---- Timeline del turno (persistente per animare le transizioni) ----
-    // Iniziativa divisa: movimento G1→G2, attacco G2→G1 (attack1 = G2 che attacca per primo).
-    var TL_ORDER = ['select', 'move1', 'move2', 'attack1', 'attack2', 'end'];
-    var TL_LABEL = { select: 'Scelta carte', move1: 'Movimento G1', move2: 'Movimento G2', attack1: 'Attacco G2', attack2: 'Attacco G1', end: 'Fine turno' };
+    // Il movimento va sempre G1→G2. L'attacco dipende dalla struttura del turno:
+    //   '1221' (default) → attacco G2→G1 (iniziativa divisa)
+    //   '1212'           → attacco G1→G2 (stesso ordine del movimento)
+    // atk1 = primo attaccante, atk2 = secondo attaccante.
+    var TL_ORDER = ['select', 'move1', 'move2', 'atk1', 'atk2', 'end'];
+    // Il primo attaccante è G2 in '1221', G1 in '1212'.
+    function attackFirstIsG1(s) { return s.turnMode === '1212'; }
+    function tlLabel(key, s) {
+      switch (key) {
+        case 'select': return 'Scelta carte';
+        case 'move1': return 'Movimento G1';
+        case 'move2': return 'Movimento G2';
+        case 'atk1': return attackFirstIsG1(s) ? 'Attacco G1' : 'Attacco G2';
+        case 'atk2': return attackFirstIsG1(s) ? 'Attacco G2' : 'Attacco G1';
+        case 'end': return 'Fine turno';
+      }
+      return '';
+    }
     function tlColorFor(key, s) {
       var other = s.firstPlayer === 'N' ? 'S' : 'N';
-      if (key === 'move1' || key === 'attack2') return PLAYER_COLOR[s.firstPlayer]; // G1
-      if (key === 'move2' || key === 'attack1') return PLAYER_COLOR[other];         // G2
+      var g1First = attackFirstIsG1(s);
+      // atk1 è G1 solo in '1212'; atk2 è G1 solo in '1221'.
+      if (key === 'move1' || (key === 'atk1' && g1First) || (key === 'atk2' && !g1First)) return PLAYER_COLOR[s.firstPlayer]; // G1
+      if (key === 'move2' || (key === 'atk1' && !g1First) || (key === 'atk2' && g1First)) return PLAYER_COLOR[other];         // G2
       return '#ffffff'; // select / end
     }
     function getTimelinePhase(s) {
       if (s.gameOver || s.phase === 'end') return 'end';
       if (s.phase === 'select') return 'select';
       if (s.phase === 'move') return s.activePlayer === s.firstPlayer ? 'move1' : 'move2';
-      if (s.phase === 'attack') return s.activePlayer === s.firstPlayer ? 'attack2' : 'attack1';
+      if (s.phase === 'attack') {
+        // Il primo attaccante (atk1) è G1 in '1212', G2 in '1221'.
+        var activeIsG1 = s.activePlayer === s.firstPlayer;
+        return (activeIsG1 === attackFirstIsG1(s)) ? 'atk1' : 'atk2';
+      }
       return 'select';
     }
     function renderTimeline(s) {
@@ -683,7 +736,7 @@
         ui.tlSegs = {};
         TL_ORDER.forEach(function (key, i) {
           if (i) dom.timeline.appendChild(h('span', 'tl-arrow', '›'));
-          var seg = h('span', 'tl-seg', TL_LABEL[key]);
+          var seg = h('span', 'tl-seg', tlLabel(key, s));
           ui.tlSegs[key] = seg; dom.timeline.appendChild(seg);
         });
       }
@@ -1089,7 +1142,7 @@
         card.onclick = function () { game.clashChoose(chooser, c.id); ui.clashChooser = null; render(); };
         body.appendChild(card);
       });
-      setAction('Clash — Giocatore ' + chooser + ' sceglie la carta (segreta)', body, null);
+      setAction('Clash — Giocatore ' + chooser + ' sceglie la carta dalla riserva (segreta)', body, null);
     }
 
     // ---- Griglia click ----
@@ -1142,9 +1195,9 @@
       var cells = [];
       if (s.phase === 'move' && s.activePlayer === playerId && ENG) {
         var pc = game.pawnCell(playerId);
-        if (pc) ENG.moveDestinations(pc.x, pc.y, s.moveModifier).forEach(function (d) { cells.push(d); });
+        if (pc) ENG.moveDestinations(pc.x, pc.y, s.moveModifier, s.gridSize).forEach(function (d) { cells.push(d); });
       } else {
-        for (var x = 1; x <= 5; x++) for (var y = 1; y <= 5; y++) cells.push([x, y]);
+        for (var x = 1; x <= s.gridSize; x++) for (var y = 1; y <= s.gridSize; y++) cells.push([x, y]);
       }
       cells.forEach(function (d) {
         if (game._matches(playerId, card, game.getCell(d[0], d[1]))) { var e = cellEl(d[0], d[1]); if (e) e.classList.add('match-hint'); }
@@ -1242,8 +1295,8 @@
         if (prev && cur && (prev.x !== cur.x || prev.y !== cur.y)) flyPawn(prev, cur, id);
         if (!ui.lastPawns) ui.lastPawns = {}; ui.lastPawns[id] = cur;
       });
-      var nowFD = {};
-      for (var x = 1; x <= 5; x++) for (var y = 1; y <= 5; y++) if (game.getCell(x, y).faceDown) nowFD[x + ',' + y] = 1;
+      var nowFD = {}, gN = game.state.gridSize;
+      for (var x = 1; x <= gN; x++) for (var y = 1; y <= gN; y++) if (game.getCell(x, y).faceDown) nowFD[x + ',' + y] = 1;
       if (ui.lastFaceDown) Object.keys(nowFD).forEach(function (k) { if (!ui.lastFaceDown[k]) flipCell(k); });
       ui.lastFaceDown = nowFD;
       if (ui.pendingShot) { flyShot(ui.pendingShot.from, ui.pendingShot.to); ui.pendingShot = null; }
@@ -1255,6 +1308,9 @@
     function fitLayout() {
       var root = document.documentElement;
       if (window.innerWidth < 940) { root.style.removeProperty('--cell'); return; } // layout mobile: gestito dal CSS
+      // La griglia è N×N (5 di default, 4 nella variante del Ruleset C): scala la cella
+      // in base al numero di righe/colonne così che il campo riempia l'altezza in ogni caso.
+      var N = (game.state && game.state.gridSize) || 5;
       var appPad = 8, gap = 8, rowGap = 12, gridPad = 8, gridGap = 6;
       var boardWrap = document.querySelector('.board-wrap');
       if (!boardWrap) return;
@@ -1265,13 +1321,15 @@
         - dom.timeline.getBoundingClientRect().height
         - dom.action.getBoundingClientRect().height
         - gap * 3 - sideExtra - 2; // 2px di margine di sicurezza (arrotondamenti)
-      var cellByH = Math.floor((availH - gridPad * 2 - gridGap * 4) / 5);
+      var cellByH = Math.floor((availH - gridPad * 2 - gridGap * (N - 1)) / N);
       // Vincolo di larghezza: la griglia deve stare nella colonna insieme alle pile ai lati.
       var colW = boardWrap.getBoundingClientRect().width;
       var pilesW = dom.piles ? dom.piles.getBoundingClientRect().width : 0;
       var objW = dom.objectPiles ? dom.objectPiles.getBoundingClientRect().width : 0;
-      var cellByW = Math.floor((colW - pilesW - objW - rowGap * 2 - gridPad * 2 - gridGap * 4) / 5);
-      var cell = Math.max(52, Math.min(150, Math.min(cellByH, cellByW)));
+      var cellByW = Math.floor((colW - pilesW - objW - rowGap * 2 - gridPad * 2 - gridGap * (N - 1)) / N);
+      // Con meno righe la cella può crescere di più senza uscire dalla finestra.
+      var maxCell = N === 4 ? 220 : 150;
+      var cell = Math.max(52, Math.min(maxCell, Math.min(cellByH, cellByW)));
       root.style.setProperty('--cell', cell + 'px');
     }
 
@@ -1366,7 +1424,8 @@
     }
     function showOverlay() { dom.overlay.hidden = false; }
     function hideOverlay() { dom.overlay.hidden = true; }
-    function isCenter(x, y) { return x === 3 && y === 3; }
+    function isCenter(x, y) { return game.state.gridSize === 5 && x === 3 && y === 3; }
+    function isBonusCell(x, y) { return game.state.gridSize === 4 && x >= 2 && x <= 3 && y >= 2 && y <= 3; }
 
     // ============================================================ UNDO / ripristino
     function resetUiTransient() {

@@ -15,14 +15,15 @@
 
   // Stato della configurazione. I poteri seguono automaticamente il modulo Personaggi.
   var cfg = { opponent: 'cpu', suitMode: 'rotating', characters: true, objects: true, reshuffle: true, reshuffleCount: 2,
-              ruleset: 'A', altMatch: true, objectMode: 'random', objectSelection: [], charN: 'runner', charS: 'brawler' };
+              ruleset: 'C', gridSize: 5, turnMode: '1221', objectMode: 'random', objectSelection: [], charN: 'runner', charS: 'brawler' };
 
   // Icona del seme (SVG inline, colorata dal CSS come in partita).
   function suitIconEl(suit) { var w = h('span', 'suit-ic s-' + suit); if (Suits) w.innerHTML = Suits.svg(suit); return w; }
-  // Descrizioni sintetiche dei due ruleset (usate nei tooltip e nella nota).
+  // Descrizioni sintetiche dei ruleset (usate nei tooltip e nella nota).
   var RULESET_DESC = {
-    A: 'Muovere su una figura non ha effetto. In attacco, colpire una figura la gira a faccia in giù, dà i suoi punti e un trofeo e fa pescare 3 oggetti tra cui ne tieni 1; anche conquistare il centro fa scegliere un oggetto. Ogni giocatore inizia con un oggetto extra.',
-    B: 'Abbinare una figura (muovendovi sopra o colpendola in attacco) la elimina, dà i suoi punti e un trofeo e fa pescare 1 oggetto.'
+    A: 'Muovere su una figura non ha effetto. In attacco, colpire una figura la gira a faccia in giù, dà i suoi punti e un trofeo e fa pescare 3 oggetti tra cui ne tieni 1; anche conquistare il centro dà punti e fa scegliere un oggetto. Ogni giocatore inizia con un oggetto extra. Si vince raggiungendo la riga avversaria o ai punti.',
+    B: 'Abbinare una figura (muovendovi sopra o colpendola in attacco) la elimina, dà i suoi punti e un trofeo e fa pescare 1 oggetto.',
+    C: 'Come il Ruleset A per le figure, ma il gioco ruota sul controllo del centro: a fine turno +1 se sei adiacente al centro, +3 se sei sul centro. Raggiungere la riga avversaria non termina la partita e non dà punti: dà una scelta oggetto (una volta a partita). Conquistare il centro non dà punti ma fa scegliere un oggetto. Vince chi ha più punti al round 9.'
   };
 
   function h(tag, cls, txt) { var e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; }
@@ -43,17 +44,29 @@
     opp.appendChild(radio('opp', 'CPU vs CPU', cfg.opponent === 'cpucpu', function () { cfg.opponent = 'cpucpu'; renderConfig(); }, 'Due CPU giocano tra loro: modalità dimostrativa.'));
     sheet.appendChild(opp);
 
-    // Ruleset (sistema di regole di abbinamento)
+    // Ruleset (sistema di regole di abbinamento) + dimensione griglia (solo Ruleset C)
     sheet.appendChild(fieldLabel('Ruleset'));
+    var rsRow = h('div', 'cfg-row');
     var rs = h('select', 'cfg-select');
     rs.title = 'Insieme di regole di abbinamento usato in partita.';
-    [['A', 'Ruleset A'], ['B', 'Ruleset B']].forEach(function (o) {
+    [['C', 'Ruleset C'], ['A', 'Ruleset A'], ['B', 'Ruleset B']].forEach(function (o) {
       var op = h('option', null, o[1]); op.value = o[0]; op.title = RULESET_DESC[o[0]];
       if (cfg.ruleset === o[0]) op.selected = true; rs.appendChild(op);
     });
-    rs.onchange = function () { cfg.ruleset = rs.value; cfg.altMatch = (cfg.ruleset === 'A'); renderConfig(); };
-    sheet.appendChild(rs);
-    sheet.appendChild(h('p', 'cfg-desc', RULESET_DESC[cfg.ruleset]));
+    rs.onchange = function () { cfg.ruleset = rs.value; renderConfig(); };
+    rsRow.appendChild(rs);
+    // La griglia alternativa 4×4 (celle bonus) è disponibile solo per il Ruleset C.
+    if (cfg.ruleset === 'C') {
+      var gs = h('select', 'cfg-select');
+      gs.title = 'Dimensione della griglia (solo Ruleset C). 4×4: +2 sulle 4 celle centrali a fine turno, niente centro.';
+      [[5, 'Griglia 5×5'], [4, 'Griglia 4×4']].forEach(function (o) {
+        var op = h('option', null, o[1]); op.value = o[0]; if (cfg.gridSize === o[0]) op.selected = true; gs.appendChild(op);
+      });
+      gs.onchange = function () { cfg.gridSize = parseInt(gs.value, 10); renderConfig(); };
+      rsRow.appendChild(gs);
+    }
+    sheet.appendChild(rsRow);
+    sheet.appendChild(h('p', 'cfg-desc', RULESET_DESC[cfg.ruleset] + (cfg.ruleset === 'C' && cfg.gridSize === 4 ? ' — Variante 4×4: le 4 celle centrali ([2,2],[2,3],[3,2],[3,3]) danno +2 a fine turno se le occupi; non c\'è cella centrale. N parte da [1,1], S da [4,4].' : '')));
 
     // Oggetti: dropdown (mazzo casuale o selezione manuale)
     sheet.appendChild(fieldLabel('Oggetti'));
@@ -88,7 +101,18 @@
       rc.onchange = function () { cfg.reshuffleCount = parseInt(rc.value, 10); };
       addl.appendChild(rc);
     }
+    // Struttura del turno: ordine delle fasi di movimento e attacco.
+    var ts = h('select', 'cfg-select');
+    ts.title = 'Ordine delle fasi di movimento e attacco nel turno.';
+    [['1221', 'Turno 1-2-2-1'], ['1212', 'Turno 1-2-1-2']].forEach(function (o) {
+      var op = h('option', null, o[1]); op.value = o[0]; if (cfg.turnMode === o[0]) op.selected = true; ts.appendChild(op);
+    });
+    ts.onchange = function () { cfg.turnMode = ts.value; renderConfig(); };
+    addl.appendChild(ts);
     sheet.appendChild(addl);
+    sheet.appendChild(h('p', 'cfg-desc', cfg.turnMode === '1212'
+      ? 'Struttura del turno: Scelta carte → Movimento G1 → Movimento G2 → Attacco G1 → Attacco G2 → Fine round.'
+      : 'Struttura del turno: Scelta carte → Movimento G1 → Movimento G2 → Attacco G2 → Attacco G1 → Fine round.'));
 
     // Scelta personaggi (solo se modulo attivo) — via menu a tendina, con descrizione sotto.
     if (cfg.characters) {
@@ -267,7 +291,9 @@
       suitMode: cfg.suitMode,
       modules: { characters: cfg.characters, objects: cfg.objects, powers: cfg.characters, reshuffle: cfg.reshuffle },
       reshuffleCount: cfg.reshuffleCount,
-      altMatch: cfg.altMatch,
+      ruleset: cfg.ruleset,
+      gridSize: cfg.ruleset === 'C' ? cfg.gridSize : 5,
+      turnMode: cfg.turnMode,
       objectSelection: useSelection ? cfg.objectSelection.slice() : null,
       characters: { N: cfg.charN, S: cfg.charS }
     };
