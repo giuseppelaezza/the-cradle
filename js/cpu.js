@@ -229,18 +229,15 @@
     var homing = ownObj(game, id, 'homing_missile'); if (homing && bs.value >= 3) return { id: homing.id, type: 'homing_missile' };
     var hook = ownObj(game, id, 'hook'); if (hook && bs.onPawn) return { id: hook.id, type: 'hook' };
     if (bs.value === 0) { // passeremmo comunque: usa un oggetto "gratis" (con guardie anti-vicolo cieco)
-      var barrage = ownObj(game, id, 'barrage'); if (barrage && barragePairExists(game)) return { id: barrage.id, type: 'barrage' };
+      var barrage = ownObj(game, id, 'barrage'); if (barrage && barrageUsable(game)) return { id: barrage.id, type: 'barrage' };
       var rand = ownObj(game, id, 'randomizer'); if (rand && randomizableCount(game) >= 1) return { id: rand.id, type: 'randomizer' };
       var elem = ownObj(game, id, 'elemental_bomb'); if (elem && elementalCount(game) >= 1) return { id: elem.id, type: 'elemental_bomb' };
     }
     return null;
   }
-  // C'è almeno una coppia (cella, cella-adiacente-valida) per il barrage?
-  function validSecond(game, x, y) {
-    return Engine.orthogonalNeighbors(x, y, _SZ).some(function (d) { var c = game.getCell(d[0], d[1]); return !isCenterC(d[0], d[1]) && !c.pawn && !c.destroyed; });
-  }
-  function barragePairExists(game) {
-    for (var x = 1; x <= _SZ; x++) for (var y = 1; y <= _SZ; y++) if (!game.getCell(x, y).destroyed && validSecond(game, x, y)) return true;
+  // Barrage colpisce una singola cella senza pedina: esiste almeno un bersaglio valido?
+  function barrageUsable(game) {
+    for (var x = 1; x <= _SZ; x++) for (var y = 1; y <= _SZ; y++) { var c = game.getCell(x, y); if (!c.destroyed && !c.pawn) return true; }
     return false;
   }
   function randomizableCount(game) { var n = 0; for (var x = 1; x <= _SZ; x++) for (var y = 1; y <= _SZ; y++) { var c = game.getCell(x, y); if (!isCenterC(x, y) && !c.destroyed && c.card) n++; } return n; }
@@ -290,14 +287,11 @@
   }
   function cpuElementalSuit(game, id) { return game.state.players[id].belongingSuit || game.state.currentSuit; }
   function cpuBarrageFirst(game, id) {
-    // Solo prime celle con almeno una seconda cella valida.
-    var opts = game.barrageFirstOptions().filter(function (o) { return validSecond(game, o.x, o.y); });
-    var opp = game.pawnCell(other(id));
-    if (opp && !opp.destroyed) { var oo = opts.filter(function (o) { return o.x === opp.x && o.y === opp.y; })[0]; if (oo) return oo; }
+    // Barrage colpisce una singola cella (no pedina): preferisci una figura scoperta, altrimenti la prima valida.
+    var opts = game.barrageFirstOptions();
     var fig = opts.filter(function (o) { var c = game.getCell(o.x, o.y); return c.card && !c.faceDown && Deck.isFigure(c.card); })[0];
     return fig || opts[0];
   }
-  function cpuBarrageSecond(game, id) { return game.barrageSecondOptions()[0] || null; }
   function cpuRandomizerCells(game, id) {
     var opts = game.randomizerSelectOptions();
     var dead = opts.filter(function (o) { var c = game.getCell(o.x, o.y); return !c.pawn && c.card && !Deck.isFigure(c.card); });
@@ -319,8 +313,7 @@
     if (s.subPhase === 'timebomb-suit') { if (s.pendingTimebomb.playerId === id) game.timebombChoose(cpuTimebombSuit(game, id)); return {}; }
     if (s.subPhase === 'elemental-target') { if (s.pendingElemental.playerId === id) { var t = cpuElementalTarget(game, id); game.elementalTarget(t.x, t.y); } return {}; }
     if (s.subPhase === 'elemental-suit') { if (s.pendingElemental.playerId === id) game.elementalSuit(cpuElementalSuit(game, id)); return {}; }
-    if (s.subPhase === 'barrage-first') { if (s.pendingBarrage.playerId === id) { var f = cpuBarrageFirst(game, id); game.barrageFirst(f.x, f.y); } return {}; }
-    if (s.subPhase === 'barrage-second') { if (s.pendingBarrage.playerId === id) { var sec = cpuBarrageSecond(game, id); if (sec) game.barrageSecond(sec.x, sec.y); } return {}; }
+    if (s.subPhase === 'barrage-first') { if (s.pendingBarrage.playerId === id) { var f = cpuBarrageFirst(game, id); if (f) game.barrageFirst(f.x, f.y); } return {}; }
     if (s.subPhase === 'tool-discard') { if (s.pendingToolDiscard.playerId === id) { var lo = minValueCard(game.toolDiscardOptions()); if (lo) game.toolDiscardChoose(lo.id); } return {}; }
     if (s.subPhase === 'runner-figure') { if (s.pendingRunner.playerId === id) { var rlo = minValueCard(game.runnerFigureOptions()); if (rlo) game.runnerFigureHit(rlo.id); else game.runnerFigureSkip(); } return {}; }
     if (s.subPhase === 'randomizer-select') { if (s.pendingRandomizer.playerId === id) { cpuRandomizerCells(game, id).forEach(function (c) { game.randomizerToggle(c.x, c.y); }); game.randomizerConfirm(); } return {}; }
@@ -378,6 +371,6 @@
     chooseSelectObject: chooseSelectObject, chooseMoveObject: chooseMoveObject, chooseAttackObject: chooseAttackObject,
     choosePower: choosePower, cpuAct: cpuAct,
     cpuTimebombSuit: cpuTimebombSuit, cpuElementalTarget: cpuElementalTarget, cpuElementalSuit: cpuElementalSuit,
-    cpuBarrageFirst: cpuBarrageFirst, cpuBarrageSecond: cpuBarrageSecond, cpuRandomizerCells: cpuRandomizerCells
+    cpuBarrageFirst: cpuBarrageFirst, cpuRandomizerCells: cpuRandomizerCells
   };
 });

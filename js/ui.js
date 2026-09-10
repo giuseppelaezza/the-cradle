@@ -194,11 +194,21 @@
     // ============================================================ RENDER
     // La griglia viene ridimensionata SOLO al primo render e ai resize della finestra (mai tra le fasi).
     function render() {
+      detectClash();
       renderBody();
       lockActionHeight();
       // La griglia si adatta solo al primo layout utile (e ai resize): non cambia tra le fasi.
       if (ui.needFit) { fitLayout(); if (ui.actionH) ui.needFit = false; }
+      renderClashModal();
       postRenderAnimations(); renderActionsOverlay(); scheduleCpu();
+    }
+    // Quando un clash si risolve (nuovo token), mostra la finestra di confronto (tranne in CPU vs CPU,
+    // dove bloccherebbe la dimostrazione; il log riporta comunque il risultato).
+    function detectClash() {
+      var r = game._clashResult;
+      if (!r || r.token === ui.shownClashToken) return;
+      ui.shownClashToken = r.token;
+      if (ui.mode !== 'cpucpu') ui.clashModal = r;
     }
     // Blocca l'altezza del pannello azione a quella della fase di SCELTA CARTE (umano),
     // così non cambia tra le fasi. Rimisura il riferimento quando la mano è mostrata in scelta carte.
@@ -230,7 +240,7 @@
     function renderHud(s) {
       dom.hud.innerHTML = '';
       var top = h('div', 'hud-top');
-      top.appendChild(pill('Round', s.round + '/9'));
+      top.appendChild(pill('Round', s.round + '/' + (s.maxRounds || 9)));
       top.appendChild(pill('Turno', s.gameOver ? '—' : s.activePlayer));
       // Seme di turno: etichetta colorata + icona del seme.
       var sp = h('span', 'pill'); sp.appendChild(document.createTextNode('Seme di turno: '));
@@ -321,7 +331,11 @@
       top.appendChild(ident);
 
       var stats = h('div', 'pc-stats');
-      var st1 = h('div', 'pc-stat'); st1.appendChild(h('span', 'pc-num', String(p.score))); st1.appendChild(h('span', 'pc-unit', ' punti'));
+      var st1 = h('div', 'pc-stat'); st1.appendChild(h('span', 'pc-num', String(p.score)));
+      // Ruleset C: anteprima (accanto al numero) dei punti che la posizione della pedina darà a fine turno.
+      var pend = pendingPositionBonus(s, id);
+      if (pend > 0) { var pb = h('span', 'pc-pending', ' (+' + pend + ')'); pb.title = 'Punti a fine turno per la posizione della pedina'; st1.appendChild(pb); }
+      st1.appendChild(h('span', 'pc-unit', ' punti'));
       var st2 = h('div', 'pc-stat'); st2.appendChild(h('span', 'pc-num', String(p.trophies.length))); st2.appendChild(h('span', 'pc-unit', ' trofei'));
       st2.title = 'Figure ' + p.figuresMatched + (p.matchedCenter ? ' · ★ Centro' : '');
       stats.appendChild(st1); stats.appendChild(st2);
@@ -412,6 +426,7 @@
 
     // Celle "bersaglio" evidenziabili per i flussi oggetto e per il brawler.
     function pickCells(s) {
+      if (s.subPhase === 'teleport-select') return game.teleportTargets();
       if (s.subPhase === 'elemental-target') return game.elementalTargetOptions();
       if (s.subPhase === 'barrage-first') return game.barrageFirstOptions();
       if (s.subPhase === 'barrage-second') return game.barrageSecondOptions();
@@ -481,6 +496,10 @@
           if (!faceDownNow) c.appendChild(cardFace(shownCard, invert));
         }
         if (VIEW.showLabels) c.appendChild(h('div', 'coord', '[' + x + ',' + y + ']'));
+        // Ruleset C: quadratino nero (angolo in basso a destra) sulle celle bonus non ancora riscosse.
+        if (s.ruleset === 'C' && !cell.destroyed && cell.card && isPositionBonusCell(x, y) && !cell.bonusTaken) {
+          var bm = h('div', 'bonus-mark'); bm.title = 'Cella bonus: scelta oggetto non ancora riscossa'; c.appendChild(bm);
+        }
         if (cell.pawn) {
           c.appendChild(h('div', 'cell-ring ' + cell.pawn)); // outline colorato della cella con pedina
           c.appendChild(h('div', 'pawn ' + cell.pawn, cell.pawn));
@@ -770,10 +789,10 @@
       if (s.subPhase === 'clash-reloc') return renderReloc(s, s.pendingClash.relocatorId, s.pendingClash.relocateePawn, s.pendingClash.relocateOptional, true);
       if (s.subPhase === 'forced-reloc') return renderReloc(s, s.pendingForced.chooserId, s.pendingForced.pawnId, s.pendingForced.optional, false);
       // Oggetti avanzati (attacco)
+      if (s.subPhase === 'teleport-select') return renderPickInfo('🌀 Teleport', 'Clicca una carta scoperta con lo stesso valore della carta su cui ti trovi (no pedina avversaria).');
       if (s.subPhase === 'elemental-target') return renderPickInfo('💥 Elemental Bomb', 'Clicca la cella bersaglio: cambieranno il suo seme e quello delle celle ortogonali.');
       if (s.subPhase === 'elemental-suit') return renderSuitChoice('💥 Elemental Bomb — scegli il seme', function (su) { game.elementalSuit(su); render(); });
-      if (s.subPhase === 'barrage-first') return renderPickInfo('🧨 Barrage', 'Clicca la prima cella da distruggere (1/2).');
-      if (s.subPhase === 'barrage-second') return renderPickInfo('🧨 Barrage', 'Clicca una cella adiacente (no centro, no pedina) da distruggere (2/2).');
+      if (s.subPhase === 'barrage-first') return renderPickInfo('🧨 Barrage', 'Clicca la cella da distruggere (una sola, senza pedina).');
       if (s.subPhase === 'randomizer-select') return renderRandomizerSelect(s);
       if (s.subPhase === 'randomizer-place') return renderRandomizerPlace(s);
       if (s.subPhase === 'altmatch-object') return renderAltObject(s);
@@ -1152,9 +1171,9 @@
       if (s.subPhase === 'clash-reloc') { if (!isCpu(s.pendingClash.relocatorId) && game.relocationOptions().some(function (o) { return o.x === x && o.y === y; })) { game.clashRelocate(x, y); render(); } return; }
       if (s.subPhase === 'forced-reloc') { if (!isCpu(s.pendingForced.chooserId) && game.relocationOptions().some(function (o) { return o.x === x && o.y === y; })) { game.forcedRelocate(x, y); render(); } return; }
       // Oggetti avanzati: selezione bersagli sulla griglia.
+      if (s.subPhase === 'teleport-select') { if (game.teleportTargets().some(function (o) { return o.x === x && o.y === y; })) { game.teleportTo(x, y); render(); } return; }
       if (s.subPhase === 'elemental-target') { if (game.elementalTargetOptions().some(function (o) { return o.x === x && o.y === y; })) { game.elementalTarget(x, y); render(); } return; }
       if (s.subPhase === 'barrage-first') { if (game.barrageFirstOptions().some(function (o) { return o.x === x && o.y === y; })) { game.barrageFirst(x, y); render(); } return; }
-      if (s.subPhase === 'barrage-second') { if (game.barrageSecondOptions().some(function (o) { return o.x === x && o.y === y; })) { game.barrageSecond(x, y); render(); } return; }
       if (s.subPhase === 'barrage-third') { if (game.barrageThirdOptions().some(function (o) { return o.x === x && o.y === y; })) { game.barrageThird(x, y); render(); } return; }
       if (s.subPhase === 'randomizer-select') { if (game.randomizerSelectOptions().some(function (o) { return o.x === x && o.y === y; })) { game.randomizerToggle(x, y); render(); } return; }
       if (s.subPhase === 'randomizer-place') {
@@ -1195,7 +1214,7 @@
       var cells = [];
       if (s.phase === 'move' && s.activePlayer === playerId && ENG) {
         var pc = game.pawnCell(playerId);
-        if (pc) ENG.moveDestinations(pc.x, pc.y, s.moveModifier, s.gridSize).forEach(function (d) { cells.push(d); });
+        if (pc) game.moveDestinationsFor(playerId).forEach(function (d) { cells.push(d); });
       } else {
         for (var x = 1; x <= s.gridSize; x++) for (var y = 1; y <= s.gridSize; y++) cells.push([x, y]);
       }
@@ -1398,6 +1417,61 @@
       e.classList.add('flipping'); setTimeout(function () { e.classList.remove('flipping'); }, 440);
     }
 
+    // ---- Finestra di confronto del clash ----
+    // Carta statica (stile identico alle carte della mano) per le schede del clash.
+    function clashCardEl(c) {
+      if (!c) return h('div', 'clash-card-empty', 'nessuna carta');
+      var el = h('div', 'card ' + (isFigureVal(c.value) ? 'inv suit-bg-' + c.suit : 'suit-' + c.suit));
+      el.appendChild(cardFace(c, isFigureVal(c.value)));
+      return el;
+    }
+    function clashPanel(r, role) {
+      var id = role === 'att' ? r.attackerId : r.defenderId;
+      var card = role === 'att' ? r.attCard : r.defCard;
+      var lost = (r.outcome !== 'tie') &&
+        ((role === 'att' && r.outcome === 'defender') || (role === 'def' && r.outcome === 'attacker'));
+      var p = h('div', 'clash-panel' + (lost ? ' loser' : ''));
+      var head = h('div', 'clash-panel-head');
+      var dot = h('span', 'clash-pdot'); dot.style.background = PLAYER_COLOR[id];
+      head.appendChild(dot);
+      head.appendChild(h('span', 'clash-panel-name', 'Giocatore ' + id));
+      head.appendChild(h('span', 'clash-panel-role', role === 'att' ? 'attaccante' : 'difensore'));
+      p.appendChild(head);
+      var wrap = h('div', 'clash-card-wrap'); wrap.appendChild(clashCardEl(card)); p.appendChild(wrap);
+      return p;
+    }
+    function clashResultText(r) {
+      if (r.outcome === 'tie') return 'Pareggio: nessuno si sposta';
+      var winId = r.outcome === 'attacker' ? r.attackerId : r.defenderId;
+      var role = r.outcome === 'attacker' ? 'attaccante' : 'difensore';
+      return 'Vince il clash: Giocatore ' + winId + ' (' + role + ')';
+    }
+    function closeClashModal() { ui.clashModal = null; renderClashModal(); render(); }
+    function buildClashModal(r) {
+      var back = h('div', 'dialog-back clash-modal-back');
+      var box = h('div', 'dialog clash-modal');
+      var head = h('div', 'rules-head'); head.appendChild(h('h2', null, 'Risultato')); box.appendChild(head);
+      box.appendChild(h('div', 'clash-result' + (r.outcome === 'tie' ? ' tie' : ''), clashResultText(r)));
+      var row = h('div', 'clash-row');
+      row.appendChild(clashPanel(r, 'att'));
+      row.appendChild(h('div', 'clash-vs', '×'));
+      row.appendChild(clashPanel(r, 'def'));
+      box.appendChild(row);
+      var cont = h('button', 'primary clash-continue', 'Continua');
+      cont.onclick = closeClashModal;
+      box.appendChild(cont);
+      back.appendChild(box);
+      return back;
+    }
+    function renderClashModal() {
+      var existing = document.querySelector('.clash-modal-back');
+      if (!ui.clashModal) { if (existing) { existing.remove(); document.removeEventListener('keydown', onClashKey); } return; }
+      if (existing) return;
+      document.body.appendChild(buildClashModal(ui.clashModal));
+      document.addEventListener('keydown', onClashKey);
+    }
+    function onClashKey(e) { if (e.key === 'Escape' || e.key === 'Enter') { e.preventDefault(); closeClashModal(); } }
+
     // ---- Overlay: gate + finale ----
     function openGate(text, button, onShow) { ui.gate = { text: text, button: button, onShow: onShow }; renderGate(); }
     function renderGate() {
@@ -1426,12 +1500,28 @@
     function hideOverlay() { dom.overlay.hidden = true; }
     function isCenter(x, y) { return game.state.gridSize === 5 && x === 3 && y === 3; }
     function isBonusCell(x, y) { return game.state.gridSize === 4 && x >= 2 && x <= 3 && y >= 2 && y <= 3; }
+    // Celle bonus del Ruleset C (punti-posizione): 5×5 centro+adiacenti, 4×4 le 4 centrali.
+    function isPositionBonusCell(x, y) {
+      return ENG ? ENG.isPositionBonusCell(x, y, game.state.gridSize)
+                 : (game.state.gridSize === 4 ? isBonusCell(x, y) : (isCenter(x, y) || Math.abs(x - 3) + Math.abs(y - 3) === 1));
+    }
+    // Ruleset C: punti che la posizione attuale della pedina darà a fine turno (0 = nessuno).
+    // 5×5: centro +3, adiacente ortogonale al centro +1. 4×4: cella bonus +2.
+    function pendingPositionBonus(s, id) {
+      if (s.ruleset !== 'C') return 0;
+      var pc = game.pawnCell(id); if (!pc) return 0;
+      if (s.gridSize === 4) return isBonusCell(pc.x, pc.y) ? 2 : 0;
+      if (isCenter(pc.x, pc.y)) return 3;
+      if (Math.abs(pc.x - 3) + Math.abs(pc.y - 3) === 1) return 1;
+      return 0;
+    }
 
     // ============================================================ UNDO / ripristino
     function resetUiTransient() {
       ui.armedCardId = null; ui.chosen = []; ui.selectingPlayer = null; ui.clashChooser = null;
       ui.reshuffleMode = null; ui.reshuffleSel = [];
       ui.gate = null; ui.pendingShot = null; ui.brawlerMode = false; ui.selectedDrawn = null;
+      ui.clashModal = null; // chiudi l'eventuale finestra di confronto del clash
     }
     function afterRestore() {
       if (ui.cpuTimer) { clearTimeout(ui.cpuTimer); ui.cpuTimer = null; }
@@ -1457,7 +1547,7 @@
       if (ui.cpuTimer) { clearTimeout(ui.cpuTimer); ui.cpuTimer = null; }
       if (ui.mode !== 'cpu' && ui.mode !== 'cpucpu') return;
       var s = game.state;
-      if (s.gameOver || ui.gate) return;
+      if (s.gameOver || ui.gate || ui.clashModal) return;
       if (!cpuActor(s)) return;
       ui.cpuTimer = setTimeout(function () { ui.cpuTimer = null; cpuStep(); }, ui.cpuDelay || 600);
     }
@@ -1468,6 +1558,7 @@
       if (s.subPhase === 'tool-discard') return s.pendingToolDiscard && s.pendingToolDiscard.playerId;
       if (s.subPhase === 'runner-figure') return s.pendingRunner && s.pendingRunner.playerId;
       if (s.subPhase === 'timebomb-suit') return s.pendingTimebomb.playerId;
+      if (s.subPhase === 'teleport-select') return s.pendingTeleport ? s.pendingTeleport.playerId : null;
       if (s.subPhase === 'elemental-target' || s.subPhase === 'elemental-suit') return s.pendingElemental ? s.pendingElemental.playerId : null;
       if (s.subPhase === 'barrage-first' || s.subPhase === 'barrage-second' || s.subPhase === 'barrage-third') return s.pendingBarrage ? s.pendingBarrage.playerId : null;
       if (s.subPhase === 'randomizer-select' || s.subPhase === 'randomizer-place') return s.pendingRandomizer ? s.pendingRandomizer.playerId : null;

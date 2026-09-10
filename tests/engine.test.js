@@ -478,14 +478,15 @@ console.log('# Oggetti avanzati: elemental bomb, barrage, randomizer');
   g.useObject('N', 'eb'); g.elementalTarget(3, 3); g.elementalSuit('oro');
   eq(g.getCell(3, 3).card.suit, 'oro', 'elemental: centro → oro'); eq(g.getCell(3, 2).card.suit, 'oro', 'elemental: ortogonale → oro');
   eq(s.phase === 'attack' && s.activePlayer === 'S', true, 'elemental consuma l\'attacco');
-  // barrage
+  // barrage: colpisce una SINGOLA cella; non può colpire celle con pedina
   var g2 = Engine.createGame({ rng: makeRng(2), firstPlayer: 'N', modules: { objects: true } });
   var s2 = g2.state; s2.players.N.objects = [{ id: 'br', type: 'barrage', phase: 'attack', fromCharacter: false }]; atk(g2, 'N');
-  g2.useObject('N', 'br'); g2.barrageFirst(2, 2);
-  ok(g2.barrageSecondOptions().length > 0, 'barrage: seconde celle disponibili'); g2.barrageSecond(2, 3);
-  ok(s2.subPhase !== 'barrage-second', 'barrage: dopo la seconda cella si risolve (solo 2 celle)');
-  ok(g2.getCell(2, 2).destroyed && g2.getCell(2, 3).destroyed, 'barrage: le 2 celle distrutte');
-  ok(!g2.getCell(2, 4).destroyed, 'barrage: nessuna terza cella distrutta');
+  g2.useObject('N', 'br');
+  ok(!g2.barrageFirstOptions().some(function (o) { return o.x === 1 && o.y === 1; }), 'barrage: la cella con pedina non è bersagliabile');
+  g2.barrageFirst(2, 2);
+  ok(s2.subPhase !== 'barrage-first', 'barrage: dopo la cella si risolve subito');
+  ok(g2.getCell(2, 2).destroyed, 'barrage: la cella scelta è distrutta');
+  ok(!g2.getCell(2, 3).destroyed, 'barrage: nessuna seconda cella distrutta');
   // randomizer
   var g3 = Engine.createGame({ rng: makeRng(2), firstPlayer: 'N', modules: { objects: true } });
   var s3 = g3.state; s3.players.N.objects = [{ id: 'rz', type: 'randomizer', phase: 'attack', fromCharacter: false }]; atk(g3, 'N');
@@ -738,7 +739,7 @@ console.log('# Ruleset C: centro/riga senza punti (scelta oggetto), controllo ce
   eq(s.players.N.matchedCenter, true, 'Ruleset C: centro conquistato (tiebreak)');
   eq(s.subPhase, 'altmatch-object', 'Ruleset C: centro apre la scelta oggetto');
 
-  // Riga avversaria: nessun punto, nessuna fine partita, scelta oggetto una tantum.
+  // Riga avversaria: nessun punto, nessuna fine partita, NESSUNA scelta oggetto (rimossa).
   var g2 = Engine.createGame({ rng: makeRng(5), firstPlayer: 'N', ruleset: 'C', modules: { objects: true } });
   var s2 = g2.state;
   s2.grid[1][1].pawn = null; s2.grid[1][4].pawn = 'N';
@@ -750,16 +751,27 @@ console.log('# Ruleset C: centro/riga senza punti (scelta oggetto), controllo ce
   g2.move('N', 1, 5, 'nj');
   eq(s2.players.N.score - sc2, 0, 'Ruleset C: riga avversaria nessun punto');
   eq(s2.endTriggered, false, 'Ruleset C: riga avversaria non termina la partita');
-  eq(s2.players.N.targetObjectUsed, true, 'Ruleset C: uso una tantum registrato');
-  eq(s2.subPhase, 'altmatch-object', 'Ruleset C: riga avversaria apre la scelta oggetto');
-  eq(s2.pendingAltMatch.drawn.length, 3, 'Ruleset C: scelta tra 3 oggetti');
-  g2.altMatchPickObject(s2.pendingAltMatch.drawn[0].id);
-  // Seconda volta: già usata, niente oggetto.
-  s2.grid[1][5].pawn = null; s2.grid[1][4].pawn = 'N'; s2.grid[1][5].card = { id: 't2', value: 5, suit: s2.currentSuit }; s2.grid[1][5].faceDown = false;
-  s2.players.N.hand.push({ id: 'nj2', value: 5, suit: s2.currentSuit }); s2.players.N.revealedIds.push('nj2');
-  s2.phase = 'move'; s2.subPhase = null; s2.activePlayer = 'N'; s2.actionsLeft = 1;
-  g2.move('N', 1, 5, 'nj2');
-  ok(s2.subPhase !== 'altmatch-object', 'Ruleset C: seconda volta niente oggetto');
+  ok(s2.subPhase !== 'altmatch-object', 'Ruleset C: riga avversaria NON dà più la scelta oggetto');
+
+  // Cella bonus (non centrale): il PRIMO che entra ottiene la scelta oggetto (una tantum per cella).
+  var g4 = Engine.createGame({ rng: makeRng(6), firstPlayer: 'N', ruleset: 'C', modules: { objects: true } });
+  var s4 = g4.state;
+  g4.pawnCell('N').pawn = null; g4.getCell(2, 2).pawn = 'N';            // N accanto a una cella bonus adiacente
+  var bc = g4.getCell(2, 3); bc.card = { id: 'bcc', value: 7, suit: s4.currentSuit }; bc.faceDown = false; bc.destroyed = false; bc.pawn = null;
+  s4.players.N.hand = [{ id: 'm7', value: 7, suit: s4.currentSuit }, { id: 'x', value: 2, suit: 'oro' }, { id: 'z', value: 3, suit: 'oro' }];
+  s4.players.N.revealedIds = ['m7', 'x', 'z'];
+  s4.phase = 'move'; s4.subPhase = null; s4.activePlayer = 'N'; s4.actionsLeft = 1; s4.moveModifier = null;
+  ok(!g4.getCell(2, 3).bonusTaken, 'cella bonus: inizialmente non riscossa');
+  g4.move('N', 2, 3, 'm7');
+  eq(s4.subPhase, 'altmatch-object', 'cella bonus adiacente: apre la scelta oggetto');
+  eq(g4.getCell(2, 3).bonusTaken, true, 'cella bonus: marcata come riscossa');
+  g4.altMatchPickObject(s4.pendingAltMatch.drawn[0].id);
+  // Secondo ingresso sulla stessa cella bonus: niente oggetto.
+  g4.getCell(2, 3).pawn = null; g4.getCell(2, 2).pawn = 'N';
+  s4.players.N.hand.push({ id: 'm7b', value: 7, suit: s4.currentSuit }); s4.players.N.revealedIds.push('m7b');
+  s4.phase = 'move'; s4.subPhase = null; s4.activePlayer = 'N'; s4.actionsLeft = 1;
+  g4.move('N', 2, 3, 'm7b');
+  ok(s4.subPhase !== 'altmatch-object', 'cella bonus: seconda entrata niente oggetto');
 
   // Controllo del centro a fine turno: +3 sul centro, +1 adiacente ortogonale.
   var g3 = Engine.createGame({ rng: makeRng(2), firstPlayer: 'N', ruleset: 'C' });
@@ -822,6 +834,94 @@ console.log('# Ruleset C 4×4: griglia 4×4, niente centro, +2 sulle celle bonus
   g._endRound();
   eq(s.players.N.score - scN, 2, '4×4: pedina su cella bonus a fine turno +2');
   eq(s.players.S.score - scS, 0, '4×4: pedina fuori dalle celle bonus nessun punto');
+})();
+
+// -------------------------------------------------------------------- Numero di round (Ruleset C)
+console.log('# Ruleset C: numero di round configurabile (7–11), default 9');
+(function () {
+  var g = Engine.createGame({ rng: makeRng(3), firstPlayer: 'N', ruleset: 'C', maxRounds: 7 });
+  eq(g.state.maxRounds, 7, 'C: maxRounds impostato a 7');
+  // porta lo stato all'ultimo round e chiudi
+  g.state.round = 7; g.state.players.N.revealedIds = []; g.state.players.S.revealedIds = [];
+  g._endRound();
+  ok(g.state.gameOver, 'C 7 round: la partita finisce al round 7');
+
+  var g2 = Engine.createGame({ rng: makeRng(3), firstPlayer: 'N', ruleset: 'C', maxRounds: 11 });
+  eq(g2.state.maxRounds, 11, 'C: maxRounds impostato a 11');
+  g2.state.round = 9; g2.state.players.N.revealedIds = []; g2.state.players.S.revealedIds = [];
+  g2._endRound();
+  ok(!g2.state.gameOver, 'C 11 round: al round 9 la partita continua');
+
+  var g3 = Engine.createGame({ rng: makeRng(3), firstPlayer: 'N', maxRounds: 11 }); // ruleset B ignora maxRounds
+  eq(g3.state.maxRounds, 9, 'A/B: maxRounds resta 9 (non configurabile)');
+
+  var g4 = Engine.createGame({ rng: makeRng(3), firstPlayer: 'N', ruleset: 'C' });
+  eq(g4.state.maxRounds, 9, 'C: default 9 round');
+  var g5 = Engine.createGame({ rng: makeRng(3), firstPlayer: 'N', ruleset: 'C', maxRounds: 20 });
+  eq(g5.state.maxRounds, 11, 'C: maxRounds oltre il limite viene ridotto a 11');
+})();
+
+// -------------------------------------------------------------------- Teleport (Ruleset C)
+console.log('# Teleport (Ruleset C): stesso valore, niente pedina avversaria');
+(function () {
+  var g = Engine.createGame({ rng: makeRng(7), firstPlayer: 'N', ruleset: 'C', modules: { objects: true } });
+  var s = g.state;
+  g.pawnCell('N').pawn = null; var here = g.getCell(2, 2); here.pawn = 'N'; here.card = { id: 'h6', value: 6, suit: 'oro' }; here.faceDown = false; here.destroyed = false;
+  var t1 = g.getCell(4, 4); t1.card = { id: 't6', value: 6, suit: 'spade' }; t1.faceDown = false; t1.destroyed = false; t1.pawn = null;
+  g.pawnCell('S').pawn = null; var t2 = g.getCell(5, 5); t2.card = { id: 's6', value: 6, suit: 'coppe' }; t2.faceDown = false; t2.destroyed = false; t2.pawn = 'S';
+  s.players.N.objects = [{ id: 'tp', type: 'teleport', phase: 'move', fromCharacter: false }];
+  s.phase = 'move'; s.subPhase = null; s.activePlayer = 'N'; s.actionsLeft = 1; s.moveModifier = null;
+  ok(g.usableObjects('N').some(function (o) { return o.id === 'tp'; }), 'teleport: usabile con un bersaglio valido');
+  g.useObject('N', 'tp');
+  eq(s.subPhase, 'teleport-select', 'teleport: apre la selezione');
+  var tg = g.teleportTargets().map(function (o) { return o.x + ',' + o.y; });
+  ok(tg.indexOf('4,4') !== -1, 'teleport: [4,4] (valore 6, libera) è bersaglio');
+  ok(tg.indexOf('5,5') === -1, 'teleport: [5,5] (pedina avversaria) NON è bersaglio');
+  g.teleportTo(4, 4);
+  eq(g.getCell(4, 4).pawn, 'N', 'teleport: pedina spostata');
+  eq(g.getCell(2, 2).pawn, null, 'teleport: cella di partenza liberata');
+})();
+
+// -------------------------------------------------------------------- Grappling Hook (Ruleset C)
+console.log('# Grappling Hook (Ruleset C): aggiunge le celle adiacenti all\'avversario');
+(function () {
+  var g = Engine.createGame({ rng: makeRng(8), firstPlayer: 'N', ruleset: 'C', modules: { objects: true } });
+  var s = g.state;
+  g.pawnCell('N').pawn = null; g.getCell(4, 4).pawn = 'N';
+  g.pawnCell('S').pawn = null; g.getCell(2, 2).pawn = 'S';
+  var adj = g.getCell(1, 2); adj.card = { id: 'a5', value: 5, suit: s.currentSuit }; adj.faceDown = false; adj.pawn = null; adj.destroyed = false; // ortogonale a S, non bonus
+  s.players.N.hand = [{ id: 'm5', value: 5, suit: s.currentSuit }, { id: 'x1', value: 2, suit: 'oro' }, { id: 'x2', value: 3, suit: 'oro' }];
+  s.players.N.revealedIds = ['m5', 'x1', 'x2'];
+  s.players.N.objects = [{ id: 'gp', type: 'grapple', phase: 'move', fromCharacter: false }];
+  s.phase = 'move'; s.subPhase = null; s.activePlayer = 'N'; s.actionsLeft = 1; s.moveModifier = null;
+  ok(!g.legalMoves('N').some(function (m) { return m.x === 1 && m.y === 2; }), 'senza grapple [1,2] non raggiungibile');
+  ok(g.usableObjects('N').some(function (o) { return o.id === 'gp'; }), 'grapple: usabile');
+  g.useObject('N', 'gp');
+  eq(s.subPhase, 'tool-discard', 'grapple: chiede la carta da scartare');
+  g.toolDiscardChoose('x1');
+  eq(s.moveModifier, 'grapple', 'grapple: modificatore armato');
+  ok(g.legalMoves('N').some(function (m) { return m.x === 1 && m.y === 2; }), 'con grapple [1,2] (adiacente a S) è raggiungibile');
+  g.move('N', 1, 2, 'm5');
+  eq(g.getCell(1, 2).pawn, 'N', 'grapple: mossa eseguita');
+})();
+
+// -------------------------------------------------------------------- Distruzione bloccata (pedina senza uscite)
+console.log('# Distruzione: cella con pedina non distrutta se non ha celle libere adiacenti');
+(function () {
+  var g = Engine.createGame({ rng: makeRng(9), firstPlayer: 'N', modules: { objects: true } });
+  var s = g.state;
+  g.pawnCell('N').pawn = null; g.pawnCell('S').pawn = null; // libera le posizioni iniziali
+  var sc = g.getCell(1, 1); sc.pawn = 'S'; sc.card = { id: 'sc', value: 7, suit: 'oro' }; sc.faceDown = false; sc.destroyed = false;
+  g.getCell(2, 1).destroyed = true; g.getCell(2, 1).card = null;
+  g.getCell(1, 2).destroyed = true; g.getCell(1, 2).card = null;
+  g.getCell(3, 1).pawn = 'N';
+  s.players.N.hand = [{ id: 'n7', value: 7, suit: 'oro' }]; s.players.N.revealedIds = ['n7'];
+  s.players.N.objects = [{ id: 'hm', type: 'homing_missile', phase: 'attack', fromCharacter: false }];
+  s.phase = 'attack'; s.subPhase = null; s.activePlayer = 'N'; s.actionsLeft = 1; s.attackModifier = null;
+  g.useObject('N', 'hm');
+  g.shoot('N', 1, 1, 'n7');
+  ok(!g.getCell(1, 1).destroyed, 'cella con pedina senza uscite: NON distrutta');
+  eq(g.getCell(1, 1).pawn, 'S', 'la pedina resta sulla cella');
 })();
 
 // -------------------------------------------------------------------- Pesca fino a 6 + energy drain

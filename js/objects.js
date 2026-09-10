@@ -57,7 +57,7 @@
     barrage: {
       type: 'barrage', phase: 'attack', label: 'Barrage',
       cost: 'Rinunci all\'attacco',
-      effect: 'Scegli una cella e una casella adiacente ortogonale (non la centrale, non con pedina): distruggi entrambe (come homing missile).'
+      effect: 'Scegli una singola cella senza pedina: viene distrutta (come homing missile).'
     },
     randomizer: {
       type: 'randomizer', phase: 'attack', label: 'Randomizer',
@@ -73,6 +73,18 @@
       type: 'energy_drain', phase: 'move', phases: ['move', 'attack'], label: 'Energy Drain',
       cost: null,
       effect: 'Movimento o attacco: ruba una carta dalla mano dell\'avversario (la puoi usare in questa mano).'
+    },
+    // Oggetti disponibili solo nel Ruleset C (cOnly): esclusi dalla selezione manuale e dal
+    // mazzo casuale negli altri ruleset.
+    teleport: {
+      type: 'teleport', phase: 'move', label: 'Teleport', cOnly: true,
+      cost: 'Rinunci al movimento',
+      effect: 'Sposta la tua pedina su una qualsiasi carta scoperta del campo con lo stesso valore della carta su cui ti trovi, purché non vi sia la pedina avversaria.'
+    },
+    grapple: {
+      type: 'grapple', phase: 'move', label: 'Grappling Hook', cOnly: true,
+      cost: 'Scarta 1 carta scelta',
+      effect: 'Per questo spostamento aggiungi alle tue destinazioni anche le caselle ortogonalmente adiacenti alla pedina avversaria (le abbini con le normali regole).'
     }
   };
   // Deriva il testo del tooltip da costo + effetto.
@@ -81,7 +93,7 @@
     d.desc = (d.cost ? 'Costo: ' + d.cost + '. ' : '') + d.effect;
   });
 
-  var ALL_TYPES = ['jetpack', 'jump', 'hook', 'homing_missile', 'rush_juice', 'combat_juice', 'timebomb', 'elemental_bomb', 'barrage', 'randomizer', 'energy_boost', 'energy_drain'];
+  var ALL_TYPES = ['jetpack', 'jump', 'hook', 'homing_missile', 'rush_juice', 'combat_juice', 'timebomb', 'elemental_bomb', 'barrage', 'randomizer', 'energy_boost', 'energy_drain', 'teleport', 'grapple'];
 
   function def(type) { return OBJECT_DEFS[type] || null; }
 
@@ -95,12 +107,15 @@
   // Mazzo Oggetti: 2 COPIE di ciascun tipo scelto, a faccia in giù, mescolate.
   // - selectedTypes assente/vuoto → 5 tipi casuali distinti (default).
   // - selectedTypes = elenco di tipi → esattamente quei tipi (2 copie ciascuno).
-  function buildObjectDeck(rng, selectedTypes) {
+  function buildObjectDeck(rng, selectedTypes, ruleset) {
+    var allowC = ruleset === 'C';
+    var ok = function (t) { return !!OBJECT_DEFS[t] && (allowC || !OBJECT_DEFS[t].cOnly); };
     var types;
     if (selectedTypes && selectedTypes.length) {
-      types = selectedTypes.filter(function (t) { return !!OBJECT_DEFS[t]; });
+      types = selectedTypes.filter(ok);
     } else {
-      var pool = ALL_TYPES.slice();
+      // Mazzo casuale: gli oggetti "solo Ruleset C" entrano nel pool solo se il ruleset è C.
+      var pool = ALL_TYPES.filter(ok);
       Deck.shuffle(pool, rng);
       types = pool.slice(0, 5);
     }

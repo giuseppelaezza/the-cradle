@@ -47,7 +47,7 @@ function suite(label, buildOpts) {
     var g = null, err = null;
     try { g = playCpuGame(buildOpts(seed)); } catch (e) { err = e; }
     ok(!err, label + ' seed ' + seed + (err ? ' → ' + err.message : ''));
-    if (g) { ok(g.state.gameOver, 'seed ' + seed + ' conclusa'); ok(g.state.round <= 9, 'seed ' + seed + ' entro 9 round'); if (g.state.gameOver) completed++; }
+    if (g) { ok(g.state.gameOver, 'seed ' + seed + ' conclusa'); ok(g.state.round <= (g.state.maxRounds || 9), 'seed ' + seed + ' entro i round previsti'); if (g.state.gameOver) completed++; }
   }
   console.log('  ' + completed + '/40 concluse.');
 }
@@ -84,6 +84,17 @@ suite('Struttura turno 1-2-1-2 + Personaggi + Oggetti', function (seed) {
   return { rng: makeRng(seed), suitMode: 'rotating', turnMode: '1212', modules: { characters: true, objects: true, powers: true },
            characters: { N: CHARS[seed % 4], S: CHARS[(seed + 1) % 4] } };
 });
+// Ruleset C con i nuovi oggetti (teleport/grapple) forzati nel mazzo: la CPU non li usa ma non deve rompersi.
+suite('Ruleset C + Teleport/Grapple/Barrage (selezione forzata)', function (seed) {
+  return { rng: makeRng(seed), ruleset: 'C', modules: { objects: true },
+           objectSelection: ['teleport', 'grapple', 'barrage', 'homing_missile', 'jetpack'] };
+});
+suite('Ruleset C 4×4 + Teleport/Grapple', function (seed) {
+  return { rng: makeRng(seed), ruleset: 'C', gridSize: 4, modules: { objects: true },
+           objectSelection: ['teleport', 'grapple', 'barrage', 'jetpack', 'randomizer'] };
+});
+suite('Ruleset C 11 round', function (seed) { return { rng: makeRng(seed), ruleset: 'C', maxRounds: 11, modules: { objects: true } }; });
+suite('Ruleset C 7 round', function (seed) { return { rng: makeRng(seed), ruleset: 'C', maxRounds: 7, modules: { objects: true } }; });
 
 console.log('\n=== Risultato CPU: ' + passed + ' passati, ' + failed + ' falliti ===');
 process.exit(failed ? 1 : 0);

@@ -91,17 +91,17 @@
       ? "- **Figura scoperta (8/9/10):** **nessun effetto**: non la elimini, non dà punti né oggetti; resta scoperta e ci sali sopra (il Runner può colpirla con la sua passiva).\n"
       : "- **Figura scoperta (8/9/10):** **+punti** (10 → 3, 9 → 2, 8 → 1); si **copre**; la carta usata resta **davanti a te** (trofeo); **inoltre peschi 1 oggetto**.\n");
     mov += (C
-      ? "- **Riga avversaria:** **non** termina la partita e **non** dà punti; **una volta a partita** dà la **scelta di 1 oggetto**.\n"
+      ? "- **Riga avversaria:** **nessun effetto** (non termina la partita, non dà punti né oggetti).\n"
       : "- **Riga-bersaglio:** **+5** e la partita **termina** (§10).\n");
     mov +=
 "- **Carta coperta:** nessun punto; la carta usata va agli **scarti**; la pedina ci sale sopra.\n" +
 "- **Carta 1–7 scoperta:** solo spostamento.\n";
     mov += (C
-      ? "\nIn **Ruleset C** il **controllo del centro** si conta a **fine turno** (§5.5); centro e riga avversaria danno i loro effetti solo con **movimento scelto**, mai per spostamento forzato.\n\n"
+      ? "\nIn **Ruleset C** i punti di **posizione** si contano a **fine turno** (§5.5). Le **caselle bonus** — quelle che a fine turno danno punti: il **centro** e le **4 caselle ortogonalmente adiacenti** al centro (nella variante **4×4**, le **4 caselle centrali**) — danno alla **prima** pedina che vi entra la **scelta di 1 oggetto tra 3**, **una sola volta per casella**. Finché il bonus di una casella non è stato riscosso, la casella mostra un **quadratino nero**. Gli effetti di casella valgono solo con **movimento scelto**, mai per spostamento forzato.\n\n"
       : "\nI **+5** del centro e della riga-bersaglio si ottengono **solo muovendo di tua scelta**, mai per spostamento forzato.\n\n") +
-"**Clash (la casella d'arrivo è occupata dall'altra pedina).** L'attaccante ha già speso 1 carta per muovere: sceglie la carta del clash tra le **2** carte rivelate che gli restano; il difensore la sceglie tra le proprie rivelate disponibili (**3** se non ha ancora mosso, **2** se ha già mosso). Si confrontano: vince il **valore più alto**; a parità di valore vince il **seme più forte** (oro > spade > coppe > bastoni); se anche il seme è pari è **parità piena**. Le carte del clash vanno agli scarti.\n\n" +
-"- **Vince l'attaccante:** avanza sulla casella; il **difensore** viene ricollocato (§5.4).\n" +
-"- **Vince il difensore:** resta dov'è; può, se vuole, ricollocare l'**attaccante** (§5.4).\n" +
+"**Clash (la casella d'arrivo è occupata dall'altra pedina).** La carta del clash si sceglie **dalla riserva**: le carte **non scelte** nella fase di scelta carte (chi non ha carte di riserva non contesta e perde). Si confrontano: vince il **valore più alto**; a parità di valore vince il **seme più forte** (oro > spade > coppe > bastoni); se anche il seme è pari è **parità piena**. Dopo il confronto le carte del clash vanno agli **scarti**.\n\n" +
+"- **Vince l'attaccante:** avanza sulla casella; il **difensore** viene ricollocato (§5.4). **+5** a chi vince il clash.\n" +
+"- **Vince il difensore:** resta dov'è; può, se vuole, ricollocare l'**attaccante** (§5.4). **+5** a chi vince il clash.\n" +
 "- **Parità piena:** nessuno si sposta.";
     s.push(mov);
 
@@ -126,11 +126,12 @@
     s.push(
 "### 5.4 Spostamento forzato\n\n" +
 "Alcune situazioni (clash perso, oggetti) costringono a spostare una pedina. Le destinazioni valide sono le caselle **ortogonalmente adiacenti** alla pedina, **escluse** la casella centrale, le caselle occupate e le caselle **distrutte**. Nessun bonus. " +
-"Se la pedina finisce su una figura scoperta, la figura **resta scoperta**. " + (C ? "In Ruleset C la riga avversaria non ha effetto sul forzato. " : "Se finisce sulla **riga-bersaglio**, la partita **termina** (ma senza +5). ") + "Se non esiste alcuna destinazione valida, la pedina **resta ferma**.");
+"Se la pedina finisce su una figura scoperta, la figura **resta scoperta**. " + (C ? "In Ruleset C la riga avversaria non ha effetto sul forzato. " : "Se finisce sulla **riga-bersaglio**, la partita **termina** (ma senza +5). ") + "Se non esiste alcuna destinazione valida, la pedina **resta ferma**.\n\n" +
+"**Distruzione bloccata:** un effetto che **distrugge una casella** occupata da una pedina (es. homing missile) può farlo **solo** se la pedina ha almeno una **casella libera adiacente** dove essere ricollocata. Se tutte le caselle ortogonali sono **distrutte** (o comunque non disponibili), la casella **non viene distrutta** e nulla accade.");
 
     s.push(
 "### 5.5 Fine del round\n\n" +
-(C ? "**Controllo del centro:** a fine turno ogni giocatore guadagna **+1** se la sua pedina è su una casella **adiacente ortogonale** al centro, **+3** se è **sul centro**.\n\n" : "") +
+(C ? "**Punti di posizione:** a fine turno ogni giocatore guadagna **+1** se la sua pedina è su una casella **adiacente ortogonale** al centro, **+3** se è **sul centro**. Nella variante **4×4** le caselle bonus sono le **4 centrali** e danno **+2** ciascuna.\n\n" : "") +
 "Ogni giocatore **scarta le carte rivelate non usate** (tiene le carte non rivelate). Si passa il segnalino **Primo Giocatore** all'avversario. Ciascuno **pesca fino ad avere 6 carte** in mano. Il **seme di turno avanza** (§7).");
 
     s.push(
@@ -178,16 +179,20 @@
 "| **combat juice** | scelta carte | Questo round esegui **due attacchi** e **rinunci** al movimento. |\n" +
 "| **timebomb** | scelta carte | Sposta il **seme di turno** su un seme a tua scelta; la rotazione prosegue da lì. |\n" +
 "| **elemental bomb** | attacco | Rinunci all'attacco. Scegli una casella: il **seme** suo e di **tutte le caselle ortogonali** diventa un **seme a tua scelta**. |\n" +
-"| **barrage** | attacco | Rinunci all'attacco. Scegli una casella e **una adiacente ortogonale** (non la centrale, non caselle con pedina): **distruggi entrambe** le caselle. |\n" +
+"| **barrage** | attacco | Rinunci all'attacco. Scegli **una singola casella senza pedina**: viene **distrutta** (come homing missile). |\n" +
 "| **randomizer** | attacco | Rinunci all'attacco. Scegli fino a **3 caselle** (non la centrale): le loro carte tornano nel mazzo, si mescola e si pescano **altrettante** carte da **ricollocare** in quelle caselle. |\n" +
 "| **energy boost** | movimento o attacco | Peschi **2 carte** e puoi usarle in questa mano; a fine turno queste carte si **scartano** con le altre carte scelte non usate (le carte non scelte restano). |\n" +
-"| **energy drain** | movimento o attacco | **Rubi 1 carta** tra le **carte scelte** dell'avversario (puoi usarla in questa mano; se non ne ha, non è utilizzabile). |";
+"| **energy drain** | movimento o attacco | **Rubi 1 carta** tra le **carte scelte** dell'avversario (puoi usarla in questa mano; se non ne ha, non è utilizzabile). |" +
+(C
+ ? "\n| **teleport** *(solo C)* | movimento | Rinunci al movimento. Sposta la tua pedina su una **carta scoperta qualsiasi** con lo **stesso valore** della carta su cui ti trovi, purché **non** vi sia la pedina avversaria. |\n" +
+   "| **grappling hook** *(solo C)* | movimento | Costo: **scarta 1 carta rivelata a tua scelta** (almeno 2). Per questo movimento aggiungi alle tue destinazioni anche le caselle **ortogonalmente adiacenti alla pedina avversaria** (le abbini con le normali regole). |"
+ : "");
     s.push(ogg);
 
     s.push(
 "## 10. Fine della partita\n\n" +
 (C
- ? "La partita dura sempre **9 round**: raggiungere la riga avversaria **non** la termina. Al termine del round 9 si contano i punti.\n\n"
+ ? "La partita dura un **numero fisso di round** (di norma **9**, configurabile da **7 a 11**): raggiungere la riga avversaria **non** la termina. Al termine dell'ultimo round si contano i punti.\n\n"
  : "La partita finisce quando **una pedina raggiunge la riga-bersaglio** (per movimento scelto o forzato): si completa il **round in corso**, poi si contano i punti. In ogni caso la partita non supera il **round 9** (dal round 9 non si rimescola: si gioca con le carte rimaste).\n\n") +
 "Vince chi ha **più punti**. In caso di parità, si applica lo **spareggio** in quest'ordine:\n\n" +
 "1. chi ha **conquistato la casella centrale**;\n" +
@@ -199,10 +204,11 @@
 "| Azione | Punti |\n" +
 "|---|---|\n" +
 (C
- ? "| Fine turno: pedina adiacente ortogonale al centro | 1 |\n| Fine turno: pedina sul centro | 3 |\n"
+ ? "| Fine turno: pedina adiacente ortogonale al centro | 1 |\n| Fine turno: pedina sul centro | 3 |\n| Fine turno: pedina su cella bonus (variante 4×4) | 2 |\n"
  : "| Muovere sulla casella centrale (una sola volta) | 5 |\n| Muovere sulla riga-bersaglio | 5 (termina la partita) |\n") +
 "| " + (ALT ? "Colpire in attacco" : "Abbinare o colpire") + " un 10 · 9 · 8 | 3 · 2 · 1 |\n" +
-"| Colpire la pedina avversaria | 5 |");
+"| Colpire la pedina avversaria | 5 |\n" +
+"| Vincere un clash (attaccante o difensore) | 5 |");
 
     s.push(
 "## 12. Regola opzionale: Mulligan\n\n" +

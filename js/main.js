@@ -15,7 +15,7 @@
 
   // Stato della configurazione. I poteri seguono automaticamente il modulo Personaggi.
   var cfg = { opponent: 'cpu', suitMode: 'rotating', characters: true, objects: true, reshuffle: true, reshuffleCount: 2,
-              ruleset: 'C', gridSize: 5, turnMode: '1221', objectMode: 'random', objectSelection: [], charN: 'runner', charS: 'brawler' };
+              ruleset: 'C', gridSize: 5, turnMode: '1221', maxRounds: 9, objectMode: 'random', objectSelection: [], charN: 'runner', charS: 'brawler' };
 
   // Icona del seme (SVG inline, colorata dal CSS come in partita).
   function suitIconEl(suit) { var w = h('span', 'suit-ic s-' + suit); if (Suits) w.innerHTML = Suits.svg(suit); return w; }
@@ -23,7 +23,7 @@
   var RULESET_DESC = {
     A: 'Muovere su una figura non ha effetto. In attacco, colpire una figura la gira a faccia in giù, dà i suoi punti e un trofeo e fa pescare 3 oggetti tra cui ne tieni 1; anche conquistare il centro dà punti e fa scegliere un oggetto. Ogni giocatore inizia con un oggetto extra. Si vince raggiungendo la riga avversaria o ai punti.',
     B: 'Abbinare una figura (muovendovi sopra o colpendola in attacco) la elimina, dà i suoi punti e un trofeo e fa pescare 1 oggetto.',
-    C: 'Come il Ruleset A per le figure, ma il gioco ruota sul controllo del centro: a fine turno +1 se sei adiacente al centro, +3 se sei sul centro. Raggiungere la riga avversaria non termina la partita e non dà punti: dà una scelta oggetto (una volta a partita). Conquistare il centro non dà punti ma fa scegliere un oggetto. Vince chi ha più punti al round 9.'
+    C: 'Come il Ruleset A per le figure, ma il gioco ruota sul controllo del centro: a fine turno +1 se sei adiacente al centro, +3 se sei sul centro. Raggiungere la riga avversaria non termina la partita e non dà punti: dà una scelta oggetto (una volta a partita). Conquistare il centro non dà punti ma fa scegliere un oggetto. Vince chi ha più punti al termine dei round di gioco (di default 9, configurabili 7–11).'
   };
 
   function h(tag, cls, txt) { var e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; }
@@ -53,7 +53,12 @@
       var op = h('option', null, o[1]); op.value = o[0]; op.title = RULESET_DESC[o[0]];
       if (cfg.ruleset === o[0]) op.selected = true; rs.appendChild(op);
     });
-    rs.onchange = function () { cfg.ruleset = rs.value; renderConfig(); };
+    rs.onchange = function () {
+      cfg.ruleset = rs.value;
+      // Uscendo dal Ruleset C, rimuovi dalla selezione gli oggetti "solo C".
+      if (cfg.ruleset !== 'C') cfg.objectSelection = cfg.objectSelection.filter(function (t) { var d = Objects && Objects.def(t); return !(d && d.cOnly); });
+      renderConfig();
+    };
     rsRow.appendChild(rs);
     // La griglia alternativa 4×4 (celle bonus) è disponibile solo per il Ruleset C.
     if (cfg.ruleset === 'C') {
@@ -64,6 +69,12 @@
       });
       gs.onchange = function () { cfg.gridSize = parseInt(gs.value, 10); renderConfig(); };
       rsRow.appendChild(gs);
+      // Numero di round di gioco (solo Ruleset C): 7–11, default 9.
+      var nr = h('select', 'cfg-select');
+      nr.title = 'Numero di round della partita (solo Ruleset C).';
+      [7, 8, 9, 10, 11].forEach(function (n) { var op = h('option', null, n + ' round'); op.value = n; if (cfg.maxRounds === n) op.selected = true; nr.appendChild(op); });
+      nr.onchange = function () { cfg.maxRounds = parseInt(nr.value, 10); };
+      rsRow.appendChild(nr);
     }
     sheet.appendChild(rsRow);
     sheet.appendChild(h('p', 'cfg-desc', RULESET_DESC[cfg.ruleset] + (cfg.ruleset === 'C' && cfg.gridSize === 4 ? ' — Variante 4×4: le 4 celle centrali ([2,2],[2,3],[3,2],[3,3]) danno +2 a fine turno se le occupi; non c\'è cella centrale. N parte da [1,1], S da [4,4].' : '')));
@@ -259,7 +270,10 @@
     var grid = h('div', 'obj-card-grid');
     function renderGrid() {
       grid.innerHTML = '';
+      // Gli oggetti "solo Ruleset C" (cOnly) sono selezionabili solo se il ruleset è C.
       OBJ.ALL_TYPES.forEach(function (type) {
+        var d = OBJ.def(type);
+        if (d && d.cOnly && cfg.ruleset !== 'C') return;
         var selected = cfg.objectSelection.indexOf(type) !== -1;
         var card = UI.objectCardEl(type, { selectable: true, selected: selected });
         card.onclick = function () {
@@ -294,6 +308,7 @@
       ruleset: cfg.ruleset,
       gridSize: cfg.ruleset === 'C' ? cfg.gridSize : 5,
       turnMode: cfg.turnMode,
+      maxRounds: cfg.ruleset === 'C' ? cfg.maxRounds : 9,
       objectSelection: useSelection ? cfg.objectSelection.slice() : null,
       characters: { N: cfg.charN, S: cfg.charS }
     };
@@ -343,21 +358,38 @@
     var randomChars = cfg.charN === 'random' || cfg.charS === 'random';
     return { completed: 0, errors: 0, rounds: 0, combined: 0, winner: 0, loser: 0, margin: 0,
              ties: 0, decided: 0, startFirstWins: 0, figures: 0,
+             emptyPass: 0, emptyPassMove: 0, emptyPassShoot: 0,
              objUses: {}, perChar: randomChars ? {} : null };
   }
   function batchPlay(seed, acc) {
     var firstPlayer = (seed % 2 === 0) ? 'N' : 'S', g, s;
     try { g = Engine.createGame(buildOpts({ rng: makeRng(seed), firstPlayer: firstPlayer })); s = g.state; }
     catch (e) { acc.errors++; return; }
-    // Strumenta l'uso oggetti (conteggio per tipo).
+    // Strumenta l'uso oggetti (conteggio per tipo) e segnala se un oggetto è stato usato nell'azione corrente.
+    var objUsedThisAction = false;
     var origUse = g.useObject.bind(g);
     g.useObject = function (pid, oid) {
       var o = s.players[pid].objects.filter(function (x) { return x.id === oid; })[0];
       if (o) acc.objUses[o.type] = (acc.objUses[o.type] || 0) + 1;
+      objUsedThisAction = true;
       return origUse.apply(null, arguments);
     };
+    // "Passo a vuoto": il giocatore passa (movimento o attacco) senza abbinare né aver usato un oggetto.
+    var origPassMove = g.passMove.bind(g);
+    g.passMove = function () { if (!objUsedThisAction) { acc.emptyPass++; acc.emptyPassMove++; } return origPassMove.apply(null, arguments); };
+    var origPassShoot = g.passShoot.bind(g);
+    g.passShoot = function () { if (!objUsedThisAction) { acc.emptyPass++; acc.emptyPassShoot++; } return origPassShoot.apply(null, arguments); };
     var guard = 0;
-    try { while (!s.gameOver && guard++ < 8000) { var a = batchWhoActs(s, g); if (!a) break; Cpu.cpuAct(g, a); } }
+    // Reset del flag "oggetto usato" a ogni azione consumata (actionsLeft cala) o cambio fase/turno.
+    var lastPhase = s.phase, lastActions = s.actionsLeft, lastActive = s.activePlayer;
+    try {
+      while (!s.gameOver && guard++ < 8000) {
+        var a = batchWhoActs(s, g); if (!a) break;
+        Cpu.cpuAct(g, a);
+        if (s.phase !== lastPhase || s.activePlayer !== lastActive || s.actionsLeft < lastActions) objUsedThisAction = false;
+        lastPhase = s.phase; lastActive = s.activePlayer; lastActions = s.actionsLeft;
+      }
+    }
     catch (e) { acc.errors++; return; }
     if (!s.gameOver) { acc.errors++; return; }
     acc.completed++; acc.rounds += s.round;
@@ -411,7 +443,8 @@
       ['Margine medio', (acc.margin / c).toFixed(1)],
       ['Patte', (100 * acc.ties / c).toFixed(1) + '%'],
       ['Vittorie 1° giocatore (su decise)', (100 * acc.startFirstWins / dec).toFixed(1) + '% (±' + (196 * Math.sqrt(0.25 / dec)).toFixed(1) + ')'],
-      ['Figure medie / giocatore', (acc.figures / c).toFixed(2)]
+      ['Figure medie / giocatore', (acc.figures / c).toFixed(2)],
+      ['Passi a vuoto medi / partita', (acc.emptyPass / c).toFixed(2) + ' (mov ' + (acc.emptyPassMove / c).toFixed(2) + ' · att ' + (acc.emptyPassShoot / c).toFixed(2) + ')']
     ];
   }
   function batchCharRows(acc) {

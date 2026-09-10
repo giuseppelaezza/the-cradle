@@ -26,6 +26,20 @@
   function isCenter(x, y, size) { return (size || DEFAULT_SIZE) === 5 && x === 3 && y === 3; }
   // Celle bonus della 4×4: le 4 celle centrali [2,2],[2,3],[3,2],[3,3].
   function isBonusCell(x, y, size) { return (size || DEFAULT_SIZE) === 4 && x >= 2 && x <= 3 && y >= 2 && y <= 3; }
+  // Ruleset C — celle che assegnano punti-posizione a fine turno (= "celle bonus" per la scelta oggetto):
+  // 5×5: centro + le 4 celle ortogonali adiacenti al centro; 4×4: le 4 celle centrali.
+  function isPositionBonusCell(x, y, size) {
+    size = size || DEFAULT_SIZE;
+    if (size === 4) return isBonusCell(x, y, 4);
+    return isCenter(x, y, 5) || (Math.abs(x - 3) + Math.abs(y - 3) === 1);
+  }
+  // Punti-posizione della cella (Ruleset C). 5×5: centro +3, adiacente +1. 4×4: bonus +2.
+  function positionBonusPoints(x, y, size) {
+    size = size || DEFAULT_SIZE;
+    if (size === 4) return isBonusCell(x, y, 4) ? 2 : 0;
+    if (isCenter(x, y, 5)) return 3;
+    return (Math.abs(x - 3) + Math.abs(y - 3) === 1) ? 1 : 0;
+  }
   function targetRow(playerId, size) { return playerId === 'N' ? (size || DEFAULT_SIZE) : 1; }
   function isTargetCell(playerId, cell, size) { return cell.y === targetRow(playerId, size); }
   function otherPlayer(id) { return id === 'N' ? 'S' : 'N'; }
@@ -175,7 +189,7 @@
     }
 
     // Mazzo Oggetti (2 copie di 5 tipi, o dei tipi scelti in configurazione) solo se il modulo è attivo.
-    var objectDeck = modules.objects ? Objects.buildObjectDeck(rng, opts.objectSelection) : [];
+    var objectDeck = modules.objects ? Objects.buildObjectDeck(rng, opts.objectSelection, ruleset) : [];
     // Ruleset A (abbinamento alternativo): ogni giocatore pesca 1 oggetto extra a inizio partita.
     if (modules.objects && altMatch) {
       ['N', 'S'].forEach(function (id) { if (objectDeck.length) players[id].objects.push(objectDeck.shift()); });
@@ -188,11 +202,14 @@
     // Struttura del turno: '1221' (default) = mov G1→G2, att G2→G1 (iniziativa divisa);
     // '1212' = mov G1→G2, att G1→G2 (stesso ordine in movimento e attacco).
     var turnMode = opts.turnMode === '1212' ? '1212' : '1221';
+    // Numero di round: 9 di default; solo nel Ruleset C è configurabile (7–11).
+    var maxRounds = 9;
+    if (ruleset === 'C' && opts.maxRounds) maxRounds = Math.max(7, Math.min(11, opts.maxRounds | 0));
 
     var state = {
       deck: deck, objectDeck: objectDeck, discard: [], objectDiscard: [],
       grid: grid, gridSize: gridSize, centerInitialSuit: centerInitialSuit,
-      suitMode: suitMode, currentSuit: centerInitialSuit, turnMode: turnMode,
+      suitMode: suitMode, currentSuit: centerInitialSuit, turnMode: turnMode, maxRounds: maxRounds,
       modules: modules, altMatch: altMatch, ruleset: ruleset,
       trail: [],               // storico geometrico di movimenti/spari (per l'overlay "Mostra azioni")
       players: players, firstPlayer: firstPlayer,
@@ -203,7 +220,7 @@
       selected: { N: null, S: null },
       selectObjectUsed: { N: false, S: false }, // max 1 oggetto select per giocatore/round
       actionsLeft: 0,
-      moveModifier: null,     // 'jetpack'|'jump' (armato per l'azione di movimento corrente)
+      moveModifier: null,     // 'jetpack'|'jump'|'grapple' (armato per l'azione di movimento corrente)
       attackModifier: null,   // 'hook'|'homing' (armato per l'attacco corrente)
       pendingClash: null,
       pendingForced: null,    // {kind,pawnId,chooserId,from,optional} durante 'forced-reloc'
@@ -212,6 +229,7 @@
       pendingRunner: null,    // {playerId,x,y} durante 'runner-figure' (passiva runner)
       pendingAltMatch: null,  // {playerId,x,y,drawn?} durante 'altmatch-object'
       pendingTimebomb: null,
+      pendingTeleport: null,  // {playerId} durante 'teleport-select' (oggetto Teleport, Ruleset C)
       pendingElemental: null, pendingBarrage: null, pendingRandomizer: null,
       gameOver: false, endTriggered: false, result: null, log: []
     };
@@ -378,6 +396,27 @@
     this._promptMove();
   };
 
+  // Destinazioni di movimento per `id`, considerando il modificatore attivo.
+  // 'grapple' (Grappling Hook, Ruleset C) aggiunge alle destinazioni normali le caselle
+  // ortogonalmente adiacenti alla pedina avversaria.
+  Game.prototype._moveDestList = function (id) {
+    var s = this.state, pc = this.pawnCell(id);
+    if (!pc) return [];
+    if (s.moveModifier === 'grapple') {
+      var out = orthogonalNeighbors(pc.x, pc.y, s.gridSize).slice(), seen = {};
+      out.forEach(function (d) { seen[d[0] + ',' + d[1]] = true; });
+      var opp = this.pawnCell(otherPlayer(id));
+      if (opp) orthogonalNeighbors(opp.x, opp.y, s.gridSize).forEach(function (d) {
+        var k = d[0] + ',' + d[1];
+        if (!seen[k] && !(d[0] === pc.x && d[1] === pc.y)) { seen[k] = true; out.push(d); }
+      });
+      return out;
+    }
+    return moveDestinations(pc.x, pc.y, s.moveModifier, s.gridSize);
+  };
+  // Esposto per UI/CPU (evidenziazione abbinamenti con il modificatore corrente).
+  Game.prototype.moveDestinationsFor = function (id) { return this._moveDestList(id); };
+
   Game.prototype.legalMoves = function (id) {
     var s = this.state;
     var pc = this.pawnCell(id);
@@ -385,7 +424,7 @@
     var revealed = this.availableRevealed(id);
     var self = this;
     var out = [];
-    var dests = moveDestinations(pc.x, pc.y, s.moveModifier, s.gridSize);
+    var dests = this._moveDestList(id);
     for (var i = 0; i < dests.length; i++) {
       var cell = s.grid[dests[i][0]][dests[i][1]];
       var okIds = [];
@@ -400,7 +439,7 @@
     this._assertAction('move', id);
     var pc = this.pawnCell(id);
     var dest = s.grid[x][y];
-    var legal = moveDestinations(pc.x, pc.y, s.moveModifier, s.gridSize).some(function (d) { return d[0] === x && d[1] === y; });
+    var legal = this._moveDestList(id).some(function (d) { return d[0] === x && d[1] === y; });
     if (!legal) throw new Error('Casella non raggiungibile con questo movimento.');
     var card = findCard(this.availableRevealed(id), cardId);
     if (!card || !this._matches(id, card, dest)) throw new Error('Carta non valida per questa casella.');
@@ -418,7 +457,7 @@
     var info = this._applyArrival(id, dest, card);
     this._chain = [this._step_afterMove(id)];
     if (info.figureEliminated) this._postFigureDraw(id);
-    if (info.centerObject || info.targetObject) this._chain.unshift(this._step_altObject(id));
+    if (info.centerObject || info.targetObject || info.bonusObject) this._chain.unshift(this._step_altObject(id));
     if (info.runnerFigure) this._chain.unshift(this._step_runnerFigure(id, info.runnerFigure.x, info.runnerFigure.y));
     this._advanceChain();
     return { type: 'moved' };
@@ -430,16 +469,11 @@
     this._afterMoveAction(id);
   };
 
-  // Raggiungimento della riga avversaria (movimento volontario). Ritorna true se apre una scelta oggetto (C).
-  // A/B: +5 e fine partita a fine round. C: una tantum, scelta oggetto, nessun punto, nessuna fine.
+  // Raggiungimento della riga avversaria (movimento volontario).
+  // A/B: +5 e fine partita a fine round. C: nessun effetto (la riga avversaria non conta).
   Game.prototype._applyTargetRow = function (id) {
     var s = this.state, p = s.players[id];
     if (s.ruleset === 'C') {
-      if (s.modules.objects && !p.targetObjectUsed) {
-        p.targetObjectUsed = true;
-        this._log(id + ' raggiunge la riga avversaria: scelta oggetto (una tantum).');
-        return true;
-      }
       this._log(id + ' raggiunge la riga avversaria (nessun effetto).');
       return false;
     }
@@ -447,29 +481,40 @@
     this._log(id + ' raggiunge la RIGA-BERSAGLIO: +5. Fine partita a fine round.');
     return false;
   };
+  // Ruleset C: la prima pedina che entra in una cella bonus ottiene una scelta oggetto (una tantum
+  // per cella). Segna la cella come "riscossa". Ritorna true se ha aperto la scelta oggetto.
+  Game.prototype._maybeBonusObject = function (cell) {
+    var s = this.state;
+    if (s.ruleset !== 'C' || !s.modules.objects) return false;
+    if (!isPositionBonusCell(cell.x, cell.y, s.gridSize) || cell.bonusTaken) return false;
+    cell.bonusTaken = true;
+    this._log('Cella bonus [' + cell.x + ',' + cell.y + ']: scelta oggetto.');
+    return true;
+  };
 
   // Effetti d'arrivo (movimento VOLONTARIO). Ritorna {figureEliminated}.
   Game.prototype._applyArrival = function (id, cell, moveCard) {
     var s = this.state, p = s.players[id];
     var from = this.pawnCell(id); if (from) from.pawn = null;
     this._recordTrail('move', id, from, cell);
-    var figureEliminated = false, runnerFigure = false, targetObject = false, centerObject = false;
+    var figureEliminated = false, runnerFigure = false, targetObject = false, centerObject = false, bonusObject = false;
 
     // moveCard può essere null (potere brawler: le 3 carte sono già state scartate → nessun trophy).
     if (cell.faceDown) {
       cell.pawn = id;
+      bonusObject = this._maybeBonusObject(cell); // Ruleset C: cella bonus (anche se coperta)
       if (isTargetCell(id, cell, s.gridSize)) targetObject = this._applyTargetRow(id);
-      else this._log(id + ' entra su [' + cell.x + ',' + cell.y + '] (carta coperta, nessun punto).');
+      else if (!bonusObject) this._log(id + ' entra su [' + cell.x + ',' + cell.y + '] (carta coperta, nessun punto).');
       if (moveCard) this._discard(moveCard);
-      return { figureEliminated: false, targetObject: targetObject };
+      return { figureEliminated: false, targetObject: targetObject, bonusObject: bonusObject };
     }
     var gotTrophy = false;
     if (isCenter(cell.x, cell.y, s.gridSize)) {
       var centerPts = (s.ruleset === 'C') ? 0 : 5;
       if (centerPts) p.score += centerPts;
       p.matchedCenter = true; if (moveCard) p.trophies.push(moveCard); cell.faceDown = true; gotTrophy = true;
-      // Ruleset A e C: conquistare il centro dà la scelta di 1 oggetto.
-      if (s.altMatch && s.modules.objects) centerObject = true;
+      // Ruleset A: conquistare il centro dà la scelta di 1 oggetto (in C la gestisce la logica "cella bonus").
+      if (s.altMatch && s.ruleset !== 'C' && s.modules.objects) centerObject = true;
       this._log(id + ' conquista il CENTRO' + (centerPts ? ': +' + centerPts + ' (una tantum)' : ' (nessun punto)') + (centerObject ? ', scelta oggetto.' : '.'));
     } else {
       if (Deck.isFigure(cell.card)) {
@@ -491,9 +536,11 @@
       if (isTargetCell(id, cell, s.gridSize)) targetObject = this._applyTargetRow(id);
     }
     cell.pawn = id;
-    if (!gotTrophy && !isCenter(cell.x, cell.y, s.gridSize) && !isTargetCell(id, cell, s.gridSize)) this._log(id + ' muove su [' + cell.x + ',' + cell.y + '].');
+    // Ruleset C: scelta oggetto entrando in una cella bonus non ancora riscossa (centro incluso).
+    bonusObject = this._maybeBonusObject(cell);
+    if (!gotTrophy && !isCenter(cell.x, cell.y, s.gridSize) && !isTargetCell(id, cell, s.gridSize) && !bonusObject) this._log(id + ' muove su [' + cell.x + ',' + cell.y + '].');
     if (!gotTrophy && moveCard) this._discard(moveCard); // carte non-trophy → scarti
-    return { figureEliminated: figureEliminated, centerObject: centerObject, targetObject: targetObject, runnerFigure: runnerFigure };
+    return { figureEliminated: figureEliminated, centerObject: centerObject, targetObject: targetObject, bonusObject: bonusObject, runnerFigure: runnerFigure };
   };
 
   // ================================================================== CLASH
@@ -538,8 +585,21 @@
     else if (!attCard) outcome = 'defender';
     else if (!defCard) outcome = 'attacker';
     else outcome = resolveClash(attCard, defCard);
+    // Log del clash: "N: 7O x S: 8B - Vince il clash B" (semi: O=Ori, B=Bastoni, C=Coppe, S=Spade).
     function lbl(c) { return c ? (c.value + c.suit[0].toUpperCase()) : '—'; }
-    this._log('Clash: ' + pc.attackerId + ' ' + lbl(attCard) + ' vs ' + pc.defenderId + ' ' + lbl(defCard) + ' → ' + outcome + '.');
+    var nCard = pc.attackerId === 'N' ? attCard : defCard;
+    var sCard = pc.attackerId === 'N' ? defCard : attCard;
+    var winnerCard = outcome === 'attacker' ? attCard : (outcome === 'defender' ? defCard : null);
+    var resTxt = (outcome === 'tie') ? 'Pareggio' : ('Vince il clash ' + winnerCard.suit[0].toUpperCase());
+    this._log('N: ' + lbl(nCard) + ' x S: ' + lbl(sCard) + ' - ' + resTxt);
+    // Risultato del clash per la UI (finestra di confronto). Fuori dallo stato: non entra negli snapshot.
+    this._clashResult = {
+      token: (this._clashToken = (this._clashToken || 0) + 1),
+      attackerId: pc.attackerId, defenderId: pc.defenderId,
+      attCard: attCard ? { value: attCard.value, suit: attCard.suit } : null,
+      defCard: defCard ? { value: defCard.value, suit: defCard.suit } : null,
+      outcome: outcome
+    };
     var self = this, dest = s.grid[pc.x][pc.y], attackerId = pc.attackerId;
 
     // Bonus vittoria clash: +5 a chi vince, sia come attaccante sia come difensore.
@@ -558,7 +618,7 @@
         this._step_finishClashMove(attackerId)
       ];
       if (info.figureEliminated) this._postFigureDraw(pc.attackerId);
-      if (info.centerObject || info.targetObject) this._chain.unshift(this._step_altObject(pc.attackerId));
+      if (info.centerObject || info.targetObject || info.bonusObject) this._chain.unshift(this._step_altObject(pc.attackerId));
       if (info.runnerFigure) this._chain.unshift(this._step_runnerFigure(pc.attackerId, info.runnerFigure.x, info.runnerFigure.y));
       this._advanceChain();
     } else {
@@ -758,6 +818,12 @@
     var self = this;
     return function () {
       var hadPawn = cell.pawn;
+      // Regola: una cella con una pedina non può essere distrutta se non ci sono celle libere
+      // ortogonali dove ricollocare la pedina (altrimenti resterebbe senza casella).
+      if (hadPawn && self._relocationOptions(cell.x, cell.y).length === 0) {
+        self._log(id + ' HOMING MISSILE: la cella [' + cell.x + ',' + cell.y + '] non è distrutta (pedina senza celle libere adiacenti).');
+        return;
+      }
       cell.card = null; cell.faceDown = false; cell.destroyed = true;
       self._log(id + ' HOMING MISSILE: distrugge la cella [' + cell.x + ',' + cell.y + '].');
       if (hadPawn) {
@@ -766,7 +832,7 @@
         if (opts.length) {
           self.state.subPhase = 'forced-reloc';
           self.state.pendingForced = { kind: 'homing', pawnId: hadPawn, chooserId: id, from: { x: cell.x, y: cell.y }, optional: false };
-        } else { self._log('Nessuna destinazione: la pedina resta ferma.'); }
+        }
       }
     };
   };
@@ -835,8 +901,53 @@
     var ri = p.revealedIds.indexOf(card.id); if (ri !== -1) p.revealedIds.splice(ri, 1);
     this._discard(card);
     this._log(pt.playerId + ' scarta ' + card.value + card.suit[0].toUpperCase() + ' come costo dell\'oggetto.');
-    s.moveModifier = pt.modifier; // arma jetpack/jump per il movimento
+    s.moveModifier = pt.modifier; // arma jetpack/jump/grapple per il movimento
     s.pendingToolDiscard = null; s.subPhase = null;
+  };
+
+  // ---- Teleport (Ruleset C) ----
+  // Destinazioni valide: carte scoperte del campo con lo stesso valore della carta su cui si trova
+  // la pedina, senza la pedina avversaria (e diverse dalla cella attuale).
+  Game.prototype._teleportTargetsFor = function (playerId) {
+    var s = this.state, pc = this.pawnCell(playerId), out = [];
+    if (!pc || !pc.card) return out;
+    var val = pc.card.value;
+    for (var x = 1; x <= s.gridSize; x++) for (var y = 1; y <= s.gridSize; y++) {
+      var c = s.grid[x][y];
+      if (c.destroyed || !c.card || c.faceDown) continue;
+      if (x === pc.x && y === pc.y) continue;
+      if (c.pawn === otherPlayer(playerId)) continue;
+      if (c.card.value === val) out.push({ x: x, y: y, key: cellKey(x, y) });
+    }
+    return out;
+  };
+  Game.prototype.teleportTargets = function () {
+    var s = this.state, pt = s.pendingTeleport;
+    return (s.subPhase === 'teleport-select' && pt) ? this._teleportTargetsFor(pt.playerId) : [];
+  };
+  Game.prototype.teleportTo = function (x, y) {
+    var s = this.state, pt = s.pendingTeleport;
+    if (s.subPhase !== 'teleport-select' || !pt) throw new Error('Nessun teleport in corso.');
+    if (!this.teleportTargets().some(function (o) { return o.x === x && o.y === y; })) throw new Error('Destinazione teleport non valida.');
+    var id = pt.playerId, from = this.pawnCell(id), dest = s.grid[x][y];
+    if (from) from.pawn = null;
+    dest.pawn = id;
+    this._recordTrail('move', id, from, dest);
+    this._log(id + ' usa Teleport: si sposta su [' + x + ',' + y + '].');
+    s.pendingTeleport = null; s.subPhase = null;
+    this._afterMoveAction(id); // il teleport consuma l'azione di movimento
+  };
+
+  // ---- Grappling Hook (Ruleset C) ----
+  // C'è almeno una casella ortogonalmente adiacente alla pedina avversaria dove poter arrivare?
+  Game.prototype._grappleHasTarget = function (playerId) {
+    var s = this.state, opp = this.pawnCell(otherPlayer(playerId)), pc = this.pawnCell(playerId);
+    if (!opp || !pc) return false;
+    return orthogonalNeighbors(opp.x, opp.y, s.gridSize).some(function (d) {
+      if (d[0] === pc.x && d[1] === pc.y) return false;
+      var cell = s.grid[d[0]][d[1]];
+      return !cell.destroyed && cell.card && cell.pawn !== playerId;
+    });
   };
 
   Game.prototype.usableObjects = function (playerId) {
@@ -855,6 +966,8 @@
         // Un modificatore già armato (jetpack/jump/hook/homing) blocca altri oggetti-modificatore, non gli "immediati".
         if (mod && o.type !== 'energy_boost' && o.type !== 'energy_drain') return false;
         if ((o.type === 'jetpack' || o.type === 'jump') && !self._canPayToolCost(playerId)) return false; // serve una carta scelta extra da scartare
+        if (o.type === 'grapple' && (!self._canPayToolCost(playerId) || !self._grappleHasTarget(playerId))) return false; // costo carta + bersaglio adiacente all'avversario
+        if (o.type === 'teleport' && self._teleportTargetsFor(playerId).length === 0) return false; // serve almeno una carta di ugual valore
         if (o.type === 'randomizer' && s.deck.length === 0 && s.discard.length === 0) return false; // serve almeno una carta
         if (o.type === 'energy_boost' && s.deck.length === 0 && s.discard.length === 0) return false; // niente da pescare
         if (o.type === 'energy_drain' && s.players[otherPlayer(playerId)].revealedIds.length === 0) return false; // niente da rubare: l'avversario non ha carte scelte
@@ -877,6 +990,8 @@
     switch (obj.type) {
       case 'jetpack': this._openToolDiscard(playerId, 'jetpack'); break; // costo: il giocatore sceglie la carta da scartare
       case 'jump': this._openToolDiscard(playerId, 'jump'); break;
+      case 'grapple': this._openToolDiscard(playerId, 'grapple'); break; // costo carta, poi arma il modificatore 'grapple'
+      case 'teleport': s.subPhase = 'teleport-select'; s.pendingTeleport = { playerId: playerId }; break;
       case 'hook': s.attackModifier = 'hook'; break;                     // armato per l'attacco
       case 'homing_missile': s.attackModifier = 'homing'; break;
       case 'rush_juice': s.players[playerId].pendingActions = { moves: 2, attacks: 0 }; s.selectObjectUsed[playerId] = true; break;
@@ -1097,8 +1212,7 @@
     var s = this.state, out = [];
     if (!this.canBrawler(playerId)) return out;
     if (s.phase === 'move') {
-      var pc = this.pawnCell(playerId);
-      moveDestinations(pc.x, pc.y, s.moveModifier, s.gridSize).forEach(function (d) {
+      this._moveDestList(playerId).forEach(function (d) {
         var cell = s.grid[d[0]][d[1]];
         if (cell.destroyed || cell.pawn === otherPlayer(playerId)) return; // no distrutte, no clash (0 carte)
         out.push({ x: d[0], y: d[1], key: cellKey(d[0], d[1]) });
@@ -1121,7 +1235,7 @@
       var info = this._applyArrival(playerId, cell, null); // moveCard null → nessun trophy
       this._chain = [this._step_afterMove(playerId)];
       if (info.figureEliminated) this._postFigureDraw(playerId);
-      if (info.centerObject || info.targetObject) this._chain.unshift(this._step_altObject(playerId));
+      if (info.centerObject || info.targetObject || info.bonusObject) this._chain.unshift(this._step_altObject(playerId));
       this._advanceChain();
     } else {
       this._recordTrail('shot', playerId, this.pawnCell(playerId), cell);
@@ -1169,21 +1283,23 @@
     this._afterAttackAction(pid);
   };
 
-  // ---- Barrage ----
+  // ---- Barrage ---- (una singola cella; non può colpire celle con una pedina)
   Game.prototype.barrageFirstOptions = function () {
     var s = this.state, out = [];
     if (s.subPhase !== 'barrage-first') return out;
-    for (var x = 1; x <= s.gridSize; x++) for (var y = 1; y <= s.gridSize; y++) { if (!s.grid[x][y].destroyed) out.push({ x: x, y: y, key: cellKey(x, y) }); }
+    for (var x = 1; x <= s.gridSize; x++) for (var y = 1; y <= s.gridSize; y++) {
+      var c = s.grid[x][y];
+      if (!c.destroyed && !c.pawn) out.push({ x: x, y: y, key: cellKey(x, y) });
+    }
     return out;
   };
   Game.prototype.barrageFirst = function (x, y) {
     var s = this.state;
     if (s.subPhase !== 'barrage-first') throw new Error('Nessun barrage in corso.');
-    if (s.grid[x][y].destroyed) throw new Error('Cella non valida.');
+    var c = s.grid[x][y];
+    if (c.destroyed || c.pawn) throw new Error('Cella non valida (distrutta o con pedina).');
     s.pendingBarrage.first = { x: x, y: y };
-    // Se la prima cella non ha vicini validi, si risolve con la sola prima (fallback anti-blocco).
-    if (this._barrageNextOptions([s.pendingBarrage.first]).length === 0) this._barrageResolve();
-    else s.subPhase = 'barrage-second';
+    this._barrageResolve(); // barrage colpisce una singola cella
   };
   // Celle valide adiacenti (ortogonali) a una qualsiasi delle celle già scelte (esclusi centro/pedina/distrutte/già scelte).
   Game.prototype._barrageNextOptions = function (anchors) {
@@ -1226,14 +1342,11 @@
   };
   Game.prototype._barrageResolve = function () {
     var s = this.state, pb = s.pendingBarrage, pid = pb.playerId;
-    var cells = [pb.first, pb.second, pb.third].filter(Boolean);
-    var pawn1 = s.grid[pb.first.x][pb.first.y].pawn; // solo la 1ª può avere una pedina
-    this._log(pid + ' usa Barrage: distrugge ' + cells.map(function (a) { return '[' + a.x + ',' + a.y + ']'; }).join(', ') + '.');
-    cells.forEach(function (a) { var c = s.grid[a.x][a.y]; c.card = null; c.faceDown = false; c.destroyed = true; });
+    var a = pb.first, c = s.grid[a.x][a.y];
+    this._log(pid + ' usa Barrage: distrugge [' + a.x + ',' + a.y + '].');
+    c.card = null; c.faceDown = false; c.destroyed = true;
     s.pendingBarrage = null; s.subPhase = null;
-    this._chain = [];
-    if (pawn1) this._chain.push(this._step_relocatePawn(pawn1, { x: pb.first.x, y: pb.first.y }));
-    this._chain.push(this._step_afterAttack(pid));
+    this._chain = [this._step_afterAttack(pid)];
     this._advanceChain();
   };
 
@@ -1319,10 +1432,8 @@
     if (s.ruleset === 'C') {
       ['N', 'S'].forEach(function (id) {
         var pc = self.pawnCell(id); if (!pc) return;
-        if (s.gridSize === 4) {
-          if (isBonusCell(pc.x, pc.y, 4)) { s.players[id].score += 2; self._log(id + ' a fine turno è su una cella bonus [' + pc.x + ',' + pc.y + ']: +2.'); }
-        } else if (isCenter(pc.x, pc.y, 5)) { s.players[id].score += 3; self._log(id + ' a fine turno è sul CENTRO: +3.'); }
-        else if (Math.abs(pc.x - 3) + Math.abs(pc.y - 3) === 1) { s.players[id].score += 1; self._log(id + ' a fine turno è adiacente al centro: +1.'); }
+        var pts = positionBonusPoints(pc.x, pc.y, s.gridSize);
+        if (pts > 0) { s.players[id].score += pts; self._log(id + ' a fine turno è su una cella bonus [' + pc.x + ',' + pc.y + ']: +' + pts + '.'); }
       });
     }
     ['N', 'S'].forEach(function (id) {
@@ -1339,7 +1450,7 @@
       // Reset dei poteri personaggio a fine round.
       p.tacticianOpen = false;
     });
-    if (s.endTriggered || s.round === 9) { this._finishGame(); return; }
+    if (s.endTriggered || s.round >= s.maxRounds) { this._finishGame(); return; }
 
     s.firstPlayer = otherPlayer(s.firstPlayer);
     // Ogni giocatore inizia il turno con 6 carte tra cui scegliere: si pesca sempre fino a 6.
@@ -1420,6 +1531,7 @@
     createGame: createGame, Game: Game,
     canMatch: canMatch, resolveClash: resolveClash, computeResult: computeResult,
     orthogonalNeighbors: orthogonalNeighbors, diagonalNeighbors: diagonalNeighbors,
-    moveDestinations: moveDestinations, isCenter: isCenter, isBonusCell: isBonusCell, cellKey: cellKey
+    moveDestinations: moveDestinations, isCenter: isCenter, isBonusCell: isBonusCell,
+    isPositionBonusCell: isPositionBonusCell, positionBonusPoints: positionBonusPoints, cellKey: cellKey
   };
 });
