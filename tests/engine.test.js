@@ -784,10 +784,10 @@ console.log('# Ruleset C: centro/riga senza punti (scelta oggetto), controllo ce
   eq(s3.players.S.score - scS, 1, 'Ruleset C: pedina adiacente al centro a fine turno +1');
 })();
 
-// -------------------------------------------------------------------- Bonus vittoria clash (+5)
-console.log('# Bonus vittoria clash: +5 all\'attaccante e +5 al difensore che vince');
+// -------------------------------------------------------------------- Bonus vittoria clash (+3 solo attaccante) + spostamento
+console.log('# Clash movimento: +3 solo all\'attaccante; l\'attaccante ricolloca il difensore; difensore/pareggio nessuno si muove');
 (function () {
-  // Attaccante vince → +5 all'attaccante (carte del clash prese dalla riserva).
+  // Attaccante vince → +3 all'attaccante; è l'attaccante a ricollocare il difensore (obbligatorio).
   var g = Engine.createGame({ rng: makeRng(11), firstPlayer: 'N' });
   var s = g.state;
   g.pawnCell('S').pawn = null; g.getCell(2, 1).pawn = 'S'; g.getCell(2, 1).card = { id: 'c21', value: 4, suit: 'coppe' }; g.getCell(2, 1).faceDown = false;
@@ -798,9 +798,16 @@ console.log('# Bonus vittoria clash: +5 all\'attaccante e +5 al difensore che vi
   var scN0 = s.players.N.score;
   g.move('N', 2, 1, 'n4');
   g.clashChoose('N', 'r9'); g.clashChoose('S', 's3'); // 9 > 3 → attaccante vince
-  eq(s.players.N.score - scN0, 5, 'clash: attaccante vincente +5');
+  eq(s.players.N.score - scN0, 3, 'clash: attaccante vincente +3');
+  eq(s.subPhase, 'clash-reloc', 'attaccante vince: ricollocazione del difensore');
+  eq(s.pendingClash.relocatorId, 'N', 'è l\'attaccante a ricollocare il difensore');
+  eq(s.pendingClash.relocateOptional, false, 'ricollocazione obbligatoria');
+  eq(g.getCell(2, 1).pawn, 'N', 'attaccante entra sulla cella');
+  var opts = g.relocationOptions(); ok(opts.length > 0, 'opzioni di ricollocazione (adiacenti alla cella del difensore)');
+  g.clashRelocate(opts[0].x, opts[0].y);
+  eq(s.subPhase, null, 'clash concluso');
 
-  // Difensore vince → +5 al difensore.
+  // Difensore vince → nessun bonus, nessuno si muove.
   var g2 = Engine.createGame({ rng: makeRng(11), firstPlayer: 'N' });
   var s2 = g2.state;
   g2.pawnCell('S').pawn = null; g2.getCell(2, 1).pawn = 'S'; g2.getCell(2, 1).card = { id: 'd21', value: 4, suit: 'coppe' }; g2.getCell(2, 1).faceDown = false;
@@ -808,10 +815,50 @@ console.log('# Bonus vittoria clash: +5 all\'attaccante e +5 al difensore che vi
   s2.players.S.hand = [{ id: 'sX', value: 7, suit: 'bastoni' }, { id: 'sY', value: 8, suit: 'bastoni' }, { id: 'sZ', value: 6, suit: 'bastoni' }, { id: 's9', value: 9, suit: 'bastoni' }];
   s2.players.N.revealedIds = ['n4', 'nA', 'nB']; s2.players.S.revealedIds = ['sX', 'sY', 'sZ'];
   s2.phase = 'move'; s2.subPhase = null; s2.activePlayer = 'N'; s2.actionsLeft = 1; s2.moveModifier = null;
-  var scS0 = s2.players.S.score;
+  var scS0 = s2.players.S.score, scN2 = s2.players.N.score;
+  var nFrom = g2.pawnCell('N');
   g2.move('N', 2, 1, 'n4');
   g2.clashChoose('N', 'r2'); g2.clashChoose('S', 's9'); // 2 < 9 → difensore vince
-  eq(s2.players.S.score - scS0, 5, 'clash: difensore vincente +5');
+  eq(s2.players.S.score - scS0, 0, 'clash: difensore vincente NON prende bonus');
+  eq(s2.players.N.score - scN2, 0, 'clash: attaccante perdente nessun punto');
+  ok(s2.subPhase !== 'clash-reloc', 'difensore vince: nessuna ricollocazione');
+  eq(g2.getCell(2, 1).pawn, 'S', 'difensore resta sulla sua cella');
+  eq(g2.pawnCell('N').x + ',' + g2.pawnCell('N').y, nFrom.x + ',' + nFrom.y, 'attaccante resta dov\'era');
+})();
+
+// -------------------------------------------------------------------- Clash su Attacco (opzione)
+console.log('# Clash su Attacco: attacco su pedina → clash, +3 solo se vince l\'attaccante, nessuno spostamento');
+(function () {
+  function setup(rngSeed) {
+    var g = Engine.createGame({ rng: makeRng(rngSeed), firstPlayer: 'N', clashOnAttack: true });
+    var s = g.state;
+    g.pawnCell('S').pawn = null; var tc = g.getCell(3, 1); tc.pawn = 'S'; tc.card = { id: 'tc', value: 4, suit: 'oro' }; tc.faceDown = false; tc.destroyed = false;
+    g.pawnCell('N').pawn = null; g.getCell(1, 3).pawn = 'N';
+    s.players.N.hand = [{ id: 'sh', value: 4, suit: 'oro' }, { id: 'ra', value: 5, suit: 'oro' }, { id: 'rb', value: 6, suit: 'oro' }, { id: 'rn', value: 9, suit: 'oro' }];
+    s.players.N.revealedIds = ['sh', 'ra', 'rb'];
+    s.players.S.hand = [{ id: 'sa', value: 2, suit: 'bastoni' }, { id: 'sb', value: 3, suit: 'bastoni' }, { id: 'sc', value: 4, suit: 'bastoni' }, { id: 'rs', value: 3, suit: 'bastoni' }];
+    s.players.S.revealedIds = ['sa', 'sb', 'sc'];
+    s.phase = 'attack'; s.subPhase = null; s.activePlayer = 'N'; s.actionsLeft = 1; s.attackModifier = null;
+    return g;
+  }
+  // Attaccante vince (9 > 3) → +3, nessuno spostamento.
+  var g = setup(21), s = g.state, sc0 = s.players.N.score, nPos = g.pawnCell('N');
+  var r = g.shoot('N', 3, 1, 'sh');
+  eq(r.type, 'clash', 'attacco su pedina → clash');
+  g.clashChoose('N', 'rn'); g.clashChoose('S', 'rs');
+  eq(s.players.N.score - sc0, 3, 'attack-clash: attaccante vince +3');
+  eq(g.getCell(3, 1).pawn, 'S', 'attack-clash: il difensore non si sposta');
+  eq(g.pawnCell('N').x + ',' + g.pawnCell('N').y, nPos.x + ',' + nPos.y, 'attack-clash: l\'attaccante non si sposta');
+  ok(g._clashResult && g._clashResult.outcome === 'attacker', 'attack-clash: risultato per il modale impostato');
+
+  // Difensore vince (3 < 9) → nessun punto.
+  var g2 = setup(22), s2 = g2.state, sc2 = s2.players.N.score, sc2s = s2.players.S.score;
+  s2.players.N.hand.push({ id: 'rn2', value: 2, suit: 'oro' }); // riserva bassa
+  s2.players.N.hand = s2.players.N.hand.filter(function (c) { return c.id !== 'rn'; });
+  g2.shoot('N', 3, 1, 'sh');
+  g2.clashChoose('N', 'rn2'); g2.clashChoose('S', 'rs'); // 2 < 3 → difensore vince
+  eq(s2.players.N.score - sc2, 0, 'attack-clash: attaccante perde, 0 punti');
+  eq(s2.players.S.score - sc2s, 0, 'attack-clash: difensore vince ma 0 punti');
 })();
 
 // -------------------------------------------------------------------- Ruleset C 4×4 (celle bonus)

@@ -95,6 +95,11 @@ suite('Ruleset C 4×4 + Teleport/Grapple', function (seed) {
 });
 suite('Ruleset C 11 round', function (seed) { return { rng: makeRng(seed), ruleset: 'C', maxRounds: 11, modules: { objects: true } }; });
 suite('Ruleset C 7 round', function (seed) { return { rng: makeRng(seed), ruleset: 'C', maxRounds: 7, modules: { objects: true } }; });
+suite('Clash su Attacco (Ruleset C)', function (seed) { return { rng: makeRng(seed), ruleset: 'C', clashOnAttack: true, modules: { objects: true } }; });
+suite('Clash su Attacco (Ruleset B) + Personaggi', function (seed) {
+  return { rng: makeRng(seed), clashOnAttack: true, modules: { characters: true, objects: true, powers: true },
+           characters: { N: CHARS[seed % 4], S: CHARS[(seed + 1) % 4] } };
+});
 
 console.log('\n=== Risultato CPU: ' + passed + ' passati, ' + failed + ' falliti ===');
 process.exit(failed ? 1 : 0);

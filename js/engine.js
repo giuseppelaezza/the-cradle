@@ -17,7 +17,7 @@
   'use strict';
 
   var DEFAULT_SIZE = 5;
-  var CLASH_WIN_BONUS = 5; // punti extra a chi vince un clash (attaccante o difensore)
+  var CLASH_WIN_BONUS = 3; // punti extra a chi vince un clash da ATTACCANTE (il difensore non prende bonus)
 
   // ------------------------------------------------------------------ Geometria
   // La griglia è quadrata size×size: 5 di default, 4 nella variante del Ruleset C.
@@ -205,11 +205,13 @@
     // Numero di round: 9 di default; solo nel Ruleset C è configurabile (7–11).
     var maxRounds = 9;
     if (ruleset === 'C' && opts.maxRounds) maxRounds = Math.max(7, Math.min(11, opts.maxRounds | 0));
+    // Regola opzionale "Clash su Attacco": attaccare una pedina avversaria apre un clash.
+    var clashOnAttack = !!opts.clashOnAttack;
 
     var state = {
       deck: deck, objectDeck: objectDeck, discard: [], objectDiscard: [],
       grid: grid, gridSize: gridSize, centerInitialSuit: centerInitialSuit,
-      suitMode: suitMode, currentSuit: centerInitialSuit, turnMode: turnMode, maxRounds: maxRounds,
+      suitMode: suitMode, currentSuit: centerInitialSuit, turnMode: turnMode, maxRounds: maxRounds, clashOnAttack: clashOnAttack,
       modules: modules, altMatch: altMatch, ruleset: ruleset,
       trail: [],               // storico geometrico di movimenti/spari (per l'overlay "Mostra azioni")
       players: players, firstPlayer: firstPlayer,
@@ -602,34 +604,39 @@
     };
     var self = this, dest = s.grid[pc.x][pc.y], attackerId = pc.attackerId;
 
-    // Bonus vittoria clash: +5 a chi vince, sia come attaccante sia come difensore.
-    if (outcome === 'attacker' || outcome === 'defender') {
-      var winnerId = outcome === 'attacker' ? pc.attackerId : pc.defenderId;
-      s.players[winnerId].score += CLASH_WIN_BONUS;
-      this._log(winnerId + ' vince il clash: +' + CLASH_WIN_BONUS + '.');
-    }
-
-    if (outcome === 'tie') { this._discard(pc.moveCard); this._chain = [this._step_finishClashMove(attackerId)]; this._advanceChain(); return; }
-
+    // Bonus vittoria clash: +CLASH_WIN_BONUS SOLO se vince l'ATTACCANTE (difensore e pareggio: niente).
     if (outcome === 'attacker') {
-      var info = this._applyArrival(pc.attackerId, dest, pc.moveCard);
-      this._chain = [
-        this._step_openReloc(pc.defenderId, pc.defenderId, { x: pc.x, y: pc.y }, false),
-        this._step_finishClashMove(attackerId)
-      ];
-      if (info.figureEliminated) this._postFigureDraw(pc.attackerId);
-      if (info.centerObject || info.targetObject || info.bonusObject) this._chain.unshift(this._step_altObject(pc.attackerId));
-      if (info.runnerFigure) this._chain.unshift(this._step_runnerFigure(pc.attackerId, info.runnerFigure.x, info.runnerFigure.y));
-      this._advanceChain();
-    } else {
-      this._discard(pc.moveCard); // l'attaccante non arriva: la carta di movimento va agli scarti
-      var attCell = this.pawnCell(pc.attackerId);
-      this._chain = [
-        this._step_openReloc(pc.defenderId, pc.attackerId, { x: attCell.x, y: attCell.y }, true),
-        this._step_finishClashMove(attackerId)
-      ];
-      this._advanceChain();
+      s.players[pc.attackerId].score += CLASH_WIN_BONUS;
+      this._log(pc.attackerId + ' vince il clash: +' + CLASH_WIN_BONUS + '.');
     }
+
+    // ---- Clash da ATTACCO (regola opzionale "Clash su Attacco"): solo punti, nessuno spostamento. ----
+    if (pc.isAttack) {
+      this._discard(pc.moveCard); // la carta di attacco va agli scarti
+      s.pendingClash = null; s.subPhase = null;
+      this._afterAttackAction(attackerId);
+      return;
+    }
+
+    // ---- Clash da MOVIMENTO ----
+    // Pareggio o vittoria del difensore: nessuno si sposta (l'attaccante non arriva).
+    if (outcome === 'tie' || outcome === 'defender') {
+      this._discard(pc.moveCard);
+      this._chain = [this._step_finishClashMove(attackerId)];
+      this._advanceChain();
+      return;
+    }
+    // Vittoria dell'attaccante: arriva sulla cella; è l'ATTACCANTE a scegliere dove spostare il difensore
+    // (tra le celle ortogonalmente adiacenti alla cella conquistata).
+    var info = this._applyArrival(pc.attackerId, dest, pc.moveCard);
+    this._chain = [
+      this._step_openReloc(pc.attackerId, pc.defenderId, { x: pc.x, y: pc.y }, false),
+      this._step_finishClashMove(attackerId)
+    ];
+    if (info.figureEliminated) this._postFigureDraw(pc.attackerId);
+    if (info.centerObject || info.targetObject || info.bonusObject) this._chain.unshift(this._step_altObject(pc.attackerId));
+    if (info.runnerFigure) this._chain.unshift(this._step_runnerFigure(pc.attackerId, info.runnerFigure.x, info.runnerFigure.y));
+    this._advanceChain();
   };
 
   // Passo: apre una ricollocazione da clash (obbligatoria o facoltativa).
@@ -752,6 +759,18 @@
     removeCard(s.players[id].hand, cardId);
     this._recordTrail('shot', id, this.pawnCell(id), cell);
     var mod = s.attackModifier;
+
+    // Regola "Clash su Attacco": colpire una cella con la pedina avversaria (senza modificatore
+    // armato) apre un clash. Attaccante vince → +CLASH_WIN_BONUS; difensore/pareggio → nulla. Nessuno spostamento.
+    if (s.clashOnAttack && !mod && cell.pawn === otherPlayer(id)) {
+      s.subPhase = 'clash-cards';
+      s.pendingClash = { attackerId: id, defenderId: otherPlayer(id), x: x, y: y, moveCard: card, isAttack: true,
+                         attackerCardId: null, defenderCardId: null, whoChooses: id };
+      this._log(id + ' attacca la pedina di ' + otherPlayer(id) + ' su [' + x + ',' + y + '] → clash.');
+      this._clashAdvanceAuto();
+      return { type: 'clash' };
+    }
+
     var info = this._applyShot(id, cell, card, mod === 'homing');
 
     var chain = [];

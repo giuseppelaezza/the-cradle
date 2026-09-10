@@ -19,17 +19,37 @@
   // Dimensione della griglia corrente (5×5 o 4×4). Impostata a ogni cpuAct: la CPU
   // esegue una singola azione in modo sincrono, quindi un valore a livello di modulo è sicuro.
   var _SZ = 5;
+  var BONUS_OBJECT_VALUE = 2; // valore euristico della scelta oggetto data da una cella bonus non riscossa (Ruleset C)
   function isCenterC(x, y) { return _SZ === 5 && x === 3 && y === 3; }
   function targetRow(id) { return id === 'N' ? _SZ : 1; }
   function distToTarget(id, y) { return Math.abs(y - targetRow(id)); }
   function other(id) { return id === 'N' ? 'S' : 'N'; }
   function bel(game, id) { return game.state.players[id].belongingSuit; }
   function suit(game) { return game.state.currentSuit; }
+  // Punti-posizione di una cella nel Ruleset C (+1/+2/+3 a fine turno), via engine.
+  function posBonus(x, y) { return Engine.positionBonusPoints ? Engine.positionBonusPoints(x, y, _SZ) : 0; }
+  function isBonusC(x, y) { return Engine.isPositionBonusCell ? Engine.isPositionBonusCell(x, y, _SZ) : false; }
+  // Distanza (Manhattan) dalla cella bonus più vicina: usata per orientare la CPU verso la zona bonus.
+  function nearestBonusDist(x, y) {
+    var best = 99;
+    for (var bx = 1; bx <= _SZ; bx++) for (var by = 1; by <= _SZ; by++) {
+      if (isBonusC(bx, by)) { var d = Math.abs(bx - x) + Math.abs(by - y); if (d < best) best = d; }
+    }
+    return best;
+  }
 
   function arrivalValue(game, id, x, y) {
-    var cell = game.getCell(x, y);
-    if (!cell.card || cell.destroyed || cell.faceDown) return { pts: 0, endsGame: false };
-    var alt = game.state.altMatch, pts = 0, ends = false;
+    var cell = game.getCell(x, y), s = game.state;
+    if (cell.destroyed) return { pts: 0, endsGame: false };
+    // Ruleset C: niente punti immediati da centro/riga; conta il punteggio di posizione (a fine turno)
+    // della cella d'arrivo, più il valore della scelta oggetto se è una cella bonus non ancora riscossa.
+    if (s.ruleset === 'C') {
+      var posPts = posBonus(x, y), v = posPts;
+      if (posPts > 0 && s.modules.objects && !cell.bonusTaken) v += BONUS_OBJECT_VALUE;
+      return { pts: v, endsGame: false };
+    }
+    if (!cell.card || cell.faceDown) return { pts: 0, endsGame: false };
+    var alt = s.altMatch, pts = 0, ends = false;
     if (isCenterC(x, y)) pts += 5;
     else {
       if (Deck.isFigure(cell.card) && !alt) pts += Deck.figurePoints(cell.card); // altMatch: muovere su figura non dà punti
@@ -90,7 +110,9 @@
         moveCardId = minValueCard(matchCards).id;
         var av = arrivalValue(game, id, m.x, m.y); value = av.pts;
         if (av.endsGame && (me.score + av.pts) <= opp.score) value -= 50;
-        value += (distToTarget(id, pawn.y) - distToTarget(id, m.y)) * 0.2;
+        // Bias di avvicinamento: nel Ruleset C verso la zona bonus, altrimenti verso la riga-bersaglio.
+        if (s.ruleset === 'C') value += (nearestBonusDist(pawn.x, pawn.y) - nearestBonusDist(m.x, m.y)) * 0.2;
+        else value += (distToTarget(id, pawn.y) - distToTarget(id, m.y)) * 0.2;
       }
       if (!best || value > best.value) best = { m: m, value: value, cardId: moveCardId };
     });
@@ -110,15 +132,25 @@
   // 4) Ricollocazione da clash
   function chooseRelocation(game) {
     var s = game.state, pc = s.pendingClash, opts = game.relocationOptions(), movee = pc.relocateePawn;
+    if (!opts.length) return { skip: true };
     if (movee === pc.relocatorId) { // la CPU sposta se stessa
       var meS = s.players[movee].score, opS = s.players[other(movee)].score, bestSelf = null;
       opts.forEach(function (o) { var ends = o.y === targetRow(movee); var sc = -distToTarget(movee, o.y) + (ends && meS <= opS ? -100 : 0); if (!bestSelf || sc > bestSelf.sc) bestSelf = { o: o, sc: sc }; });
       return { x: bestSelf.o.x, y: bestSelf.o.y };
     }
-    // sposta l'avversario (facoltativo): allontanalo dalla sua meta
-    var oppId = movee, cur = distToTarget(oppId, pc.relocateFrom.y), best = null;
-    opts.forEach(function (o) { var ends = o.y === targetRow(oppId); var cell = game.getCell(o.x, o.y); var fig = (!cell.faceDown && cell.card && Deck.isFigure(cell.card)) ? 3 : 0; var sc = distToTarget(oppId, o.y) + fig - (ends ? 100 : 0); if (!best || sc > best.sc) best = { o: o, sc: sc, d: distToTarget(oppId, o.y), fig: fig }; });
-    if (best && (best.d > cur || best.fig > 0) && best.sc > -50) return { x: best.o.x, y: best.o.y };
+    // Sposta l'avversario. Nel Ruleset C: allontanalo dalle celle bonus; altrimenti: dalla sua meta.
+    function pushScore(o) {
+      if (s.ruleset === 'C') return nearestBonusDist(o.x, o.y) - posBonus(o.x, o.y) * 2;
+      var cell = game.getCell(o.x, o.y); var fig = (!cell.faceDown && cell.card && Deck.isFigure(cell.card)) ? 3 : 0;
+      return distToTarget(movee, o.y) + fig - (o.y === targetRow(movee) ? 100 : 0);
+    }
+    var best = null;
+    opts.forEach(function (o) { var sc = pushScore(o); if (!best || sc > best.sc) best = { o: o, sc: sc }; });
+    // Ricollocazione obbligatoria (es. l'attaccante che vince il clash): scegli comunque la migliore.
+    if (!pc.relocateOptional) return { x: best.o.x, y: best.o.y };
+    // Facoltativa: ricolloca solo se migliora davvero.
+    var cur = s.ruleset === 'C' ? nearestBonusDist(pc.relocateFrom.x, pc.relocateFrom.y) : distToTarget(movee, pc.relocateFrom.y);
+    if (best.sc > cur) return { x: best.o.x, y: best.o.y };
     return { skip: true };
   }
 

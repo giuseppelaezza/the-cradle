@@ -15,7 +15,7 @@
 
   // Stato della configurazione. I poteri seguono automaticamente il modulo Personaggi.
   var cfg = { opponent: 'cpu', suitMode: 'rotating', characters: true, objects: true, reshuffle: true, reshuffleCount: 2,
-              ruleset: 'C', gridSize: 5, turnMode: '1221', maxRounds: 9, objectMode: 'random', objectSelection: [], charN: 'runner', charS: 'brawler' };
+              ruleset: 'C', gridSize: 5, turnMode: '1221', maxRounds: 9, clashOnAttack: true, objectMode: 'random', objectSelection: [], charN: 'runner', charS: 'brawler' };
 
   // Icona del seme (SVG inline, colorata dal CSS come in partita).
   function suitIconEl(suit) { var w = h('span', 'suit-ic s-' + suit); if (Suits) w.innerHTML = Suits.svg(suit); return w; }
@@ -105,6 +105,7 @@
     var addl = h('div', 'cfg-row');
     addl.appendChild(checkbox('Personaggi', cfg.characters, function (v) { cfg.characters = v; renderConfig(); }, 'Ogni giocatore ha un personaggio con seme di appartenenza, oggetti di partenza e potere.'));
     addl.appendChild(checkbox('Mulligan', cfg.reshuffle, function (v) { cfg.reshuffle = v; renderConfig(); }, 'Consente di scartare 1+ carte scelte e ripescarne altrettante (usi limitati per partita).'));
+    addl.appendChild(checkbox('Clash su Attacco', cfg.clashOnAttack, function (v) { cfg.clashOnAttack = v; renderConfig(); }, 'Attaccando una pedina avversaria si apre un clash (carte a confronto): l\'attaccante vincente fa 3 punti, difensore o pareggio nessun punto. Nessuno spostamento.'));
     if (cfg.reshuffle) {
       var rc = h('select', 'cfg-select');
       rc.title = 'Numero di Mulligan per giocatore in una partita.';
@@ -309,6 +310,7 @@
       gridSize: cfg.ruleset === 'C' ? cfg.gridSize : 5,
       turnMode: cfg.turnMode,
       maxRounds: cfg.ruleset === 'C' ? cfg.maxRounds : 9,
+      clashOnAttack: cfg.clashOnAttack,
       objectSelection: useSelection ? cfg.objectSelection.slice() : null,
       characters: { N: cfg.charN, S: cfg.charS }
     };

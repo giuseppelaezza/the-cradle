@@ -100,8 +100,8 @@
       ? "\nIn **Ruleset C** i punti di **posizione** si contano a **fine turno** (§5.5). Le **caselle bonus** — quelle che a fine turno danno punti: il **centro** e le **4 caselle ortogonalmente adiacenti** al centro (nella variante **4×4**, le **4 caselle centrali**) — danno alla **prima** pedina che vi entra la **scelta di 1 oggetto tra 3**, **una sola volta per casella**. Finché il bonus di una casella non è stato riscosso, la casella mostra un **quadratino nero**. Gli effetti di casella valgono solo con **movimento scelto**, mai per spostamento forzato.\n\n"
       : "\nI **+5** del centro e della riga-bersaglio si ottengono **solo muovendo di tua scelta**, mai per spostamento forzato.\n\n") +
 "**Clash (la casella d'arrivo è occupata dall'altra pedina).** La carta del clash si sceglie **dalla riserva**: le carte **non scelte** nella fase di scelta carte (chi non ha carte di riserva non contesta e perde). Si confrontano: vince il **valore più alto**; a parità di valore vince il **seme più forte** (oro > spade > coppe > bastoni); se anche il seme è pari è **parità piena**. Dopo il confronto le carte del clash vanno agli **scarti**.\n\n" +
-"- **Vince l'attaccante:** avanza sulla casella; il **difensore** viene ricollocato (§5.4). **+5** a chi vince il clash.\n" +
-"- **Vince il difensore:** resta dov'è; può, se vuole, ricollocare l'**attaccante** (§5.4). **+5** a chi vince il clash.\n" +
+"- **Vince l'attaccante:** avanza sulla casella e ottiene **+3**; è **l'attaccante** a decidere dove ricollocare il **difensore**, in una casella **ortogonalmente adiacente** alla cella conquistata (§5.4).\n" +
+"- **Vince il difensore:** **nessuno si sposta** e nessun punto (l'attaccante resta dov'era).\n" +
 "- **Parità piena:** nessuno si sposta.";
     s.push(mov);
 
@@ -208,12 +208,18 @@
  : "| Muovere sulla casella centrale (una sola volta) | 5 |\n| Muovere sulla riga-bersaglio | 5 (termina la partita) |\n") +
 "| " + (ALT ? "Colpire in attacco" : "Abbinare o colpire") + " un 10 · 9 · 8 | 3 · 2 · 1 |\n" +
 "| Colpire la pedina avversaria | 5 |\n" +
-"| Vincere un clash (attaccante o difensore) | 5 |");
+"| Vincere un clash da attaccante | 3 |");
 
     s.push(
 "## 12. Regola opzionale: Mulligan\n\n" +
 "Se concordata a inizio partita, ogni giocatore ha un numero fisso di **Mulligan** (1, 2 o 3; di norma 2). " +
 "Durante la **propria scelta delle carte**, prima di fissare le 3 carte, puoi usare un Mulligan: **scarti da 1 a tutte** le carte della tua mano e ne **peschi altrettante** dal mazzo (se il mazzo finisce, si rimescolano gli scarti). Ogni uso consuma un Mulligan.");
+
+    s.push(
+"## 13. Regola opzionale: Clash su Attacco\n\n" +
+"Se attivata, **attaccare una casella occupata dalla pedina avversaria** apre un **clash** invece di dare i normali +5. " +
+"Entrambi scelgono una carta dalla **riserva** e la confrontano con le stesse regole del clash da movimento (valore più alto; a parità di valore il seme più forte). " +
+"Se vince **l'attaccante** ottiene **+3**; se vince il **difensore** o è **pareggio**, nessun punto. In ogni caso **nessuna pedina si sposta**.");
 
     return s.join("\n\n");
   }
