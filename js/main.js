@@ -54,9 +54,6 @@
     nr.onchange = function () { cfg.maxRounds = parseInt(nr.value, 10); };
     rsRow.appendChild(nr);
     sheet.appendChild(rsRow);
-    sheet.appendChild(h('p', 'cfg-desc', cfg.gridSize === 4
-      ? 'Griglia 4×4: le 4 CELLE BONUS centrali ([2,2],[2,3],[3,2],[3,3]) danno +2 a fine TURNO se le occupi; nessun centro. I PILOTI partono da [1,1] e [4,4].'
-      : 'Griglia 5×5: a fine TURNO +3 sul centro, +1 su una CELLA ORTOGONALE al centro. Vince chi ha più punti al termine dei ROUND.'));
 
     // TOOLS: DECK casuale o selezione manuale.
     sheet.appendChild(fieldLabel('TOOLS'));
@@ -79,19 +76,16 @@
     }
     sheet.appendChild(objRow);
 
-    // Regole addizionali
-    sheet.appendChild(fieldLabel('Regole addizionali'));
+    // Regole. ARM, REMIX e Clash su Attacco fanno sempre parte del regolamento:
+    // qui si sceglie solo il numero di usi di REMIX e la struttura del TURNO.
+    sheet.appendChild(fieldLabel('Regole'));
     var addl = h('div', 'cfg-row');
-    addl.appendChild(checkbox('ARM', cfg.characters, function (v) { cfg.characters = v; renderConfig(); }, 'Ogni PILOTA controlla un ARM con ARM SUIT, TOOL di partenza e SKILL.'));
-    addl.appendChild(checkbox('REMIX', cfg.reshuffle, function (v) { cfg.reshuffle = v; renderConfig(); }, 'In DEPLOY puoi SCARTARE 1+ carte della STACK e PESCARNE altrettante (usi limitati per partita).'));
-    addl.appendChild(checkbox('Clash su Attacco', cfg.clashOnAttack, function (v) { cfg.clashOnAttack = v; renderConfig(); }, 'Attaccando un ARM avversario si apre un CLASH: l\'attaccante vincente COLPISCE (fa 3 punti), difensore o pareggio nessun punto. Nessuno spostamento.'));
-    if (cfg.reshuffle) {
-      var rc = h('select', 'cfg-select');
-      rc.title = 'Numero di usi di REMIX per PILOTA in una partita.';
-      [1, 2, 3].forEach(function (n) { var op = h('option', null, String(n)); op.value = n; if (cfg.reshuffleCount === n) op.selected = true; rc.appendChild(op); });
-      rc.onchange = function () { cfg.reshuffleCount = parseInt(rc.value, 10); };
-      addl.appendChild(rc);
-    }
+    // Numero di usi di REMIX per PILOTA in una partita.
+    var rc = h('select', 'cfg-select');
+    rc.title = 'Numero di usi di REMIX per PILOTA in una partita.';
+    [1, 2, 3].forEach(function (n) { var op = h('option', null, n + ' REMIX'); op.value = n; if (cfg.reshuffleCount === n) op.selected = true; rc.appendChild(op); });
+    rc.onchange = function () { cfg.reshuffleCount = parseInt(rc.value, 10); };
+    addl.appendChild(rc);
     // Struttura del TURNO: ordine delle fasi di MOVIMENTO e ATTACCO.
     var ts = h('select', 'cfg-select');
     ts.title = 'Ordine delle fasi di MOVIMENTO e ATTACCO nel TURNO.';
@@ -105,12 +99,10 @@
       ? 'Struttura del TURNO: DEPLOY → MOVIMENTO G1 → MOVIMENTO G2 → ATTACCO G1 → ATTACCO G2 → Fine ROUND.'
       : 'Struttura del TURNO: DEPLOY → MOVIMENTO G1 → MOVIMENTO G2 → ATTACCO G2 → ATTACCO G1 → Fine ROUND.'));
 
-    // Scelta ARM (solo se modulo attivo).
-    if (cfg.characters) {
-      sheet.appendChild(fieldLabel('ARM'));
-      sheet.appendChild(charSelect('N', 'charN'));
-      sheet.appendChild(charSelect('S', 'charS'));
-    }
+    // Scelta ARM (sempre parte del regolamento).
+    sheet.appendChild(fieldLabel('ARM'));
+    sheet.appendChild(charSelect('N', 'charN'));
+    sheet.appendChild(charSelect('S', 'charS'));
 
     var startRow = h('div', 'start-row');
     var start = h('button', 'primary big-btn start-main', '▶ Inizia partita');
@@ -145,12 +137,6 @@
     var r = document.createElement('input'); r.type = 'radio'; r.name = name; r.checked = checked;
     r.onchange = function () { if (r.checked) onSel(); };
     l.appendChild(r); l.appendChild(document.createTextNode(' ' + label)); return l;
-  }
-  function checkbox(label, checked, onChange, title) {
-    var l = h('label', 'cfg-opt'); if (title) l.title = title;
-    var c = document.createElement('input'); c.type = 'checkbox'; c.checked = checked;
-    c.onchange = function () { onChange(c.checked); };
-    l.appendChild(c); l.appendChild(document.createTextNode(' ' + label)); return l;
   }
 
   function charSelect(playerId, cfgKey) {
@@ -450,12 +436,11 @@
     return [
       ['Griglia', cfg.gridSize + '×' + cfg.gridSize],
       ['ROUND', String(cfg.maxRounds)],
-      ['ARM (modulo)', cfg.characters ? 'sì' : 'no'],
       ['ARM N', cfg.charN === 'random' ? 'Random' : (Characters.get(cfg.charN) || {}).label],
       ['ARM S', cfg.charS === 'random' ? 'Random' : (Characters.get(cfg.charS) || {}).label],
       ['TOOLS', cfg.objectMode === 'select' ? ('Selezione (' + cfg.objectSelection.length + ')') : 'Random'],
-      ['REMIX', cfg.reshuffle ? (cfg.reshuffleCount + '/partita') : 'no'],
-      ['Clash su Attacco', cfg.clashOnAttack ? 'sì' : 'no'],
+      ['REMIX', cfg.reshuffleCount + '/partita'],
+      ['Turno', cfg.turnMode === '1212' ? '1-2-1-2' : '1-2-2-1'],
       ['Modalità', 'CPU vs CPU']
     ];
   }

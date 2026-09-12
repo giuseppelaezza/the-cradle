@@ -84,7 +84,7 @@
 
     s.push(
 "### 5.1 DEPLOY\n\n" +
-"Ognuno sceglie **in segreto 3 carte** dalla STACK e le rivela: sono la **STACK ATTIVA** (usata per MOVIMENTO e ATTACCO per tutto il ROUND). Le altre carte restano coperte nella **STACK DI RISERVA** (usata nei CLASH).");
+"Ognuno sceglie **in segreto 3 carte** dalla STACK e le rivela: sono la **STACK ATTIVA** (usata per MOVIMENTO e ATTACCO per tutto il ROUND). Le altre carte restano coperte nella **STACK DI RISERVA** (usata nei CLASH). Prima di fissare le 3 carte puoi usare un **REMIX** (§12).");
 
     s.push(
 "### 5.2 MOVIMENTO\n\n" +
@@ -105,7 +105,7 @@
 "### 5.3 ATTACCO\n\n" +
 "I PILOTI ATTACCANO **a TURNO** (con iniziativa divisa parte l'avversario del 1° Pilota, §5). Gioca una carta della STACK ATTIVA che fa **MATCH con una CELLA qualsiasi**.\n\n" +
 "**ATTACCARE una CELLA la DISATTIVA sempre** (anche se non è un OBIETTIVO). Effetti:\n\n" +
-"- **ARM avversario sulla CELLA:** **+5** (ATTACCARE il proprio ARM non dà nulla). *(Con l'opzione **Clash su Attacco** si apre invece un CLASH, §13.)*\n" +
+"- **ARM avversario sulla CELLA:** si apre un **CLASH da ATTACCO** (§13); ATTACCARE il proprio ARM non dà nulla.\n" +
 "- **OBIETTIVO ONLINE:** **+punti** (10 → 3, 9 → 2, 8 → 1) e **+1 trofeo**; scegli **[1] TOOL tra 3**. L'OBIETTIVO si DISATTIVA.\n" +
 "- **CELLA OFFLINE / carta 1–7:** si DISATTIVA, nessun punto.");
 
@@ -185,18 +185,17 @@
 "| Fine TURNO: ARM sul centro | 3 |\n" +
 "| Fine TURNO: ARM su CELLA BONUS (4×4) | 2 |\n" +
 "| COLPIRE un OBIETTIVO 10 · 9 · 8 | 3 · 2 · 1 |\n" +
-"| ATTACCARE l'ARM avversario | 5 |\n" +
-"| Vincere un CLASH da attaccante | 3 |");
+"| Vincere un CLASH da attaccante (MOVIMENTO o ATTACCO) | 3 |");
 
     s.push(
-"## 12. Opzione: REMIX\n\n" +
-"Se attivata, ogni PILOTA ha un numero fisso di usi di **REMIX** (1, 2 o 3; di norma 2). " +
+"## 12. REMIX\n\n" +
+"Ogni PILOTA ha un numero fisso di usi di **REMIX** per partita (**1, 2 o 3**; di norma **2**, configurabile in preparazione). " +
 "Durante il proprio **DEPLOY**, prima di fissare le 3 carte, puoi usare un REMIX: **SCARTI da 1 a tutte** le carte della STACK e ne **PESCHI altrettante** dal DECK. Ogni uso consuma un REMIX.");
 
     s.push(
-"## 13. Opzione: Clash su Attacco\n\n" +
-"Se attivata, **ATTACCARE una CELLA OCCUPATA dall'ARM avversario** apre un **CLASH** invece di dare i normali +5 — anche con **Granata** o **Spinta**. " +
-"Entrambi scelgono [1] carta dalla **STACK DI RISERVA** e la confrontano con le regole del CLASH da MOVIMENTO. " +
+"## 13. CLASH da ATTACCO\n\n" +
+"**ATTACCARE una CELLA OCCUPATA dall'ARM avversario** apre sempre un **CLASH** — anche con **Granata** o **Spinta**. " +
+"Entrambi scelgono [1] carta dalla **STACK DI RISERVA** e la confrontano con le regole del CLASH da MOVIMENTO (§5.2). " +
 "Se vince **l'attaccante** ottiene **+3** e il colpo si risolve normalmente (un OBIETTIVO si DISATTIVA, dà i suoi punti e la scelta di [1] TOOL; gli effetti di Granata/Spinta si applicano). " +
 "Se vince il **difensore** o è **pareggio**, il colpo è **parato**: nessun punto e nessun effetto. In nessun caso il CLASH da ATTACCO sposta gli ARM.");
 
