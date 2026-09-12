@@ -448,6 +448,7 @@ body.setup .sheet { padding-top: 14px; }
 .big { font-size: 44px; margin: 8px 0; text-align: center; }
 .win { color: var(--good); text-align: center; }
 .final-title { text-align: center; }
+.final-tiebreak { text-align: center; color: var(--muted); margin: 6px 0 2px; }
 .final-summary { text-align: center; color: var(--muted); margin: 4px 0 14px; }
 /* Schede statistiche di fine partita (stile allineato ai Batch Test). */
 .final-cards { display: flex; gap: 14px; flex-wrap: wrap; margin: 8px 0 18px; }
@@ -458,11 +459,15 @@ body.setup .sheet { padding-top: 14px; }
 .final-card-head .fc-badge { font-weight: 800; font-size: 14px; }
 .final-card-head .fc-arm { font-size: 12.5px; color: var(--ink); }
 .final-card-head .fc-suit { font-size: 12px; color: var(--muted); margin-left: auto; }
-.final-table { padding: 4px 12px 8px; }
+/* Padding sui td: su un <table> border-collapse il padding dell'elemento è ignorato. */
+.final-table td.bt-k { padding-left: 12px; white-space: nowrap; text-align: left; }
+.final-table td.bt-v { padding-right: 12px; white-space: nowrap; text-align: right; }
+.final-table tr:first-child td { padding-top: 8px; }
+.final-table tr:last-child td { padding-bottom: 8px; }
 .final-table tr.fc-strong td { font-weight: 800; font-size: 15px; color: var(--ink); }
-.final-table tr.fc-sub td.bt-k { padding-left: 18px; font-size: 12px; }
+.final-table tr.fc-sub td.bt-k { padding-left: 22px; font-size: 12px; }
 .final-table tr.fc-sub td.bt-v { color: var(--muted); font-weight: 500; }
-.final-table tr.fc-detail td.bt-v { font-size: 11.5px; line-height: 1.35; font-weight: 500; white-space: normal; max-width: 150px; }
+.final-table tr.fc-detail td.bt-v { font-size: 11.5px; line-height: 1.35; font-weight: 500; white-space: normal; }
 .final-actions { display: flex; gap: 10px; justify-content: center; }
 .final-actions button { min-width: 120px; }
 
