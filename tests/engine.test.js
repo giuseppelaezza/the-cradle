@@ -1114,6 +1114,54 @@ console.log('# Struttura del turno: ordine di attacco 1-2-2-1 vs 1-2-1-2');
   eq(s2.activePlayer, 'S', '1212: poi attacca G2 (S)');
 })();
 
+// -------------------------------------------------------------------- Statistiche di partita
+console.log('# Statistiche di partita (breakdown punti, contatori azioni/oggetti)');
+(function () {
+  var Cpu = require('../js/cpu.js');
+  function whoActs(s, g) {
+    if (s.gameOver) return null;
+    if (s.subPhase === 'object-discard') return s.pendingObjectDiscard.playerId;
+    if (s.subPhase === 'end-discard') return s.pendingEndDiscard.playerId;
+    if (s.subPhase === 'rebuild-select' || s.subPhase === 'rebuild-place') return s.pendingRebuild.playerId;
+    if (s.subPhase === 'tool-discard') return s.pendingToolDiscard && s.pendingToolDiscard.playerId;
+    if (s.subPhase === 'runner-figure') return s.pendingRunner && s.pendingRunner.playerId;
+    if (s.subPhase === 'timebomb-suit') return s.pendingTimebomb.playerId;
+    if (s.subPhase === 'elemental-target' || s.subPhase === 'elemental-suit') return s.pendingElemental.playerId;
+    if (s.subPhase === 'barrage-first' || s.subPhase === 'barrage-second' || s.subPhase === 'barrage-third') return s.pendingBarrage.playerId;
+    if (s.subPhase === 'randomizer-select' || s.subPhase === 'randomizer-place') return s.pendingRandomizer.playerId;
+    if (s.subPhase === 'altmatch-choice' || s.subPhase === 'altmatch-object') return s.pendingAltMatch.playerId;
+    if (s.subPhase === 'clash-cards') return g.clashCurrentChooser();
+    if (s.subPhase === 'clash-reloc') return s.pendingClash.relocatorId;
+    if (s.subPhase === 'forced-reloc') return s.pendingForced.chooserId;
+    if (s.subPhase) return null;
+    if (s.phase === 'select') return s.selected.N == null ? 'N' : (s.selected.S == null ? 'S' : null);
+    if (s.phase === 'move' || s.phase === 'attack') return s.activePlayer;
+    return null;
+  }
+  // Stato iniziale: tutte le statistiche a zero.
+  var g0 = Engine.createGame({ rng: makeRng(1), modules: { characters: true, objects: true, powers: true } });
+  var st0 = g0.state.players.N.stats;
+  ok(st0 && st0.ptsPawn === 0 && st0.ptsFigure === 0 && st0.ptsBonus === 0 && st0.moves === 0 &&
+     st0.attacks === 0 && st0.objUses === 0 && st0.zeroActionTurns === 0, 'stats inizializzate a zero');
+  // Partite complete: invarianti sulle statistiche.
+  [1, 7, 42, 99].forEach(function (seed) {
+    var g = Engine.createGame({ rng: makeRng(seed), suitMode: 'rotating', ruleset: 'C', gridSize: 5, maxRounds: 9,
+      turnMode: '1221', clashOnAttack: true, reshuffleCount: 2,
+      modules: { characters: true, objects: true, powers: true, reshuffle: true }, characters: { N: 'runner', S: 'brawler' } });
+    var s = g.state, guard = 0;
+    while (!s.gameOver && guard++ < 6000) { var a = whoActs(s, g); if (!a) break; Cpu.cpuAct(g, a); }
+    ok(s.gameOver, 'seed ' + seed + ': partita conclusa');
+    ['N', 'S'].forEach(function (id) {
+      var p = s.players[id], stx = p.stats;
+      eq(stx.ptsPawn + stx.ptsFigure + stx.ptsBonus, p.score, 'seed ' + seed + ' ' + id + ': breakdown punti = totale');
+      var objSum = 0; Object.keys(stx.objByType).forEach(function (k) { objSum += stx.objByType[k]; });
+      eq(objSum, stx.objUses, 'seed ' + seed + ' ' + id + ': dettaglio oggetti = totale usi');
+      ok(stx.zeroActionTurns <= s.round, 'seed ' + seed + ' ' + id + ': turni-a-zero entro i round');
+      ok(stx.moves >= 0 && stx.attacks >= 0 && p.trophies.length >= 0, 'seed ' + seed + ' ' + id + ': contatori non negativi');
+    });
+  });
+})();
+
 // --------------------------------------------------------------------
 console.log('\n=== Risultato: ' + passed + ' passati, ' + failed + ' falliti ===');
 process.exit(failed ? 1 : 0);

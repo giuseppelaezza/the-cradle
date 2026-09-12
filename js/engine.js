@@ -110,7 +110,19 @@
       brawlerLeft: 3,              // brawler: attivazioni rimaste
       runnerTotal: 2,             // runner: usi della passiva "colpisci figura in movimento"
       runnerLeft: 2,
-      targetObjectUsed: false     // Ruleset C: scelta oggetto (una tantum) al raggiungimento della riga avversaria
+      targetObjectUsed: false,    // Ruleset C: scelta oggetto (una tantum) al raggiungimento della riga avversaria
+      actedThisRound: false,      // true se il PILOTA ha fatto almeno un'azione nel ROUND corrente
+      // Statistiche di partita per la schermata finale.
+      stats: {
+        ptsPawn: 0,        // punti da COLPO su ARM avversario (clash vinto / colpo diretto)
+        ptsFigure: 0,      // punti da COLPO su OBIETTIVI (figure 8/9/10)
+        ptsBonus: 0,       // punti ricevuti da CELLE BONUS a fine TURNO
+        objUses: 0,        // numero di TOOLS usati
+        objByType: {},     // dettaglio TOOLS usati per tipo { type: count }
+        zeroActionTurns: 0,// ROUND passati senza alcuna azione
+        moves: 0,          // MOVIMENTI effettuati
+        attacks: 0         // ATTACCHI effettuati
+      }
     };
   }
 
@@ -253,6 +265,15 @@
   }
 
   Game.prototype._log = function (m) { this.state.log.push('R' + this.state.round + ' · ' + m); };
+  // Aggiunge punti al PILOTA e li imputa a una categoria di statistica (ptsPawn/ptsFigure/ptsBonus).
+  Game.prototype._addScore = function (id, amount, cat) {
+    if (!amount) return;
+    var p = this.state.players[id];
+    p.score += amount;
+    if (cat && p.stats && p.stats[cat] != null) p.stats[cat] += amount;
+  };
+  // Segna che il PILOTA ha compiuto almeno un'azione (MOVIMENTO / ATTACCO / uso TOOL) nel ROUND.
+  Game.prototype._markActed = function (id) { var p = this.state.players[id]; if (p) p.actedThisRound = true; };
   // Le carte che escono dal gioco finiscono nella pila degli scarti.
   Game.prototype._discard = function (card) { if (card) this.state.discard.push(card); };
   // Le carte Oggetto che escono dal gioco (usate, scartate oltre il limite, non scelte) vanno nella pila scarti Oggetti.
@@ -446,6 +467,7 @@
     var card = findCard(this.availableRevealed(id), cardId);
     if (!card || !this._matches(id, card, dest)) throw new Error('Carta non valida per questa casella.');
     removeCard(s.players[id].hand, cardId);
+    this._markActed(id); s.players[id].stats.moves += 1;
 
     if (dest.pawn === otherPlayer(id)) {
       s.subPhase = 'clash-cards';
@@ -513,7 +535,7 @@
     var gotTrophy = false;
     if (isCenter(cell.x, cell.y, s.gridSize)) {
       var centerPts = (s.ruleset === 'C') ? 0 : 5;
-      if (centerPts) p.score += centerPts;
+      if (centerPts) this._addScore(id, centerPts, 'ptsBonus');
       p.matchedCenter = true; if (moveCard) p.trophies.push(moveCard); cell.faceDown = true; gotTrophy = true;
       // Ruleset A: conquistare il centro dà la scelta di 1 oggetto (in C la gestisce la logica "cella bonus").
       if (s.altMatch && s.ruleset !== 'C' && s.modules.objects) centerObject = true;
@@ -531,7 +553,7 @@
           }
         } else {
           var pts = Deck.figurePoints(cell.card);
-          p.score += pts; p.figuresMatched += 1; if (moveCard) p.trophies.push(moveCard); cell.faceDown = true; gotTrophy = true; figureEliminated = true;
+          this._addScore(id, pts, 'ptsFigure'); p.figuresMatched += 1; if (moveCard) p.trophies.push(moveCard); cell.faceDown = true; gotTrophy = true; figureEliminated = true;
           this._log(id + ' abbina la figura ' + cell.card.value + ' su [' + cell.x + ',' + cell.y + ']: +' + pts + '.');
         }
       }
@@ -606,7 +628,7 @@
 
     // Bonus vittoria clash: +CLASH_WIN_BONUS SOLO se vince l'ATTACCANTE (difensore e pareggio: niente).
     if (outcome === 'attacker') {
-      s.players[pc.attackerId].score += CLASH_WIN_BONUS;
+      this._addScore(pc.attackerId, CLASH_WIN_BONUS, 'ptsPawn');
       this._log(pc.attackerId + ' vince il clash: +' + CLASH_WIN_BONUS + '.');
     }
 
@@ -770,6 +792,7 @@
     var card = findCard(this.availableRevealed(id), cardId);
     if (!card || !this._matches(id, card, cell)) throw new Error('Carta non valida per l\'attacco.');
     removeCard(s.players[id].hand, cardId);
+    this._markActed(id); s.players[id].stats.attacks += 1;
     this._recordTrail('shot', id, this.pawnCell(id), cell);
     var mod = s.attackModifier;
 
@@ -816,7 +839,7 @@
     var oppOnCell = cell.pawn && cell.pawn !== id;
     var pawnPts = (oppOnCell && !skipPawnBonus) ? 5 : 0;
     if (cell.faceDown || cell.destroyed || !cell.card) {
-      if (pawnPts) { p.score += pawnPts; this._log(id + ' colpisce la pedina avversaria (carta coperta): +5.'); }
+      if (pawnPts) { this._addScore(id, pawnPts, 'ptsPawn'); this._log(id + ' colpisce la pedina avversaria (carta coperta): +5.'); }
       if (shootCard) this._discard(shootCard);
       return { figureEliminated: false, hitOpponentPawn: oppOnCell && !cell.destroyed };
     }
@@ -824,14 +847,13 @@
     // Su una figura (senza homing): punti della figura + 1 trofeo, poi scelta di 1 oggetto su 3.
     if (this.state.altMatch && !isHoming) {
       var isFigA = Deck.isFigure(cell.card);
-      var gainedA = 0, trophyA = false;
-      gainedA += pawnPts;
+      var trophyA = false;
+      this._addScore(id, pawnPts, 'ptsPawn');
       if (isFigA) {
-        gainedA += Deck.figurePoints(cell.card);
+        this._addScore(id, Deck.figurePoints(cell.card), 'ptsFigure');
         p.figuresMatched += 1;
         if (shootCard) { p.trophies.push(shootCard); trophyA = true; }
       }
-      p.score += gainedA;
       cell.faceDown = true;
       if (isFigA) this._log(id + ' colpisce la figura ' + cell.card.value + ' su [' + cell.x + ',' + cell.y + ']: +' + Deck.figurePoints(cell.card) + (pawnPts ? ' +5 pedina' : '') + ', 1 trofeo, scelta oggetto.');
       else if (pawnPts) this._log(id + ' colpisce la pedina avversaria su [' + cell.x + ',' + cell.y + ']: +5 (carta girata a faccia in giù).');
@@ -839,13 +861,12 @@
       if (!trophyA && shootCard) this._discard(shootCard);
       return { figureEliminated: false, hitOpponentPawn: oppOnCell, altFigureObject: isFigA };
     }
-    var gained = 0, trophy = false, figureEliminated = false;
-    gained += pawnPts;
+    var trophy = false, figureEliminated = false;
+    this._addScore(id, pawnPts, 'ptsPawn');
     if (Deck.isFigure(cell.card)) {
       var pts = Deck.figurePoints(cell.card);
-      gained += pts; p.figuresMatched += 1; if (shootCard) p.trophies.push(shootCard); cell.faceDown = true; trophy = shootCard ? true : false; figureEliminated = true;
+      this._addScore(id, pts, 'ptsFigure'); p.figuresMatched += 1; if (shootCard) p.trophies.push(shootCard); cell.faceDown = true; trophy = shootCard ? true : false; figureEliminated = true;
     }
-    p.score += gained;
     if (pawnPts && trophy) this._log(id + ' DOUBLE KILL su [' + cell.x + ',' + cell.y + ']: +5 pedina e +' + Deck.figurePoints(cell.card) + ' figura.');
     else if (pawnPts) this._log(id + ' colpisce la pedina avversaria su [' + cell.x + ',' + cell.y + ']: +5.');
     else if (trophy) this._log(id + ' colpisce la figura ' + cell.card.value + ' su [' + cell.x + ',' + cell.y + ']: +' + Deck.figurePoints(cell.card) + '.');
@@ -1047,6 +1068,8 @@
 
     removeCard(s.players[playerId].objects, objectId); // usato una volta
     this._discardObjectCard(obj);                       // la carta Oggetto usata va nella pila scarti Oggetti
+    var _st = s.players[playerId].stats; _st.objUses += 1; _st.objByType[obj.type] = (_st.objByType[obj.type] || 0) + 1;
+    this._markActed(playerId);
     this._log(playerId + ' usa ' + obj.type + '.');
 
     switch (obj.type) {
@@ -1197,7 +1220,7 @@
     var ri = p.revealedIds.indexOf(cardId); if (ri !== -1) p.revealedIds.splice(ri, 1);
     this._discard(card);
     var pts = Deck.figurePoints(cell.card);
-    p.score += pts; p.figuresMatched += 1; cell.faceDown = true; p.runnerLeft -= 1;
+    this._addScore(pr.playerId, pts, 'ptsFigure'); p.figuresMatched += 1; cell.faceDown = true; p.runnerLeft -= 1;
     this._log(pr.playerId + ' (runner) colpisce la figura ' + cell.card.value + ' in movimento: +' + pts + ' (usi rimasti ' + p.runnerLeft + ').');
     var pid = pr.playerId;
     s.pendingRunner = null; s.subPhase = null;
@@ -1319,6 +1342,8 @@
     var avail = this.availableRevealed(playerId).slice();
     avail.forEach(function (c) { removeCard(s.players[playerId].hand, c.id); self._discard(c); });
     s.players[playerId].brawlerLeft -= 1;
+    this._markActed(playerId);
+    s.players[playerId].stats[s.phase === 'move' ? 'moves' : 'attacks'] += 1;
     this._log(playerId + ' (brawler) scarta 3 carte per abbinare qualsiasi cella (attivazioni rimaste: ' + s.players[playerId].brawlerLeft + ').');
     var cell = s.grid[x][y];
     if (s.phase === 'move') {
@@ -1558,6 +1583,8 @@
   // ================================================================== FINE ROUND / PARTITA
   Game.prototype._endRound = function () {
     var s = this.state, self = this;
+    // Statistiche: conta i ROUND passati senza alcuna azione (nè MOVIMENTO nè ATTACCO nè uso TOOL).
+    ['N', 'S'].forEach(function (id) { if (!s.players[id].actedThisRound) s.players[id].stats.zeroActionTurns += 1; });
     // Ruleset C: punteggio di posizione a fine turno.
     // 5×5 → controllo del centro: sul centro +3, adiacente ortogonale al centro +1.
     // 4×4 → celle bonus: +2 se ti trovi su una delle 4 celle centrali ([2,2],[2,3],[3,2],[3,3]).
@@ -1565,7 +1592,7 @@
       ['N', 'S'].forEach(function (id) {
         var pc = self.pawnCell(id); if (!pc) return;
         var pts = positionBonusPoints(pc.x, pc.y, s.gridSize);
-        if (pts > 0) { s.players[id].score += pts; self._log(id + ' a fine turno è su una cella bonus [' + pc.x + ',' + pc.y + ']: +' + pts + '.'); }
+        if (pts > 0) { self._addScore(id, pts, 'ptsBonus'); self._log(id + ' a fine turno è su una cella bonus [' + pc.x + ',' + pc.y + ']: +' + pts + '.'); }
       });
     }
     // Le carte non usate restano in mano (non si scartano più le rivelate non giocate). Le carte
@@ -1603,6 +1630,7 @@
         while (s.players[id].hand.length < 6) { var c = self._drawCard(); if (!c) break; s.players[id].hand.push(c); }
       });
       s.round += 1;
+      s.players.N.actedThisRound = false; s.players.S.actedThisRound = false; // nuovo ROUND: azzera il flag azioni
       if (s.suitMode === 'rotating') { s.currentSuit = Deck.nextSuit(s.currentSuit); self._log('Il seme di turno avanza a ' + s.currentSuit + '.'); }
       self._log('— Fine round. Primo Giocatore: ' + s.firstPlayer + '. Mazzo: ' + s.deck.length + ' carte.');
       self._beginSelectPhase();

@@ -1557,16 +1557,53 @@
       btn.onclick = function () { var cb = ui.gate.onShow; ui.gate = null; cb(); };
       dom.sheet.appendChild(btn); showOverlay();
     }
+    function objTypeLabel(type) { var d = OBJ ? OBJ.def(type) : null; return (d && d.label) ? d.label : type; }
+    function objDetailText(st) {
+      var keys = Object.keys(st.objByType || {});
+      if (!keys.length) return '—';
+      keys.sort(function (a, b) { return st.objByType[b] - st.objByType[a]; });
+      return keys.map(function (t) { return objTypeLabel(t) + ' ×' + st.objByType[t]; }).join(', ');
+    }
     function renderFinal(s) {
       var r = s.result; dom.sheet.innerHTML = '';
       dom.sheet.appendChild(h('h2', null, '🏁 Fine partita'));
-      var scores = h('div', 'final-scores');
-      ['N', 'S'].forEach(function (id) { var fs = h('div', 'fs' + (r.winner === id ? ' win' : '')); fs.appendChild(h('div', 'n', 'Pilota ' + id)); fs.appendChild(h('div', 'p', String(s.players[id].score))); fs.appendChild(h('div', 'n', s.players[id].figuresMatched + ' figure' + (s.players[id].matchedCenter ? ' · ★centro' : ''))); scores.appendChild(fs); });
-      dom.sheet.appendChild(scores);
       dom.sheet.appendChild(h('div', 'big', r.winner ? '🏆' : '🤝'));
       dom.sheet.appendChild(h('h2', 'win', r.winner ? '🏆 Vince il Pilota ' + r.winner : '🤝 Patta'));
       if (r.tiebreak && r.tiebreak !== 'patta') dom.sheet.appendChild(h('p', null, 'Spareggio: ' + (r.tiebreak === 'centro' ? 'ha conquistato il centro.' : 'più OBIETTIVI.')));
-      dom.sheet.appendChild(h('p', null, r.summary));
+      dom.sheet.appendChild(h('p', 'final-summary', r.summary));
+
+      // Tabella statistiche di partita: una colonna per PILOTA.
+      var table = h('table', 'final-stats');
+      var thead = h('tr');
+      thead.appendChild(h('th', 'fst-lbl', ''));
+      ['N', 'S'].forEach(function (id) {
+        var p = s.players[id];
+        var th = h('th', 'fst-pl' + (r.winner === id ? ' win' : ''));
+        th.appendChild(h('div', 'fst-name', 'Pilota ' + id + (r.winner === id ? ' 🏆' : '')));
+        th.appendChild(h('div', 'fst-arm', charLabel(p.character)));
+        th.appendChild(h('div', 'fst-suit', SUIT_LABEL[p.belongingSuit] || '—'));
+        thead.appendChild(th);
+      });
+      table.appendChild(thead);
+
+      function row(label, fn, cls) {
+        var tr = h('tr', cls || null);
+        tr.appendChild(h('td', 'fst-lbl', label));
+        ['N', 'S'].forEach(function (id) { tr.appendChild(h('td', 'fst-val', fn(s.players[id]))); });
+        table.appendChild(tr);
+      }
+      row('Punti totali', function (p) { return String(p.score); }, 'fst-strong');
+      row('↳ da colpo su avversario', function (p) { return String(p.stats.ptsPawn); }, 'fst-sub');
+      row('↳ da colpo su OBIETTIVI', function (p) { return String(p.stats.ptsFigure); }, 'fst-sub');
+      row('↳ da CELLE BONUS', function (p) { return String(p.stats.ptsBonus); }, 'fst-sub');
+      row('TROFEI', function (p) { return String(p.trophies.length); });
+      row('MOVIMENTI', function (p) { return String(p.stats.moves); });
+      row('ATTACCHI', function (p) { return String(p.stats.attacks); });
+      row('TOOLS usati', function (p) { return String(p.stats.objUses); });
+      row('↳ dettaglio', function (p) { return objDetailText(p.stats); }, 'fst-sub fst-detail');
+      row('TURNI a 0 azioni', function (p) { return String(p.stats.zeroActionTurns); });
+      dom.sheet.appendChild(table);
+
       var again = h('button', 'primary', 'Nuova partita'); again.onclick = function () { location.reload(); };
       dom.sheet.appendChild(again); showOverlay();
     }

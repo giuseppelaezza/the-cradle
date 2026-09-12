@@ -450,6 +450,20 @@ body.setup .sheet { padding-top: 14px; }
 .final-scores .fs { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 12px 22px; text-align: center; }
 .final-scores .fs.win { border-color: var(--good); } .final-scores .fs .n { font-size: 13px; color: var(--muted); } .final-scores .fs .p { font-size: 30px; font-weight: 800; }
 .win { color: var(--good); text-align: center; }
+.final-summary { text-align: center; color: var(--muted); margin: 4px 0 14px; }
+.final-stats { width: 100%; border-collapse: collapse; margin: 8px 0 18px; font-size: 13px; }
+.final-stats th, .final-stats td { border: 1px solid var(--line); padding: 6px 10px; }
+.final-stats th.fst-pl { background: var(--panel-2); text-align: center; vertical-align: top; }
+.final-stats th.fst-pl.win { border-color: var(--good); }
+.final-stats .fst-name { font-weight: 800; font-size: 14px; }
+.final-stats .fst-arm { color: var(--ink); font-size: 12.5px; }
+.final-stats .fst-suit { color: var(--muted); font-size: 12px; }
+.final-stats td.fst-lbl, .final-stats th.fst-lbl { text-align: left; color: var(--muted); background: var(--panel); white-space: nowrap; }
+.final-stats td.fst-val { text-align: center; color: var(--ink); font-variant-numeric: tabular-nums; }
+.final-stats tr.fst-strong td { font-weight: 800; font-size: 15px; }
+.final-stats tr.fst-sub td.fst-lbl { padding-left: 20px; font-size: 12px; }
+.final-stats tr.fst-sub td.fst-val { color: var(--muted); }
+.final-stats tr.fst-detail td.fst-val { font-size: 11.5px; line-height: 1.35; text-align: center; }
 
 /* config */
 .cfg-label { font-weight: 700; margin: 14px 0 6px; }
