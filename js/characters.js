@@ -18,18 +18,18 @@
   //   - Regola questo valore per testare bilanciamenti diversi.
   //   - null = potere PASSIVO / sempre attivo (nessun limite di attivazioni): runner e fighter.
   var CHARACTERS = {
-    runner:    { type: 'runner',    suit: 'spade',   startObjects: ['jetpack'], label: 'Runner',
+    runner:    { type: 'runner',    suit: 'spade',   startObjects: ['jetpack'], label: 'E-RUN-01',
                  powerUses: 2,
-                 power: 'Passiva: 2 volte a partita, muovendo su una figura può scartare 1 carta scelta extra per colpirla (ne ottiene i punti e la scelta di un oggetto).' },
-    brawler:   { type: 'brawler',   suit: 'coppe',   startObjects: ['barrage'], label: 'Brawler',
+                 power: 'SKILL (2 usi): quando MATCHI un OBIETTIVO in MOVIMENTO puoi SCARTARE [1] carta dalla STACK ATTIVA per COLPIRLO (ne ottieni il VALORE e la scelta di [1] TOOL).' },
+    brawler:   { type: 'brawler',   suit: 'coppe',   startObjects: ['barrage'], label: 'The Sniper',
                  powerUses: 3,
-                 power: 'Fino a 3 volte per partita, in movimento o in attacco, se ha 3 carte disponibili le scarta tutte per abbinare QUALSIASI cella (rinuncia all\'azione).' },
-    tactician: { type: 'tactician', suit: 'oro',     startObjects: ['timebomb'], label: 'Tactician',
-                 powerUses: 2,
-                 power: 'Fino a 2 volte per partita usa anche le carte NON scelte in fase di selezione. Passiva: quando sceglie un oggetto sceglie tra 4 invece che tra 3.' },
-    fighter:   { type: 'fighter',   suit: 'bastoni', startObjects: ['hook'], label: 'Fighter',
+                 power: 'SKILL (3 usi): in MOVIMENTO o ATTACCO, se hai 3 carte nella STACK ATTIVA le SCARTI tutte per MATCHARE una CELLA qualsiasi (SOSTITUISCI l\'azione).' },
+    tactician: { type: 'tactician', suit: 'oro',     startObjects: ['timebomb'], label: 'Deep Mind',
+                 powerUses: 3,
+                 power: 'SKILL (3 usi): guarda la STACK DI RISERVA dell\'ARM avversario. Passiva: quando scegli [1] TOOL scegli tra 4 invece che tra 3.' },
+    fighter:   { type: 'fighter',   suit: 'bastoni', startObjects: ['hook'], label: 'Soldier Boy',
                  powerUses: null,
-                 power: 'In attacco abbina le carte PARI tra loro (una carta pari abbina una cella scoperta di valore pari).' }
+                 power: 'SKILL passiva: in ATTACCO MATCHI le carte di VALORE PARI tra loro (una carta pari MATCHA una CELLA ONLINE di VALORE pari).' }
   };
 
   var ORDER = ['runner', 'brawler', 'tactician', 'fighter'];

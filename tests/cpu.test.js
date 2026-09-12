@@ -14,6 +14,8 @@ function makeRng(seed) { var s = seed >>> 0; return function () { s = (s * 16645
 // Determina quale giocatore deve agire adesso (per pilotare entrambi con Cpu.cpuAct).
 function whoActs(s, g) {
   if (s.subPhase === 'object-discard') return s.pendingObjectDiscard.playerId;
+  if (s.subPhase === 'end-discard') return s.pendingEndDiscard.playerId;
+  if (s.subPhase === 'rebuild-select' || s.subPhase === 'rebuild-place') return s.pendingRebuild.playerId;
       if (s.subPhase === 'tool-discard') return s.pendingToolDiscard && s.pendingToolDiscard.playerId;
       if (s.subPhase === 'runner-figure') return s.pendingRunner && s.pendingRunner.playerId;
   if (s.subPhase === 'timebomb-suit') return s.pendingTimebomb.playerId;
@@ -98,6 +100,11 @@ suite('Ruleset C 7 round', function (seed) { return { rng: makeRng(seed), rulese
 suite('Clash su Attacco (Ruleset C)', function (seed) { return { rng: makeRng(seed), ruleset: 'C', clashOnAttack: true, modules: { objects: true } }; });
 suite('Clash su Attacco (Ruleset B) + Personaggi', function (seed) {
   return { rng: makeRng(seed), clashOnAttack: true, modules: { characters: true, objects: true, powers: true },
+           characters: { N: CHARS[seed % 4], S: CHARS[(seed + 1) % 4] } };
+});
+suite('Nuovi TOOLS (rebuild/remix/encore/elemental/randomizer) + Personaggi', function (seed) {
+  return { rng: makeRng(seed), modules: { characters: true, objects: true, powers: true },
+           objectSelection: ['rebuild', 'remix', 'encore', 'elemental_bomb', 'randomizer'],
            characters: { N: CHARS[seed % 4], S: CHARS[(seed + 1) % 4] } };
 });
 

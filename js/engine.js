@@ -232,6 +232,8 @@
       pendingAltMatch: null,  // {playerId,x,y,drawn?} durante 'altmatch-object'
       pendingTimebomb: null,
       pendingTeleport: null,  // {playerId} durante 'teleport-select' (oggetto Teleport, Ruleset C)
+      pendingEndDiscard: null, // {playerId,need,sel} durante 'end-discard' (scarto in eccesso a fine turno)
+      pendingRebuild: null,    // {playerId,drawn,chosen} durante 'rebuild-select'/'rebuild-place' (TOOL Ricostruisci)
       pendingElemental: null, pendingBarrage: null, pendingRandomizer: null,
       gameOver: false, endTriggered: false, result: null, log: []
     };
@@ -304,8 +306,6 @@
   };
   Game.prototype.availableRevealed = function (id) {
     var p = this.state.players[id];
-    // Potere tactician: quando è attivo si possono usare TUTTE le carte in mano (anche le non scelte).
-    if (this.state.modules.powers && p.character === 'tactician' && p.tacticianOpen) return p.hand.slice();
     return p.hand.filter(function (c) { return p.revealedIds.indexOf(c.id) !== -1; });
   };
   // La "riserva": le carte in mano NON scelte nella fase di scelta carte. È il pool usato nei clash.
@@ -610,11 +610,19 @@
       this._log(pc.attackerId + ' vince il clash: +' + CLASH_WIN_BONUS + '.');
     }
 
-    // ---- Clash da ATTACCO (regola opzionale "Clash su Attacco"): solo punti, nessuno spostamento. ----
+    // ---- Clash da ATTACCO (regola opzionale "Clash su Attacco"). ----
     if (pc.isAttack) {
-      this._discard(pc.moveCard); // la carta di attacco va agli scarti
+      var attMod = pc.attackMod;
       s.pendingClash = null; s.subPhase = null;
-      this._afterAttackAction(attackerId);
+      if (outcome === 'attacker') {
+        // L'attaccante vince: il colpo si risolve normalmente (figura girata, punti figura, scelta
+        // oggetto, effetti di homing/hook), senza i +5 pedina (già sostituiti dal +3 del clash). Nessuno spostamento di clash.
+        this._resolveShotEffects(attackerId, dest, pc.moveCard, attMod, true);
+      } else {
+        // Difensore vince o pareggio: colpo parato, nessun effetto; la carta di attacco va agli scarti.
+        this._discard(pc.moveCard);
+        this._afterAttackAction(attackerId);
+      }
       return;
     }
 
@@ -739,6 +747,11 @@
     s.actionsLeft -= 1; s.attackModifier = null;
     this._promptAttack();
   };
+  // Chiude un'azione consumata da un TOOL utilizzabile sia in MOVIMENTO sia in ATTACCO (es. randomizer).
+  Game.prototype._afterActionObject = function (id) {
+    if (this.state.phase === 'move') this._afterMoveAction(id);
+    else this._afterAttackAction(id);
+  };
 
   Game.prototype.legalShots = function (id) {
     var s = this.state, n = s.gridSize, revealed = this.availableRevealed(id), self = this, out = [];
@@ -760,19 +773,25 @@
     this._recordTrail('shot', id, this.pawnCell(id), cell);
     var mod = s.attackModifier;
 
-    // Regola "Clash su Attacco": colpire una cella con la pedina avversaria (senza modificatore
-    // armato) apre un clash. Attaccante vince → +CLASH_WIN_BONUS; difensore/pareggio → nulla. Nessuno spostamento.
-    if (s.clashOnAttack && !mod && cell.pawn === otherPlayer(id)) {
+    // Regola "Clash su Attacco": colpire una cella con la pedina avversaria apre un clash — anche con
+    // homing/hook armati. Se vince l'attaccante il colpo si risolve normalmente (+3 al posto dei +5
+    // pedina, più gli effetti su figura/oggetto/modificatore); se perde o pareggia il colpo è parato.
+    if (s.clashOnAttack && cell.pawn === otherPlayer(id)) {
       s.subPhase = 'clash-cards';
-      s.pendingClash = { attackerId: id, defenderId: otherPlayer(id), x: x, y: y, moveCard: card, isAttack: true,
+      s.pendingClash = { attackerId: id, defenderId: otherPlayer(id), x: x, y: y, moveCard: card, isAttack: true, attackMod: mod,
                          attackerCardId: null, defenderCardId: null, whoChooses: id };
       this._log(id + ' attacca la pedina di ' + otherPlayer(id) + ' su [' + x + ',' + y + '] → clash.');
       this._clashAdvanceAuto();
       return { type: 'clash' };
     }
 
-    var info = this._applyShot(id, cell, card, mod === 'homing');
+    this._resolveShotEffects(id, cell, card, mod, false);
+  };
 
+  // Risolve gli effetti di un colpo (figura, oggetto pescato/scelto, modificatore homing/hook) e
+  // costruisce la catena post-attacco. skipPawnBonus salta i +5 per la pedina (usato dal clash da attacco).
+  Game.prototype._resolveShotEffects = function (id, cell, card, mod, skipPawnBonus) {
+    var info = this._applyShot(id, cell, card, mod === 'homing', skipPawnBonus);
     var chain = [];
     if (mod === 'homing') chain.push(this._step_homing(id, cell));
     else if (mod === 'hook' && info.hitOpponentPawn) chain.push(this._step_hook(id, cell));
@@ -790,11 +809,14 @@
   };
 
   // Applica lo sparo base. Ritorna {figureEliminated, hitOpponentPawn}.
-  Game.prototype._applyShot = function (id, cell, shootCard, isHoming) {
+  // skipPawnBonus: non aggiunge i +5 per la pedina avversaria (usato quando il colpo passa da un
+  // clash da attacco, che assegna già il proprio bonus di +3 al vincitore).
+  Game.prototype._applyShot = function (id, cell, shootCard, isHoming, skipPawnBonus) {
     var p = this.state.players[id];
     var oppOnCell = cell.pawn && cell.pawn !== id;
+    var pawnPts = (oppOnCell && !skipPawnBonus) ? 5 : 0;
     if (cell.faceDown || cell.destroyed || !cell.card) {
-      if (oppOnCell && !cell.destroyed) { p.score += 5; this._log(id + ' colpisce la pedina avversaria (carta coperta): +5.'); }
+      if (pawnPts) { p.score += pawnPts; this._log(id + ' colpisce la pedina avversaria (carta coperta): +5.'); }
       if (shootCard) this._discard(shootCard);
       return { figureEliminated: false, hitOpponentPawn: oppOnCell && !cell.destroyed };
     }
@@ -803,7 +825,7 @@
     if (this.state.altMatch && !isHoming) {
       var isFigA = Deck.isFigure(cell.card);
       var gainedA = 0, trophyA = false;
-      if (oppOnCell) gainedA += 5;
+      gainedA += pawnPts;
       if (isFigA) {
         gainedA += Deck.figurePoints(cell.card);
         p.figuresMatched += 1;
@@ -811,21 +833,21 @@
       }
       p.score += gainedA;
       cell.faceDown = true;
-      if (isFigA) this._log(id + ' colpisce la figura ' + cell.card.value + ' su [' + cell.x + ',' + cell.y + ']: +' + Deck.figurePoints(cell.card) + (oppOnCell ? ' +5 pedina' : '') + ', 1 trofeo, scelta oggetto.');
-      else if (oppOnCell) this._log(id + ' colpisce la pedina avversaria su [' + cell.x + ',' + cell.y + ']: +5 (carta girata a faccia in giù).');
+      if (isFigA) this._log(id + ' colpisce la figura ' + cell.card.value + ' su [' + cell.x + ',' + cell.y + ']: +' + Deck.figurePoints(cell.card) + (pawnPts ? ' +5 pedina' : '') + ', 1 trofeo, scelta oggetto.');
+      else if (pawnPts) this._log(id + ' colpisce la pedina avversaria su [' + cell.x + ',' + cell.y + ']: +5 (carta girata a faccia in giù).');
       else this._log(id + ' spara su [' + cell.x + ',' + cell.y + ']: carta girata a faccia in giù.');
       if (!trophyA && shootCard) this._discard(shootCard);
       return { figureEliminated: false, hitOpponentPawn: oppOnCell, altFigureObject: isFigA };
     }
     var gained = 0, trophy = false, figureEliminated = false;
-    if (oppOnCell) gained += 5;
+    gained += pawnPts;
     if (Deck.isFigure(cell.card)) {
       var pts = Deck.figurePoints(cell.card);
       gained += pts; p.figuresMatched += 1; if (shootCard) p.trophies.push(shootCard); cell.faceDown = true; trophy = shootCard ? true : false; figureEliminated = true;
     }
     p.score += gained;
-    if (oppOnCell && trophy) this._log(id + ' DOUBLE KILL su [' + cell.x + ',' + cell.y + ']: +5 pedina e +' + Deck.figurePoints(cell.card) + ' figura.');
-    else if (oppOnCell) this._log(id + ' colpisce la pedina avversaria su [' + cell.x + ',' + cell.y + ']: +5.');
+    if (pawnPts && trophy) this._log(id + ' DOUBLE KILL su [' + cell.x + ',' + cell.y + ']: +5 pedina e +' + Deck.figurePoints(cell.card) + ' figura.');
+    else if (pawnPts) this._log(id + ' colpisce la pedina avversaria su [' + cell.x + ',' + cell.y + ']: +5.');
     else if (trophy) this._log(id + ' colpisce la figura ' + cell.card.value + ' su [' + cell.x + ',' + cell.y + ']: +' + Deck.figurePoints(cell.card) + '.');
     else this._log(id + ' spara su [' + cell.x + ',' + cell.y + ']: nessun effetto.');
     if (!trophy) this._discard(shootCard); // carta di sparo non-trophy → scarti
@@ -975,7 +997,12 @@
     var objs = s.players[playerId].objects;
     if (s.phase === 'select') {
       if (s.selected[playerId] != null || s.selectObjectUsed[playerId]) return [];
-      return objs.filter(function (o) { return objInPhase(o, 'select') && !(o.type === 'timebomb' && s.suitMode !== 'rotating'); });
+      return objs.filter(function (o) {
+        if (!objInPhase(o, 'select')) return false;
+        if (o.type === 'timebomb' && s.suitMode !== 'rotating') return false;
+        if (o.type === 'encore' && !self._encoreUsable(playerId)) return false;
+        return true;
+      });
     }
     if (s.phase === 'move' || s.phase === 'attack') {
       var mod = s.phase === 'move' ? s.moveModifier : s.attackModifier;
@@ -983,17 +1010,33 @@
       return objs.filter(function (o) {
         if (!objInPhase(o, s.phase)) return false;
         // Un modificatore già armato (jetpack/jump/hook/homing) blocca altri oggetti-modificatore, non gli "immediati".
-        if (mod && o.type !== 'energy_boost' && o.type !== 'energy_drain') return false;
+        if (mod && o.type !== 'energy_boost' && o.type !== 'energy_drain' && o.type !== 'remix' && o.type !== 'encore') return false;
         if ((o.type === 'jetpack' || o.type === 'jump') && !self._canPayToolCost(playerId)) return false; // serve una carta scelta extra da scartare
         if (o.type === 'grapple' && (!self._canPayToolCost(playerId) || !self._grappleHasTarget(playerId))) return false; // costo carta + bersaglio adiacente all'avversario
         if (o.type === 'teleport' && self._teleportTargetsFor(playerId).length === 0) return false; // serve almeno una carta di ugual valore
         if (o.type === 'randomizer' && s.deck.length === 0 && s.discard.length === 0) return false; // serve almeno una carta
         if (o.type === 'energy_boost' && s.deck.length === 0 && s.discard.length === 0) return false; // niente da pescare
         if (o.type === 'energy_drain' && s.players[otherPlayer(playerId)].revealedIds.length === 0) return false; // niente da rubare: l'avversario non ha carte scelte
+        if (o.type === 'rebuild' && ((s.deck.length === 0 && s.discard.length === 0) || !self._rebuildHasTarget())) return false; // serve una carta e una CELLA DISTRUTTA/OFFLINE
+        if (o.type === 'encore' && !self._encoreUsable(playerId)) return false;
         return true;
       });
     }
     return [];
+  };
+  // Encore! è utile solo se il tuo ARM ha una SKILL con usi (tactician/brawler/runner).
+  Game.prototype._encoreUsable = function (playerId) {
+    var p = this.state.players[playerId];
+    return !!this.state.modules.powers && (p.character === 'tactician' || p.character === 'brawler' || p.character === 'runner');
+  };
+  // Ricostruisci ha bisogno di almeno una CELLA DISTRUTTA o OFFLINE dove piazzare la carta.
+  Game.prototype._rebuildHasTarget = function () {
+    var s = this.state;
+    for (var x = 1; x <= s.gridSize; x++) for (var y = 1; y <= s.gridSize; y++) {
+      var c = s.grid[x][y];
+      if (c.destroyed || (c.card && c.faceDown)) return true;
+    }
+    return false;
   };
 
   Game.prototype.useObject = function (playerId, objectId, params) {
@@ -1020,12 +1063,34 @@
         if (params.suit && Deck.SUITS.indexOf(params.suit) !== -1) { s.currentSuit = params.suit; this._log('Timebomb: seme di turno → ' + params.suit + '.'); }
         else { s.subPhase = 'timebomb-suit'; s.pendingTimebomb = { playerId: playerId }; } // la UI chiede il seme
         break;
-      // Oggetti "energetici" (movimento o attacco): effetto immediato, non consumano l'azione né armano modificatori.
+      // TOOLS "energetici" e immediati: effetto istantaneo, non consumano l'azione né armano modificatori.
       case 'energy_boost': {
         var p = s.players[playerId], drew = [];
-        // Le 2 carte pescate sono "scelte" (rivelate): a fine turno si scartano con le altre carte scelte non usate.
+        // PESCA [2] e aggiungi alla STACK ATTIVA (le carte rivelate).
         for (var eb = 0; eb < 2; eb++) { var c = this._drawCard(); if (c) { p.hand.push(c); p.revealedIds.push(c.id); drew.push(c); } }
-        this._log(playerId + ' usa Energy Boost: pesca ' + drew.length + ' carte (usabili ora; a fine turno si scartano con le carte scelte non usate).');
+        this._log(playerId + ' usa Ricarica: PESCA ' + drew.length + ' → STACK ATTIVA.');
+        break;
+      }
+      case 'remix': {
+        var pr2 = s.players[playerId];
+        pr2.reshuffleLeft += 1; pr2.reshuffleTotal += 1;
+        this._log(playerId + ' usa Remix!: +1 uso a REMIX (usi: ' + pr2.reshuffleLeft + ').');
+        break;
+      }
+      case 'encore': {
+        var pe = s.players[playerId], ch = pe.character;
+        if (ch === 'tactician') { pe.tacticianLeft += 1; pe.tacticianTotal += 1; }
+        else if (ch === 'brawler') { pe.brawlerLeft += 1; pe.brawlerTotal += 1; }
+        else if (ch === 'runner') { pe.runnerLeft += 1; pe.runnerTotal += 1; }
+        this._log(playerId + ' usa Encore!: +1 uso alla SKILL del proprio ARM.');
+        break;
+      }
+      case 'rebuild': {
+        var pb = s.players[playerId], drawn = [];
+        for (var rb = 0; rb < 3; rb++) { var rc = this._drawCard(); if (rc) drawn.push(rc); }
+        if (!drawn.length) { this._log(playerId + ' usa Ricostruisci ma il DECK è vuoto.'); break; }
+        s.subPhase = 'rebuild-select'; s.pendingRebuild = { playerId: playerId, drawn: drawn, chosen: null };
+        this._log(playerId + ' usa Ricostruisci: PESCA ' + drawn.length + ', scegline 1.');
         break;
       }
       case 'energy_drain': {
@@ -1203,19 +1268,25 @@
   };
 
   // ================================================================== POTERI PERSONAGGIO (§12)
-  // Tactician: apre tutte le carte in mano (usa anche le non scelte). Attivabile al massimo 2 volte per partita.
+  // Tactician: 3 volte a partita può guardare le carte di RISERVA dell'avversario (le mostra un modale).
   Game.prototype.canActivatePower = function (playerId) {
     var s = this.state, p = s.players[playerId];
-    if (!s.modules.powers || s.subPhase || p.character !== 'tactician' || p.tacticianOpen) return false;
+    if (!s.modules.powers || s.subPhase || p.character !== 'tactician') return false;
     if (!(p.tacticianLeft > 0)) return false; // esaurite le attivazioni della partita
     return (s.phase === 'move' || s.phase === 'attack') && s.activePlayer === playerId && s.actionsLeft > 0;
   };
   Game.prototype.activatePower = function (playerId) {
     if (!this.canActivatePower(playerId)) throw new Error('Potere non attivabile ora.');
-    var p = this.state.players[playerId];
-    p.tacticianOpen = true;
+    var s = this.state, p = s.players[playerId], oppId = otherPlayer(playerId), opp = s.players[oppId];
     p.tacticianLeft -= 1;
-    this._log(playerId + ' (tactician) apre tutte le carte in mano (attivazioni rimaste: ' + p.tacticianLeft + ').');
+    var reserve = this.availableReserve(oppId);
+    // Risultato per la UI (modale): fuori dallo stato, non entra negli snapshot.
+    this._tacticianPeek = {
+      token: (this._tacticianToken = (this._tacticianToken || 0) + 1),
+      viewerId: playerId, opponentId: oppId,
+      cards: reserve.map(function (c) { return { value: c.value, suit: c.suit }; })
+    };
+    this._log(playerId + ' (tactician) guarda la riserva di ' + oppId + ' (' + reserve.length + ' carte; attivazioni rimaste: ' + p.tacticianLeft + ').');
   };
 
   // Brawler: scarta 3 carte disponibili per abbinare QUALSIASI cella (rinuncia a un'azione).
@@ -1297,9 +1368,9 @@
     if (Deck.SUITS.indexOf(suit) === -1) throw new Error('Seme non valido.');
     var pe = s.pendingElemental, cells = [[pe.x, pe.y]].concat(orthogonalNeighbors(pe.x, pe.y, s.gridSize)), changed = 0;
     cells.forEach(function (d) { var c = s.grid[d[0]][d[1]]; if (!c.destroyed && c.card) { c.card.suit = suit; changed++; } });
-    this._log(pe.playerId + ' usa Elemental Bomb su [' + pe.x + ',' + pe.y + ']: ' + changed + ' celle → seme ' + suit + '.');
+    this._log(pe.playerId + ' usa Bomba Elementale su [' + pe.x + ',' + pe.y + ']: ' + changed + ' CELLE → SUIT ' + suit + '.');
     var pid = pe.playerId; s.pendingElemental = null; s.subPhase = null;
-    this._afterAttackAction(pid);
+    this._promptAttack(); // senza costo: non consuma l'ATTACCO
   };
 
   // ---- Barrage ---- (una singola cella; non può colpire celle con una pedina)
@@ -1424,9 +1495,51 @@
       var c = s.grid[ch.x][ch.y]; c.card = card; c.faceDown = false; c.destroyed = false;
     });
     var pid = pr.playerId;
-    this._log(pid + ' completa il Randomizer.');
+    this._log(pid + ' completa il Randomizzatore.');
     s.pendingRandomizer = null; s.subPhase = null;
-    this._afterAttackAction(pid);
+    this._afterActionObject(pid); // usabile in MOVIMENTO o ATTACCO
+  };
+
+  // ---- Ricostruisci (rebuild): PESCA 3, scegli 1, SOVRASCRIVI una CELLA DISTRUTTA o OFFLINE ----
+  Game.prototype.rebuildDrawn = function () {
+    var s = this.state, pr = s.pendingRebuild;
+    return (pr && (s.subPhase === 'rebuild-select' || s.subPhase === 'rebuild-place')) ? pr.drawn.slice() : [];
+  };
+  Game.prototype.rebuildSelectCard = function (cardId) {
+    var s = this.state, pr = s.pendingRebuild;
+    if (s.subPhase !== 'rebuild-select' || !pr) throw new Error('Nessun Ricostruisci in corso.');
+    var card = pr.drawn.filter(function (c) { return c.id === cardId; })[0];
+    if (!card) throw new Error('Carta non valida.');
+    pr.chosen = card;
+    s.subPhase = 'rebuild-place';
+  };
+  // CELLE bersaglio: DISTRUTTE o OFFLINE (carta a faccia in giù).
+  Game.prototype.rebuildTargets = function () {
+    var s = this.state, pr = s.pendingRebuild, out = [];
+    if (s.subPhase !== 'rebuild-place' || !pr) return out;
+    for (var x = 1; x <= s.gridSize; x++) for (var y = 1; y <= s.gridSize; y++) {
+      var c = s.grid[x][y];
+      if (c.destroyed || (c.card && c.faceDown)) out.push({ x: x, y: y, key: cellKey(x, y) });
+    }
+    return out;
+  };
+  Game.prototype.rebuildPlace = function (x, y) {
+    var s = this.state, pr = s.pendingRebuild;
+    if (s.subPhase !== 'rebuild-place' || !pr) throw new Error('Nessun Ricostruisci in corso.');
+    if (!this.rebuildTargets().some(function (o) { return o.x === x && o.y === y; })) throw new Error('CELLA non valida (serve DISTRUTTA o OFFLINE).');
+    var c = s.grid[x][y];
+    if (c.card && c.faceDown) this._discard(c.card); // la carta OFFLINE sovrascritta va nella HEAP
+    c.card = pr.chosen; c.faceDown = false; c.destroyed = false; // nuova CELLA ONLINE
+    // Le altre carte pescate non scelte vanno nella HEAP.
+    pr.drawn.forEach(function (d) { if (d.id !== pr.chosen.id) s.discard.push(d); });
+    var pid = pr.playerId;
+    this._log(pid + ' Ricostruisce [' + x + ',' + y + '] con ' + pr.chosen.value + pr.chosen.suit[0].toUpperCase() + '.');
+    s.pendingRebuild = null; s.subPhase = null;
+    this._promptCurrentPhase(); // senza costo: non consuma l'azione
+  };
+  // Ritorna alla fase corrente (MOVIMENTO/ATTACCO) senza consumare l'azione.
+  Game.prototype._promptCurrentPhase = function () {
+    if (this.state.phase === 'move') this._promptMove(); else this._promptAttack();
   };
 
   // ================================================================== Catena post-azione
@@ -1455,31 +1568,68 @@
         if (pts > 0) { s.players[id].score += pts; self._log(id + ' a fine turno è su una cella bonus [' + pc.x + ',' + pc.y + ']: +' + pts + '.'); }
       });
     }
+    // Le carte non usate restano in mano (non si scartano più le rivelate non giocate). Le carte
+    // non sono più "scelte" per il prossimo round.
     ['N', 'S'].forEach(function (id) {
       var p = s.players[id];
-      // Le carte rivelate non usate vanno agli scarti; restano le 3 non rivelate.
-      p.hand = p.hand.filter(function (c) {
-        if (p.revealedIds.indexOf(c.id) !== -1) { self._discard(c); return false; }
-        return true;
-      });
       p.revealedIds = []; p.revealedCards = [];
-      // (Energy Boost: le carte pescate erano "scelte" e sono già state scartate qui sopra
-      //  con le altre carte scelte non usate; le carte NON scelte restano in mano.)
       p.pendingActions = { moves: 1, attacks: 1 };
-      // Reset dei poteri personaggio a fine round.
-      p.tacticianOpen = false;
     });
     if (s.endTriggered || s.round >= s.maxRounds) { this._finishGame(); return; }
 
-    s.firstPlayer = otherPlayer(s.firstPlayer);
-    // Ogni giocatore inizia il turno con 6 carte tra cui scegliere: si pesca sempre fino a 6.
-    ['N', 'S'].forEach(function (id) {
-      while (s.players[id].hand.length < 6) { var c = self._drawCard(); if (!c) break; s.players[id].hand.push(c); }
-    });
-    s.round += 1;
-    if (s.suitMode === 'rotating') { s.currentSuit = Deck.nextSuit(s.currentSuit); this._log('Il seme di turno avanza a ' + s.currentSuit + '.'); }
-    this._log('— Fine round. Primo Giocatore: ' + s.firstPlayer + '. Mazzo: ' + s.deck.length + ' carte.');
-    this._beginSelectPhase();
+    // Chi ha più di 6 carte sceglie quali scartare fino a 6 (sotto-fase 'end-discard'), poi si pesca
+    // fino a 6 e si passa al round successivo.
+    this._chain = [this._step_endDiscard('N'), this._step_endDiscard('S'), this._step_finishRoundDraw()];
+    this._advanceChain();
+  };
+
+  // Passo: apre lo scarto in eccesso di fine turno per `id` (se ha più di 6 carte).
+  Game.prototype._step_endDiscard = function (id) {
+    var self = this;
+    return function () {
+      var p = self.state.players[id], need = p.hand.length - 6;
+      if (need <= 0) return; // niente da scartare
+      self.state.subPhase = 'end-discard';
+      self.state.pendingEndDiscard = { playerId: id, need: need, sel: [] };
+    };
+  };
+  // Passo: pesca fino a 6, avanza round/seme, apre la scelta carte del nuovo round.
+  Game.prototype._step_finishRoundDraw = function () {
+    var self = this;
+    return function () {
+      var s = self.state;
+      s.firstPlayer = otherPlayer(s.firstPlayer);
+      ['N', 'S'].forEach(function (id) {
+        while (s.players[id].hand.length < 6) { var c = self._drawCard(); if (!c) break; s.players[id].hand.push(c); }
+      });
+      s.round += 1;
+      if (s.suitMode === 'rotating') { s.currentSuit = Deck.nextSuit(s.currentSuit); self._log('Il seme di turno avanza a ' + s.currentSuit + '.'); }
+      self._log('— Fine round. Primo Giocatore: ' + s.firstPlayer + '. Mazzo: ' + s.deck.length + ' carte.');
+      self._beginSelectPhase();
+    };
+  };
+  // ---- Scarto in eccesso di fine turno ----
+  Game.prototype.endDiscardOptions = function () {
+    var s = this.state, pd = s.pendingEndDiscard;
+    return (s.subPhase === 'end-discard' && pd) ? s.players[pd.playerId].hand.slice() : [];
+  };
+  Game.prototype.endDiscardToggle = function (cardId) {
+    var s = this.state, pd = s.pendingEndDiscard;
+    if (s.subPhase !== 'end-discard' || !pd) throw new Error('Nessuno scarto di fine turno in corso.');
+    if (!s.players[pd.playerId].hand.some(function (c) { return c.id === cardId; })) throw new Error('Carta non in mano.');
+    var i = pd.sel.indexOf(cardId);
+    if (i >= 0) pd.sel.splice(i, 1);
+    else { if (pd.sel.length >= pd.need) throw new Error('Massimo ' + pd.need + ' carte.'); pd.sel.push(cardId); }
+  };
+  Game.prototype.endDiscardConfirm = function () {
+    var s = this.state, pd = s.pendingEndDiscard, self = this;
+    if (s.subPhase !== 'end-discard' || !pd) throw new Error('Nessuno scarto di fine turno in corso.');
+    if (pd.sel.length !== pd.need) throw new Error('Devi scartare esattamente ' + pd.need + ' carte.');
+    var p = s.players[pd.playerId];
+    pd.sel.forEach(function (id) { var c = removeCard(p.hand, id); if (c) self._discard(c); });
+    this._log(pd.playerId + ' scarta ' + pd.need + ' carte in eccesso a fine turno.');
+    s.pendingEndDiscard = null; s.subPhase = null;
+    this._advanceChain();
   };
 
   Game.prototype._finishGame = function () {

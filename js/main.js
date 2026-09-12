@@ -19,13 +19,6 @@
 
   // Icona del seme (SVG inline, colorata dal CSS come in partita).
   function suitIconEl(suit) { var w = h('span', 'suit-ic s-' + suit); if (Suits) w.innerHTML = Suits.svg(suit); return w; }
-  // Descrizioni sintetiche dei ruleset (usate nei tooltip e nella nota).
-  var RULESET_DESC = {
-    A: 'Muovere su una figura non ha effetto. In attacco, colpire una figura la gira a faccia in giù, dà i suoi punti e un trofeo e fa pescare 3 oggetti tra cui ne tieni 1; anche conquistare il centro dà punti e fa scegliere un oggetto. Ogni giocatore inizia con un oggetto extra. Si vince raggiungendo la riga avversaria o ai punti.',
-    B: 'Abbinare una figura (muovendovi sopra o colpendola in attacco) la elimina, dà i suoi punti e un trofeo e fa pescare 1 oggetto.',
-    C: 'Come il Ruleset A per le figure, ma il gioco ruota sul controllo del centro: a fine turno +1 se sei adiacente al centro, +3 se sei sul centro. Raggiungere la riga avversaria non termina la partita e non dà punti: dà una scelta oggetto (una volta a partita). Conquistare il centro non dà punti ma fa scegliere un oggetto. Vince chi ha più punti al termine dei round di gioco (di default 9, configurabili 7–11).'
-  };
-
   function h(tag, cls, txt) { var e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; }
 
   function renderConfig() {
@@ -44,57 +37,43 @@
     opp.appendChild(radio('opp', 'CPU vs CPU', cfg.opponent === 'cpucpu', function () { cfg.opponent = 'cpucpu'; renderConfig(); }, 'Due CPU giocano tra loro: modalità dimostrativa.'));
     sheet.appendChild(opp);
 
-    // Ruleset (sistema di regole di abbinamento) + dimensione griglia (solo Ruleset C)
-    sheet.appendChild(fieldLabel('Ruleset'));
+    // Griglia + numero di ROUND (il regolamento è unico).
+    sheet.appendChild(fieldLabel('Griglia'));
     var rsRow = h('div', 'cfg-row');
-    var rs = h('select', 'cfg-select');
-    rs.title = 'Insieme di regole di abbinamento usato in partita.';
-    [['C', 'Ruleset C'], ['A', 'Ruleset A'], ['B', 'Ruleset B']].forEach(function (o) {
-      var op = h('option', null, o[1]); op.value = o[0]; op.title = RULESET_DESC[o[0]];
-      if (cfg.ruleset === o[0]) op.selected = true; rs.appendChild(op);
+    var gs = h('select', 'cfg-select');
+    gs.title = 'Dimensione della griglia. 4×4: +2 sulle 4 CELLE BONUS centrali a fine TURNO, niente centro.';
+    [[5, 'Griglia 5×5'], [4, 'Griglia 4×4']].forEach(function (o) {
+      var op = h('option', null, o[1]); op.value = o[0]; if (cfg.gridSize === o[0]) op.selected = true; gs.appendChild(op);
     });
-    rs.onchange = function () {
-      cfg.ruleset = rs.value;
-      // Uscendo dal Ruleset C, rimuovi dalla selezione gli oggetti "solo C".
-      if (cfg.ruleset !== 'C') cfg.objectSelection = cfg.objectSelection.filter(function (t) { var d = Objects && Objects.def(t); return !(d && d.cOnly); });
-      renderConfig();
-    };
-    rsRow.appendChild(rs);
-    // La griglia alternativa 4×4 (celle bonus) è disponibile solo per il Ruleset C.
-    if (cfg.ruleset === 'C') {
-      var gs = h('select', 'cfg-select');
-      gs.title = 'Dimensione della griglia (solo Ruleset C). 4×4: +2 sulle 4 celle centrali a fine turno, niente centro.';
-      [[5, 'Griglia 5×5'], [4, 'Griglia 4×4']].forEach(function (o) {
-        var op = h('option', null, o[1]); op.value = o[0]; if (cfg.gridSize === o[0]) op.selected = true; gs.appendChild(op);
-      });
-      gs.onchange = function () { cfg.gridSize = parseInt(gs.value, 10); renderConfig(); };
-      rsRow.appendChild(gs);
-      // Numero di round di gioco (solo Ruleset C): 7–11, default 9.
-      var nr = h('select', 'cfg-select');
-      nr.title = 'Numero di round della partita (solo Ruleset C).';
-      [7, 8, 9, 10, 11].forEach(function (n) { var op = h('option', null, n + ' round'); op.value = n; if (cfg.maxRounds === n) op.selected = true; nr.appendChild(op); });
-      nr.onchange = function () { cfg.maxRounds = parseInt(nr.value, 10); };
-      rsRow.appendChild(nr);
-    }
+    gs.onchange = function () { cfg.gridSize = parseInt(gs.value, 10); renderConfig(); };
+    rsRow.appendChild(gs);
+    // Numero di ROUND di gioco: 7–11, default 9.
+    var nr = h('select', 'cfg-select');
+    nr.title = 'Numero di ROUND della partita.';
+    [7, 8, 9, 10, 11].forEach(function (n) { var op = h('option', null, n + ' ROUND'); op.value = n; if (cfg.maxRounds === n) op.selected = true; nr.appendChild(op); });
+    nr.onchange = function () { cfg.maxRounds = parseInt(nr.value, 10); };
+    rsRow.appendChild(nr);
     sheet.appendChild(rsRow);
-    sheet.appendChild(h('p', 'cfg-desc', RULESET_DESC[cfg.ruleset] + (cfg.ruleset === 'C' && cfg.gridSize === 4 ? ' — Variante 4×4: le 4 celle centrali ([2,2],[2,3],[3,2],[3,3]) danno +2 a fine turno se le occupi; non c\'è cella centrale. N parte da [1,1], S da [4,4].' : '')));
+    sheet.appendChild(h('p', 'cfg-desc', cfg.gridSize === 4
+      ? 'Griglia 4×4: le 4 CELLE BONUS centrali ([2,2],[2,3],[3,2],[3,3]) danno +2 a fine TURNO se le occupi; nessun centro. I PILOTI partono da [1,1] e [4,4].'
+      : 'Griglia 5×5: a fine TURNO +3 sul centro, +1 su una CELLA ORTOGONALE al centro. Vince chi ha più punti al termine dei ROUND.'));
 
-    // Oggetti: dropdown (mazzo casuale o selezione manuale)
-    sheet.appendChild(fieldLabel('Oggetti'));
+    // TOOLS: DECK casuale o selezione manuale.
+    sheet.appendChild(fieldLabel('TOOLS'));
     var objRow = h('div', 'cfg-row');
     var os = h('select', 'cfg-select');
-    os.title = 'Composizione del mazzo Oggetti.';
-    [['random', 'Oggetti Random'], ['select', 'Seleziona Oggetti']].forEach(function (o) {
+    os.title = 'Composizione del DECK dei TOOLS.';
+    [['random', 'TOOLS casuali'], ['select', 'Seleziona TOOLS']].forEach(function (o) {
       var op = h('option', null, o[1]); op.value = o[0]; if (cfg.objectMode === o[0]) op.selected = true;
-      op.title = o[0] === 'random' ? '5 tipi casuali (2 copie ciascuno).' : 'Scegli tu quali oggetti (2 copie di ciascuno).';
+      op.title = o[0] === 'random' ? '5 tipi casuali (2 copie ciascuno).' : 'Scegli tu quali TOOLS (2 copie di ciascuno).';
       os.appendChild(op);
     });
     os.onchange = function () { cfg.objectMode = os.value; renderConfig(); };
     objRow.appendChild(os);
     if (cfg.objectMode === 'select') {
-      var toolsBtn = h('button', 'ghost', 'Tools' + (cfg.objectSelection.length ? ' (' + cfg.objectSelection.length + ')' : ''));
+      var toolsBtn = h('button', 'ghost', 'TOOLS' + (cfg.objectSelection.length ? ' (' + cfg.objectSelection.length + ')' : ''));
       toolsBtn.type = 'button';
-      toolsBtn.title = 'Apri la selezione degli oggetti da includere nel mazzo.';
+      toolsBtn.title = 'Apri la selezione dei TOOLS da includere nel DECK.';
       toolsBtn.onclick = openToolsDialog;
       objRow.appendChild(toolsBtn);
     }
@@ -103,19 +82,19 @@
     // Regole addizionali
     sheet.appendChild(fieldLabel('Regole addizionali'));
     var addl = h('div', 'cfg-row');
-    addl.appendChild(checkbox('Personaggi', cfg.characters, function (v) { cfg.characters = v; renderConfig(); }, 'Ogni giocatore ha un personaggio con seme di appartenenza, oggetti di partenza e potere.'));
-    addl.appendChild(checkbox('Mulligan', cfg.reshuffle, function (v) { cfg.reshuffle = v; renderConfig(); }, 'Consente di scartare 1+ carte scelte e ripescarne altrettante (usi limitati per partita).'));
-    addl.appendChild(checkbox('Clash su Attacco', cfg.clashOnAttack, function (v) { cfg.clashOnAttack = v; renderConfig(); }, 'Attaccando una pedina avversaria si apre un clash (carte a confronto): l\'attaccante vincente fa 3 punti, difensore o pareggio nessun punto. Nessuno spostamento.'));
+    addl.appendChild(checkbox('ARM', cfg.characters, function (v) { cfg.characters = v; renderConfig(); }, 'Ogni PILOTA controlla un ARM con ARM SUIT, TOOL di partenza e SKILL.'));
+    addl.appendChild(checkbox('REMIX', cfg.reshuffle, function (v) { cfg.reshuffle = v; renderConfig(); }, 'In DEPLOY puoi SCARTARE 1+ carte della STACK e PESCARNE altrettante (usi limitati per partita).'));
+    addl.appendChild(checkbox('Clash su Attacco', cfg.clashOnAttack, function (v) { cfg.clashOnAttack = v; renderConfig(); }, 'Attaccando un ARM avversario si apre un CLASH: l\'attaccante vincente COLPISCE (fa 3 punti), difensore o pareggio nessun punto. Nessuno spostamento.'));
     if (cfg.reshuffle) {
       var rc = h('select', 'cfg-select');
-      rc.title = 'Numero di Mulligan per giocatore in una partita.';
+      rc.title = 'Numero di usi di REMIX per PILOTA in una partita.';
       [1, 2, 3].forEach(function (n) { var op = h('option', null, String(n)); op.value = n; if (cfg.reshuffleCount === n) op.selected = true; rc.appendChild(op); });
       rc.onchange = function () { cfg.reshuffleCount = parseInt(rc.value, 10); };
       addl.appendChild(rc);
     }
-    // Struttura del turno: ordine delle fasi di movimento e attacco.
+    // Struttura del TURNO: ordine delle fasi di MOVIMENTO e ATTACCO.
     var ts = h('select', 'cfg-select');
-    ts.title = 'Ordine delle fasi di movimento e attacco nel turno.';
+    ts.title = 'Ordine delle fasi di MOVIMENTO e ATTACCO nel TURNO.';
     [['1221', 'Turno 1-2-2-1'], ['1212', 'Turno 1-2-1-2']].forEach(function (o) {
       var op = h('option', null, o[1]); op.value = o[0]; if (cfg.turnMode === o[0]) op.selected = true; ts.appendChild(op);
     });
@@ -123,12 +102,12 @@
     addl.appendChild(ts);
     sheet.appendChild(addl);
     sheet.appendChild(h('p', 'cfg-desc', cfg.turnMode === '1212'
-      ? 'Struttura del turno: Scelta carte → Movimento G1 → Movimento G2 → Attacco G1 → Attacco G2 → Fine round.'
-      : 'Struttura del turno: Scelta carte → Movimento G1 → Movimento G2 → Attacco G2 → Attacco G1 → Fine round.'));
+      ? 'Struttura del TURNO: DEPLOY → MOVIMENTO G1 → MOVIMENTO G2 → ATTACCO G1 → ATTACCO G2 → Fine ROUND.'
+      : 'Struttura del TURNO: DEPLOY → MOVIMENTO G1 → MOVIMENTO G2 → ATTACCO G2 → ATTACCO G1 → Fine ROUND.'));
 
-    // Scelta personaggi (solo se modulo attivo) — via menu a tendina, con descrizione sotto.
+    // Scelta ARM (solo se modulo attivo).
     if (cfg.characters) {
-      sheet.appendChild(fieldLabel('Personaggi'));
+      sheet.appendChild(fieldLabel('ARM'));
       sheet.appendChild(charSelect('N', 'charN'));
       sheet.appendChild(charSelect('S', 'charS'));
     }
@@ -152,10 +131,10 @@
     if (!rulesBtn) {
       rulesBtn = h('button', 'ghost config-rules-btn');
       rulesBtn.type = 'button';
-      rulesBtn.title = 'Mostra il regolamento del ruleset selezionato.';
-      rulesBtn.onclick = function () { if (window.CradleUI && window.CradleUI.openRulesDialog) window.CradleUI.openRulesDialog(cfg.ruleset); };
+      rulesBtn.title = 'Mostra il Regolamento.';
+      rulesBtn.onclick = function () { if (window.CradleUI && window.CradleUI.openRulesDialog) window.CradleUI.openRulesDialog('C'); };
     }
-    rulesBtn.textContent = '📖 Regolamento (' + cfg.ruleset + ')';
+    rulesBtn.textContent = '📖 Regolamento';
     if (rulesBtn.parentNode !== overlay) overlay.appendChild(rulesBtn);
   }
 
@@ -178,10 +157,10 @@
     var box = h('div', 'char-block');
     var isCpuSlot = cfg.opponent === 'cpucpu' || (cfg.opponent === 'cpu' && playerId === 'S');
     // Titolo su una riga a sé; dropdown e card sotto.
-    box.appendChild(h('div', 'char-who', 'Giocatore ' + playerId + (playerId === 'N' ? ' (Nord)' : ' (Sud)') + (isCpuSlot ? ' — CPU' : '')));
+    box.appendChild(h('div', 'char-who', 'Pilota ' + playerId + (playerId === 'N' ? ' (Nord)' : ' (Sud)') + (isCpuSlot ? ' — CPU' : '')));
     var sel = h('select', 'cfg-select char-select');
-    sel.title = 'Scegli il personaggio.';
-    // "Random": personaggio scelto casualmente a inizio partita.
+    sel.title = 'Scegli l\'ARM.';
+    // "Random": ARM scelto casualmente a inizio partita.
     var rop = h('option', null, 'Random'); rop.value = 'random'; if (cfg[cfgKey] === 'random') rop.selected = true; sel.appendChild(rop);
     Characters.ORDER.forEach(function (type) {
       var ch = Characters.get(type);
@@ -194,28 +173,27 @@
     return box;
   }
 
-  // Testo "quando" di un oggetto (come in partita): "attack & move" se in entrambe le fasi.
+  // Etichetta della fase di un TOOL (DEPLOY / MOVIMENTO / ATTACCO).
   function objPhaseTextCfg(type) {
     var def = Objects && Objects.def(type);
-    var phases = (def && def.phases) ? def.phases : (def ? [def.phase] : []);
-    return phases.length > 1 ? 'attack & move' : (phases[0] || '');
+    return def ? def.phaseLabel : '';
   }
-  // Descrizione compatta del personaggio: 3 riquadri uguali (Seme, Oggetti, Abilità) con tooltip.
+  // Descrizione compatta dell'ARM: 3 riquadri uguali (ARM SUIT, TOOL, SKILL) con tooltip.
   function charDescription(type) {
     var d = h('div', 'char-desc');
-    if (type === 'random') { d.appendChild(h('div', 'cd-random', 'Personaggio scelto casualmente a inizio partita.')); return d; }
+    if (type === 'random') { d.appendChild(h('div', 'cd-random', 'ARM scelto casualmente a inizio partita.')); return d; }
     var ch = Characters.get(type); if (!ch) return d;
-    // Seme (dentro un chip, così i 3 riquadri sono uguali)
+    // ARM SUIT (dentro un chip, così i 3 riquadri sono uguali)
     var semeBox = h('div', 'cd-box');
-    semeBox.appendChild(h('div', 'cd-label', 'Seme'));
+    semeBox.appendChild(h('div', 'cd-label', 'ARM SUIT'));
     var semeChip = h('div', 'cd-chip cd-seme-chip');
     var ic = suitIconEl(ch.suit); ic.classList.add('cd-suit'); semeChip.appendChild(ic);
     semeChip.appendChild(h('span', 'cd-chip-name', SUIT_LABEL[ch.suit]));
-    attachTip(semeChip, 'Seme di appartenenza: ' + SUIT_LABEL[ch.suit] + ' (funziona come un secondo seme di turno personale e fisso).');
+    attachTip(semeChip, 'ARM SUIT: ' + SUIT_LABEL[ch.suit] + ' (funziona come una GLOBAL SUIT personale e fissa).');
     semeBox.appendChild(semeChip); d.appendChild(semeBox);
-    // Oggetti (nome + quando, con tooltip descrizione)
+    // TOOL di partenza (nome + fase, con tooltip descrizione)
     var objBox = h('div', 'cd-box');
-    objBox.appendChild(h('div', 'cd-label', 'Oggetti'));
+    objBox.appendChild(h('div', 'cd-label', 'TOOL'));
     (ch.startObjects || []).forEach(function (t) {
       var def = Objects && Objects.def(t);
       var chip = h('div', 'cd-chip');
@@ -225,9 +203,9 @@
       objBox.appendChild(chip);
     });
     d.appendChild(objBox);
-    // Abilità (nome + numero di utilizzi, con tooltip descrizione)
+    // SKILL (nome + numero di usi, con tooltip descrizione)
     var abBox = h('div', 'cd-box');
-    abBox.appendChild(h('div', 'cd-label', 'Abilità'));
+    abBox.appendChild(h('div', 'cd-label', 'SKILL'));
     var abChip = h('div', 'cd-chip');
     abChip.appendChild(h('span', 'cd-chip-name', ch.label));
     abChip.appendChild(h('span', 'cd-chip-sub', ch.powerUses != null ? (ch.powerUses + ' usi') : 'passiva'));
@@ -267,7 +245,7 @@
     x.onclick = close; head.appendChild(x); box.appendChild(head);
 
     var content = h('div', 'opt-content');
-    content.appendChild(h('p', 'setup-sub', 'Il mazzo Oggetti sarà composto da 2 copie di ciascun oggetto selezionato. Clicca per selezionare/deselezionare.'));
+    content.appendChild(h('p', 'setup-sub', 'Il DECK dei TOOLS sarà composto da 2 copie di ciascun TOOL selezionato. Clicca per selezionare/deselezionare.'));
     var grid = h('div', 'obj-card-grid');
     function renderGrid() {
       grid.innerHTML = '';
@@ -322,10 +300,10 @@
     var opts = buildOpts();
     var game = window.CradleEngine.createGame(opts);
     var st = game.state;
-    st.log.push('Setup: seme iniziale/di turno = ' + st.centerInitialSuit + ' · modalità ' + st.suitMode +
-      ' · moduli: ' + (st.modules.characters ? 'Personaggi ' : '') + (st.modules.objects ? 'Oggetti' : '') +
-      (!st.modules.characters && !st.modules.objects ? 'base' : '') + '. Primo Giocatore = ' + st.firstPlayer + '.');
-    if (st.modules.characters) st.log.push('Personaggi: N=' + st.players.N.character + ' (' + st.players.N.belongingSuit + '), S=' + st.players.S.character + ' (' + st.players.S.belongingSuit + ').');
+    st.log.push('Setup: GLOBAL SUIT iniziale = ' + st.centerInitialSuit + ' · modalità ' + st.suitMode +
+      ' · moduli: ' + (st.modules.characters ? 'ARM ' : '') + (st.modules.objects ? 'TOOLS' : '') +
+      (!st.modules.characters && !st.modules.objects ? 'base' : '') + '. 1° Pilota = ' + st.firstPlayer + '.');
+    if (st.modules.characters) st.log.push('ARM: N=' + (Characters.get(st.players.N.character) || {}).label + ' (' + st.players.N.belongingSuit + '), S=' + (Characters.get(st.players.S.character) || {}).label + ' (' + st.players.S.belongingSuit + ').');
 
     var controller = window.CradleUI.createController(game, { mode: cfg.opponent, cpuId: 'S' });
     window.__cradle = { game: game, controller: controller };
@@ -341,6 +319,8 @@
   function batchWhoActs(s, g) {
     if (s.gameOver) return null;
     if (s.subPhase === 'object-discard') return s.pendingObjectDiscard.playerId;
+    if (s.subPhase === 'end-discard') return s.pendingEndDiscard.playerId;
+    if (s.subPhase === 'rebuild-select' || s.subPhase === 'rebuild-place') return s.pendingRebuild.playerId;
     if (s.subPhase === 'tool-discard') return s.pendingToolDiscard && s.pendingToolDiscard.playerId;
     if (s.subPhase === 'runner-figure') return s.pendingRunner && s.pendingRunner.playerId;
     if (s.subPhase === 'timebomb-suit') return s.pendingTimebomb.playerId;
@@ -438,14 +418,14 @@
     return [
       ['Partite completate', acc.completed + '/' + GAMES],
       ['Errori', String(acc.errors)],
-      ['Round medi', (acc.rounds / c).toFixed(2)],
+      ['ROUND medi', (acc.rounds / c).toFixed(2)],
       ['Punti medi totali', (acc.combined / c).toFixed(1)],
       ['Punti medi vincitore', (acc.winner / c).toFixed(1)],
       ['Punti medi perdente', (acc.loser / c).toFixed(1)],
       ['Margine medio', (acc.margin / c).toFixed(1)],
       ['Patte', (100 * acc.ties / c).toFixed(1) + '%'],
-      ['Vittorie 1° giocatore (su decise)', (100 * acc.startFirstWins / dec).toFixed(1) + '% (±' + (196 * Math.sqrt(0.25 / dec)).toFixed(1) + ')'],
-      ['Figure medie / giocatore', (acc.figures / c).toFixed(2)],
+      ['Vittorie 1° Pilota (su decise)', (100 * acc.startFirstWins / dec).toFixed(1) + '% (±' + (196 * Math.sqrt(0.25 / dec)).toFixed(1) + ')'],
+      ['OBIETTIVI medi / Pilota', (acc.figures / c).toFixed(2)],
       ['Passi a vuoto medi / partita', (acc.emptyPass / c).toFixed(2) + ' (mov ' + (acc.emptyPassMove / c).toFixed(2) + ' · att ' + (acc.emptyPassShoot / c).toFixed(2) + ')']
     ];
   }
@@ -468,12 +448,14 @@
   }
   function batchSettingsRows() {
     return [
-      ['Ruleset', cfg.ruleset],
-      ['Personaggi (modulo)', cfg.characters ? 'sì' : 'no'],
-      ['Personaggio N', cfg.charN === 'random' ? 'Random' : (Characters.get(cfg.charN) || {}).label],
-      ['Personaggio S', cfg.charS === 'random' ? 'Random' : (Characters.get(cfg.charS) || {}).label],
-      ['Oggetti', cfg.objectMode === 'select' ? ('Selezione (' + cfg.objectSelection.length + ')') : 'Random'],
-      ['Mulligan', cfg.reshuffle ? (cfg.reshuffleCount + '/partita') : 'no'],
+      ['Griglia', cfg.gridSize + '×' + cfg.gridSize],
+      ['ROUND', String(cfg.maxRounds)],
+      ['ARM (modulo)', cfg.characters ? 'sì' : 'no'],
+      ['ARM N', cfg.charN === 'random' ? 'Random' : (Characters.get(cfg.charN) || {}).label],
+      ['ARM S', cfg.charS === 'random' ? 'Random' : (Characters.get(cfg.charS) || {}).label],
+      ['TOOLS', cfg.objectMode === 'select' ? ('Selezione (' + cfg.objectSelection.length + ')') : 'Random'],
+      ['REMIX', cfg.reshuffle ? (cfg.reshuffleCount + '/partita') : 'no'],
+      ['Clash su Attacco', cfg.clashOnAttack ? 'sì' : 'no'],
       ['Modalità', 'CPU vs CPU']
     ];
   }
@@ -489,8 +471,8 @@
     var content = h('div', 'batch-content');
     content.appendChild(collapsibleSection('Impostazioni', batchSettingsRows(), false));
     content.appendChild(collapsibleSection('Generale', batchGeneralRows(acc, GAMES), false));
-    if (acc.perChar) content.appendChild(collapsibleSection('Personaggi (win-rate)', batchCharRows(acc), false));
-    content.appendChild(collapsibleSection('Oggetti (utilizzo)', batchObjRows(acc, GAMES), true));
+    if (acc.perChar) content.appendChild(collapsibleSection('ARM (win-rate)', batchCharRows(acc), false));
+    content.appendChild(collapsibleSection('TOOLS (utilizzo)', batchObjRows(acc, GAMES), true));
     box.appendChild(content);
 
     var foot = h('div', 'tools-foot');
@@ -527,8 +509,8 @@
     lines.push('sezione,metrica,valore');
     push('Impostazioni', batchSettingsRows());
     push('Generale', batchGeneralRows(acc, GAMES));
-    if (acc.perChar) push('Personaggi', batchCharRows(acc));
-    push('Oggetti', batchObjRows(acc, GAMES));
+    if (acc.perChar) push('ARM', batchCharRows(acc));
+    push('TOOLS', batchObjRows(acc, GAMES));
     var blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a'); a.href = url; a.download = 'cradle-batch-' + Date.now() + '.csv';

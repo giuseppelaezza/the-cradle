@@ -186,6 +186,19 @@
     return { x: best.o.x, y: best.o.y };
   }
 
+  // Scarto in eccesso di fine turno: scarta le carte di valore più basso (non-jolly per prime).
+  function chooseEndDiscard(game, id) {
+    var pd = game.state.pendingEndDiscard, need = pd.need;
+    var hand = game.state.players[id].hand.slice();
+    hand.sort(function (a, b) {
+      var ja = (a.suit === suit(game) || a.suit === bel(game, id)) ? 1 : 0;
+      var jb = (b.suit === suit(game) || b.suit === bel(game, id)) ? 1 : 0;
+      if (ja !== jb) return ja - jb;          // scarta prima le non-jolly
+      return a.value - b.value;               // poi le più basse
+    });
+    return hand.slice(0, need).map(function (c) { return c.id; });
+  }
+
   // 7) Scarto forzato: scarta l'oggetto non-iniziale meno utile (semplice: il primo non-iniziale).
   function chooseDiscard(game, id) {
     var objs = game.state.players[id].objects.filter(function (o) { return !o.fromCharacter; });
@@ -298,12 +311,7 @@
       var normal = phase === 'move' ? bestArrival(game, id, revealed, s.moveModifier).value : bestShotWith(game, id, revealed).value;
       if (bestT && bestV > normal && bestV > 0) return { kind: 'brawler', x: bestT.x, y: bestT.y };
     }
-    if (p.character === 'tactician' && game.canActivatePower(id)) {
-      var rev = game.availableRevealed(id), full = p.hand;
-      var nowV = phase === 'move' ? bestArrival(game, id, rev, s.moveModifier).value : bestShotWith(game, id, rev).value;
-      var fullV = phase === 'move' ? bestArrival(game, id, full, s.moveModifier).value : bestShotWith(game, id, full).value;
-      if (fullV > nowV && fullV >= 2) return { kind: 'tactician' };
-    }
+    // Tactician: il potere (guardare la riserva avversaria) è informativo e la CPU non lo sa sfruttare → non lo usa.
     return null;
   }
 
@@ -351,6 +359,9 @@
     if (s.subPhase === 'randomizer-select') { if (s.pendingRandomizer.playerId === id) { cpuRandomizerCells(game, id).forEach(function (c) { game.randomizerToggle(c.x, c.y); }); game.randomizerConfirm(); } return {}; }
     if (s.subPhase === 'randomizer-place') { if (s.pendingRandomizer.playerId === id) { var pr = s.pendingRandomizer; pr.chosen.forEach(function (ch, i) { if (pr.drawn[i]) game.randomizerPlace(pr.drawn[i].id, ch.x, ch.y); }); game.randomizerDone(); } return {}; }
     if (s.subPhase === 'object-discard') { if (s.pendingObjectDiscard.playerId === id) game.discardObject(id, chooseDiscard(game, id)); return {}; }
+    if (s.subPhase === 'end-discard') { if (s.pendingEndDiscard.playerId === id) { chooseEndDiscard(game, id).forEach(function (cid) { game.endDiscardToggle(cid); }); game.endDiscardConfirm(); } return {}; }
+    if (s.subPhase === 'rebuild-select') { if (s.pendingRebuild.playerId === id) { var rd = game.rebuildDrawn(); if (rd.length) game.rebuildSelectCard(maxValueCard(rd).id); } return {}; }
+    if (s.subPhase === 'rebuild-place') { if (s.pendingRebuild.playerId === id) { var rt = game.rebuildTargets(); if (rt.length) game.rebuildPlace(rt[0].x, rt[0].y); } return {}; }
     if (s.subPhase === 'altmatch-object') { if (s.pendingAltMatch.playerId === id) cpuAltPickObject(game, id); return {}; }
     if (s.subPhase === 'clash-cards') { if (game.clashCurrentChooser() === id) game.clashChoose(id, chooseClashCard(game, id)); return {}; }
     if (s.subPhase === 'clash-reloc') { if (s.pendingClash.relocatorId === id) { var r = chooseRelocation(game); if (r.skip) game.clashSkipRelocate(); else game.clashRelocate(r.x, r.y); } return {}; }

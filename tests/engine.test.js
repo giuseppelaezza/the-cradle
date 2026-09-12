@@ -406,22 +406,22 @@ console.log('# Poteri: runner (nessun pari↔pari), tactician (apre carte), braw
   s.phase = 'move';
   ok(!g._matches('N', { value: 4, suit: 'oro' }, evenCell), 'runner: carta pari NON abbina più cella pari (potere rimosso)');
 
-  // tactician: attiva potere (senza oggetto, max 2 volte per partita) → availableRevealed = tutta la mano
+  // tactician: potere attivo = guarda la riserva avversaria (3 volte a partita); non cambia le proprie carte disponibili
   var gt = Engine.createGame({ rng: makeRng(5), firstPlayer: 'N', modules: { characters: true, objects: true, powers: true }, characters: { N: 'tactician', S: 'runner' } });
   var st = gt.state;
   gt.selectCards('N', st.players.N.hand.slice(0, 3).map(function (c) { return c.id; }));
   gt.selectCards('S', st.players.S.hand.slice(0, 3).map(function (c) { return c.id; }));
-  eq(gt.availableRevealed('N').length, 3, 'tactician: prima del potere 3 carte');
-  eq(st.players.N.tacticianLeft, 2, 'tactician: 2 attivazioni disponibili a inizio partita');
-  ok(gt.canActivatePower('N'), 'tactician può attivare (senza scartare oggetti)');
+  eq(gt.availableRevealed('N').length, 3, 'tactician: usa sempre solo le 3 carte scelte');
+  eq(st.players.N.tacticianLeft, 3, 'tactician: 3 attivazioni disponibili a inizio partita');
+  ok(gt.canActivatePower('N'), 'tactician può attivare');
   gt.activatePower('N');
-  eq(gt.availableRevealed('N').length, 6, 'tactician: dopo il potere usa tutte le 6 carte');
-  eq(st.players.N.tacticianLeft, 1, 'tactician: attivazioni decrementate a 1');
-  // esaurisci: seconda attivazione (nuovo round) e poi non più disponibile
-  st.players.N.tacticianOpen = false; st.players.N.tacticianLeft = 1;
-  gt.activatePower('N'); eq(st.players.N.tacticianLeft, 0, 'tactician: attivazioni a 0');
-  st.players.N.tacticianOpen = false;
-  ok(!gt.canActivatePower('N'), 'tactician: esaurite le 2 attivazioni non è più attivabile');
+  eq(gt.availableRevealed('N').length, 3, 'tactician: il potere non apre le carte non scelte');
+  eq(st.players.N.tacticianLeft, 2, 'tactician: attivazioni decrementate a 2');
+  ok(gt._tacticianPeek && gt._tacticianPeek.opponentId === 'S', 'tactician: peek imposta la riserva avversaria per la UI');
+  eq(gt._tacticianPeek.cards.length, gt.availableReserve('S').length, 'tactician: peek mostra tutte le carte di riserva di S');
+  gt.activatePower('N'); gt.activatePower('N');
+  eq(st.players.N.tacticianLeft, 0, 'tactician: attivazioni a 0 dopo 3 usi');
+  ok(!gt.canActivatePower('N'), 'tactician: esaurite le 3 attivazioni non è più attivabile');
 
   // jetpack: scarta una carta SCELTA (non di riserva) come costo, e serve >=2 carte scelte
   var gj = Engine.createGame({ rng: makeRng(8), firstPlayer: 'N', modules: { objects: true } });
@@ -477,7 +477,7 @@ console.log('# Oggetti avanzati: elemental bomb, barrage, randomizer');
   var s = g.state; s.players.N.objects = [{ id: 'eb', type: 'elemental_bomb', phase: 'attack', fromCharacter: false }]; atk(g, 'N');
   g.useObject('N', 'eb'); g.elementalTarget(3, 3); g.elementalSuit('oro');
   eq(g.getCell(3, 3).card.suit, 'oro', 'elemental: centro → oro'); eq(g.getCell(3, 2).card.suit, 'oro', 'elemental: ortogonale → oro');
-  eq(s.phase === 'attack' && s.activePlayer === 'S', true, 'elemental consuma l\'attacco');
+  eq(s.phase === 'attack' && s.activePlayer === 'N' && s.actionsLeft === 1, true, 'elemental NON consuma l\'attacco (costo rimosso)');
   // barrage: colpisce una SINGOLA cella; non può colpire celle con pedina
   var g2 = Engine.createGame({ rng: makeRng(2), firstPlayer: 'N', modules: { objects: true } });
   var s2 = g2.state; s2.players.N.objects = [{ id: 'br', type: 'barrage', phase: 'attack', fromCharacter: false }]; atk(g2, 'N');
@@ -859,6 +859,103 @@ console.log('# Clash su Attacco: attacco su pedina → clash, +3 solo se vince l
   g2.clashChoose('N', 'rn2'); g2.clashChoose('S', 'rs'); // 2 < 3 → difensore vince
   eq(s2.players.N.score - sc2, 0, 'attack-clash: attaccante perde, 0 punti');
   eq(s2.players.S.score - sc2s, 0, 'attack-clash: difensore vince ma 0 punti');
+})();
+
+// -------------------------------------------------------------------- Nuovi TOOLS: Remix!, Encore!, Ricostruisci
+console.log('# Nuovi TOOLS: Remix! (+1 REMIX), Encore! (+1 SKILL), Ricostruisci (pesca 3, scegli 1, SOVRASCRIVI)');
+(function () {
+  var g = Engine.createGame({ rng: makeRng(3), firstPlayer: 'N', modules: { objects: true, reshuffle: true }, reshuffleCount: 2 });
+  var s = g.state;
+  s.players.N.objects = [{ id: 'rx', type: 'remix', phase: 'select', fromCharacter: false }];
+  s.phase = 'select'; s.subPhase = null;
+  var rl0 = s.players.N.reshuffleLeft;
+  g.useObject('N', 'rx');
+  eq(s.players.N.reshuffleLeft - rl0, 1, 'Remix!: +1 uso REMIX');
+
+  var g2 = Engine.createGame({ rng: makeRng(3), firstPlayer: 'N', modules: { characters: true, objects: true, powers: true }, characters: { N: 'tactician', S: 'runner' } });
+  var s2 = g2.state;
+  s2.players.N.objects = [{ id: 'en', type: 'encore', phase: 'select', fromCharacter: false }];
+  s2.phase = 'select'; s2.subPhase = null;
+  var tl0 = s2.players.N.tacticianLeft;
+  g2.useObject('N', 'en');
+  eq(s2.players.N.tacticianLeft - tl0, 1, 'Encore!: +1 uso SKILL');
+
+  var g3 = Engine.createGame({ rng: makeRng(3), firstPlayer: 'N', modules: { objects: true } });
+  var s3 = g3.state;
+  var dc = g3.getCell(2, 2); dc.destroyed = true; dc.card = null;
+  s3.players.N.objects = [{ id: 'rb', type: 'rebuild', phase: 'move', fromCharacter: false }];
+  s3.phase = 'move'; s3.subPhase = null; s3.activePlayer = 'N'; s3.actionsLeft = 1; s3.moveModifier = null; s3.firstPlayer = 'N';
+  g3.useObject('N', 'rb');
+  eq(s3.subPhase, 'rebuild-select', 'Ricostruisci: apre la scelta della carta');
+  ok(g3.rebuildDrawn().length >= 1 && g3.rebuildDrawn().length <= 3, 'Ricostruisci: PESCA fino a 3');
+  g3.rebuildSelectCard(g3.rebuildDrawn()[0].id);
+  eq(s3.subPhase, 'rebuild-place', 'Ricostruisci: apre la scelta della CELLA');
+  ok(g3.rebuildTargets().some(function (o) { return o.x === 2 && o.y === 2; }), 'Ricostruisci: la CELLA DISTRUTTA è bersaglio');
+  g3.rebuildPlace(2, 2);
+  ok(!g3.getCell(2, 2).destroyed && g3.getCell(2, 2).card, 'Ricostruisci: la CELLA torna ONLINE con la carta scelta');
+  eq(s3.subPhase, null, 'Ricostruisci: concluso');
+  eq(s3.actionsLeft, 1, 'Ricostruisci: non consuma l\'azione');
+})();
+
+// -------------------------------------------------------------------- Fine turno: scarto in eccesso oltre 6 carte
+console.log('# Fine turno: chi ha più di 6 carte scarta fino a 6; a inizio turno tutti hanno 6');
+(function () {
+  var g = Engine.createGame({ rng: makeRng(5), firstPlayer: 'N' });
+  var s = g.state;
+  s.round = 3;
+  s.players.N.hand = [1, 2, 3, 4, 5, 6, 7, 8].map(function (v, i) { return { id: 'n' + i, value: v, suit: 'oro' }; });
+  s.players.S.hand = [1, 2, 3, 4].map(function (v, i) { return { id: 's' + i, value: v, suit: 'oro' }; });
+  s.players.N.revealedIds = []; s.players.S.revealedIds = [];
+  g._endRound();
+  eq(s.subPhase, 'end-discard', 'N con 8 carte apre lo scarto in eccesso');
+  eq(s.pendingEndDiscard.playerId, 'N', 'tocca a N');
+  eq(s.pendingEndDiscard.need, 2, 'N deve scartare 2 carte');
+  eq(g.endDiscardOptions().length, 8, 'sceglie tra le sue 8 carte');
+  g.endDiscardToggle('n0'); g.endDiscardToggle('n1');
+  g.endDiscardConfirm();
+  eq(s.players.N.hand.length, 6, 'N: 6 carte a inizio nuovo round');
+  eq(s.players.S.hand.length, 6, 'S: pescato fino a 6');
+  eq(s.round, 4, 'round avanzato');
+})();
+
+// -------------------------------------------------------------------- Clash su Attacco: figura + homing
+console.log('# Clash su Attacco: su figura (vinta) gira la carta, dà punti figura e scelta oggetto; con homing distrugge');
+(function () {
+  // Ruleset C, attacco su FIGURA (valore 9) con pedina avversaria: attaccante vince → carta girata,
+  // +punti figura, scelta oggetto; e il +3 del clash.
+  var g = Engine.createGame({ rng: makeRng(31), firstPlayer: 'N', ruleset: 'C', clashOnAttack: true, modules: { objects: true } });
+  var s = g.state;
+  g.pawnCell('S').pawn = null; var tc = g.getCell(3, 1); tc.pawn = 'S'; tc.card = { id: 'f9', value: 9, suit: 'oro' }; tc.faceDown = false; tc.destroyed = false;
+  g.pawnCell('N').pawn = null; g.getCell(1, 3).pawn = 'N';
+  s.players.N.hand = [{ id: 'sh', value: 9, suit: 'oro' }, { id: 'ra', value: 5, suit: 'oro' }, { id: 'rb', value: 6, suit: 'oro' }, { id: 'rn', value: 9, suit: 'oro' }];
+  s.players.N.revealedIds = ['sh', 'ra', 'rb'];
+  s.players.S.hand = [{ id: 'sa', value: 2, suit: 'bastoni' }, { id: 'sb', value: 3, suit: 'bastoni' }, { id: 'sc', value: 4, suit: 'bastoni' }, { id: 'rs', value: 3, suit: 'bastoni' }];
+  s.players.S.revealedIds = ['sa', 'sb', 'sc'];
+  s.phase = 'attack'; s.subPhase = null; s.activePlayer = 'N'; s.actionsLeft = 1; s.attackModifier = null;
+  var sc0 = s.players.N.score, fig0 = s.players.N.figuresMatched;
+  g.shoot('N', 3, 1, 'sh');
+  g.clashChoose('N', 'rn'); g.clashChoose('S', 'rs'); // 9 > 3 → attaccante vince
+  eq(s.players.N.score - sc0, 3 + Deck.figurePoints({ value: 9 }), 'attack-clash figura: +3 clash + punti figura');
+  eq(s.players.N.figuresMatched - fig0, 1, 'attack-clash figura: figura conteggiata');
+  ok(g.getCell(3, 1).faceDown, 'attack-clash figura: carta girata a faccia in giù');
+  eq(s.subPhase, 'altmatch-object', 'attack-clash figura: scelta oggetto offerta');
+
+  // Homing su pedina: attaccante vince → la cella viene distrutta.
+  var g2 = Engine.createGame({ rng: makeRng(32), firstPlayer: 'N', ruleset: 'C', clashOnAttack: true, modules: { objects: true } });
+  var s2 = g2.state;
+  g2.pawnCell('S').pawn = null; var tc2 = g2.getCell(3, 1); tc2.pawn = 'S'; tc2.card = { id: 'h4', value: 4, suit: 'oro' }; tc2.faceDown = false; tc2.destroyed = false;
+  g2.pawnCell('N').pawn = null; g2.getCell(1, 3).pawn = 'N';
+  s2.players.N.hand = [{ id: 'sh', value: 4, suit: 'oro' }, { id: 'ra', value: 5, suit: 'oro' }, { id: 'rb', value: 6, suit: 'oro' }, { id: 'rn', value: 9, suit: 'oro' }];
+  s2.players.N.revealedIds = ['sh', 'ra', 'rb'];
+  s2.players.S.hand = [{ id: 'sa', value: 2, suit: 'bastoni' }, { id: 'sb', value: 3, suit: 'bastoni' }, { id: 'sc', value: 4, suit: 'bastoni' }, { id: 'rs', value: 3, suit: 'bastoni' }];
+  s2.players.S.revealedIds = ['sa', 'sb', 'sc'];
+  s2.players.N.objects = [{ id: 'hm', type: 'homing_missile', phase: 'attack', fromCharacter: false }];
+  s2.phase = 'attack'; s2.subPhase = null; s2.activePlayer = 'N'; s2.actionsLeft = 1; s2.attackModifier = null;
+  g2.useObject('N', 'hm'); // arma homing
+  var r2 = g2.shoot('N', 3, 1, 'sh');
+  eq(r2.type, 'clash', 'homing su pedina + clashOnAttack: apre comunque il clash');
+  g2.clashChoose('N', 'rn'); g2.clashChoose('S', 'rs'); // attaccante vince
+  ok(g2.getCell(3, 1).destroyed, 'attack-clash + homing: cella distrutta dopo la vittoria');
 })();
 
 // -------------------------------------------------------------------- Ruleset C 4×4 (celle bonus)
