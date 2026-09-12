@@ -1162,6 +1162,23 @@ console.log('# Statistiche di partita (breakdown punti, contatori azioni/oggetti
   });
 })();
 
+// -------------------------------------------------------------------- The Sniper (brawler) + Clash su Attacco
+console.log('# The Sniper: in ATTACCO su una CELLA OCCUPATA la SKILL apre un clash');
+(function () {
+  var g = Engine.createGame({ rng: makeRng(3), clashOnAttack: true,
+    modules: { characters: true, objects: true, powers: true }, characters: { N: 'brawler', S: 'fighter' } });
+  toMovePhase(g);
+  var s = g.state;
+  // Porta N (brawler) in ATTACCO con 3 carte attive disponibili e la pedina avversaria come bersaglio.
+  s.phase = 'attack'; s.activePlayer = 'N'; s.actionsLeft = 1;
+  ok(g.canBrawler('N'), 'brawler attivabile in attacco con 3 carte attive');
+  var sc = g.pawnCell('S');
+  ok(g.brawlerTargets('N').some(function (t) { return t.x === sc.x && t.y === sc.y; }), 'la pedina avversaria è un bersaglio valido');
+  g.brawlerAction('N', sc.x, sc.y);
+  eq(s.subPhase, 'clash-cards', 'la SKILL su pedina avversaria apre un clash');
+  ok(s.pendingClash && s.pendingClash.isAttack === true && s.pendingClash.attackerId === 'N', 'clash da ATTACCO impostato correttamente');
+})();
+
 // --------------------------------------------------------------------
 console.log('\n=== Risultato: ' + passed + ' passati, ' + failed + ' falliti ===');
 process.exit(failed ? 1 : 0);

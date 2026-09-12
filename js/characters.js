@@ -23,7 +23,7 @@
                  power: 'SKILL (2 usi): quando MATCHI un OBIETTIVO in MOVIMENTO puoi SCARTARE [1] carta dalla STACK ATTIVA per COLPIRLO (ne ottieni il VALORE e la scelta di [1] TOOL).' },
     brawler:   { type: 'brawler',   suit: 'coppe',   startObjects: ['barrage'], label: 'The Sniper',
                  powerUses: 3,
-                 power: 'SKILL (3 usi): in MOVIMENTO o ATTACCO, se hai 3 carte nella STACK ATTIVA le SCARTI tutte per MATCHARE una CELLA qualsiasi (SOSTITUISCI l\'azione).' },
+                 power: 'SKILL (3 usi): in MOVIMENTO o ATTACCO, se hai 3 carte nella STACK ATTIVA le SCARTI tutte per MATCHARE una CELLA qualsiasi (SOSTITUISCI l\'azione). In ATTACCO su una CELLA OCCUPATA dall\'ARM avversario si apre un CLASH.' },
     tactician: { type: 'tactician', suit: 'oro',     startObjects: ['timebomb'], label: 'Deep Mind',
                  powerUses: 3,
                  power: 'SKILL (3 usi): guarda la STACK DI RISERVA dell\'ARM avversario. Passiva: quando scegli [1] TOOL scegli tra 4 invece che tra 3.' },

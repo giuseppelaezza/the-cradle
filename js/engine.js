@@ -1354,6 +1354,16 @@
       this._advanceChain();
     } else {
       this._recordTrail('shot', playerId, this.pawnCell(playerId), cell);
+      // Clash su Attacco: se il bersaglio è occupato dall'ARM avversario, la SKILL apre un clash
+      // (come un attacco normale). L'attaccante ha già scartato le 3 carte attive: il clash usa la RISERVA.
+      if (s.clashOnAttack && cell.pawn === otherPlayer(playerId)) {
+        s.subPhase = 'clash-cards';
+        s.pendingClash = { attackerId: playerId, defenderId: otherPlayer(playerId), x: x, y: y, moveCard: null, isAttack: true, attackMod: null,
+                           attackerCardId: null, defenderCardId: null, whoChooses: playerId };
+        this._log(playerId + ' (brawler) attacca la pedina di ' + otherPlayer(playerId) + ' su [' + x + ',' + y + '] → clash.');
+        this._clashAdvanceAuto();
+        return;
+      }
       var info2 = this._applyShot(playerId, cell, null, false);
       this._chain = [];
       if (info2.altFigureObject) this._chain.push(this._step_altObject(playerId));

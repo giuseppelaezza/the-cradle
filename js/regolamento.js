@@ -134,7 +134,7 @@
 "| ARM | ARM SUIT | TOOL di partenza | SKILL |\n" +
 "|---|---|---|---|\n" +
 "| **E-RUN-01** | spade | Jetpack | SKILL (2 usi): quando MATCHI un OBIETTIVO in MOVIMENTO puoi SCARTARE [1] carta dalla STACK ATTIVA per COLPIRLO (ne ottieni il VALORE e la scelta di [1] TOOL). Se la CELLA è OCCUPATA si fa CLASH: la SKILL vale solo se vinci. |\n" +
-"| **The Sniper** | coppe | Barrage! | SKILL (3 usi): in MOVIMENTO o ATTACCO, se hai 3 carte nella STACK ATTIVA le SCARTI tutte per MATCHARE una CELLA qualsiasi (SOSTITUISCI l'azione). |\n" +
+"| **The Sniper** | coppe | Barrage! | SKILL (3 usi): in MOVIMENTO o ATTACCO, se hai 3 carte nella STACK ATTIVA le SCARTI tutte per MATCHARE una CELLA qualsiasi (SOSTITUISCI l'azione). In ATTACCO su una CELLA OCCUPATA dall'ARM avversario si apre un **CLASH** (§13). |\n" +
 "| **Deep Mind** | oro | Manipolatore Temporale | SKILL (3 usi): guarda la STACK DI RISERVA dell'ARM avversario. Passiva: quando scegli [1] TOOL scegli tra 4 invece che tra 3. |\n" +
 "| **Soldier Boy** | bastoni | Spinta | SKILL passiva: in ATTACCO MATCHI le carte di VALORE PARI tra loro (una carta pari MATCHA una CELLA ONLINE di VALORE pari). |\n\n" +
 "Il TOOL di partenza dell'ARM si usa **una sola volta** e **non conta** nel limite TOOLS (§9).");
