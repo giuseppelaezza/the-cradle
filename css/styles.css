@@ -446,24 +446,24 @@ body.setup .app { visibility: hidden; }
 body.setup .sheet { padding-top: 14px; }
 .setup-sub { text-align: left; color: var(--muted); font-size: 15px; margin: 0 0 8px; letter-spacing: .02em; }
 .big { font-size: 44px; margin: 8px 0; text-align: center; }
-.final-scores { display: flex; gap: 20px; justify-content: center; margin: 16px 0; }
-.final-scores .fs { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 12px 22px; text-align: center; }
-.final-scores .fs.win { border-color: var(--good); } .final-scores .fs .n { font-size: 13px; color: var(--muted); } .final-scores .fs .p { font-size: 30px; font-weight: 800; }
 .win { color: var(--good); text-align: center; }
 .final-summary { text-align: center; color: var(--muted); margin: 4px 0 14px; }
-.final-stats { width: 100%; border-collapse: collapse; margin: 8px 0 18px; font-size: 13px; }
-.final-stats th, .final-stats td { border: 1px solid var(--line); padding: 6px 10px; }
-.final-stats th.fst-pl { background: var(--panel-2); text-align: center; vertical-align: top; }
-.final-stats th.fst-pl.win { border-color: var(--good); }
-.final-stats .fst-name { font-weight: 800; font-size: 14px; }
-.final-stats .fst-arm { color: var(--ink); font-size: 12.5px; }
-.final-stats .fst-suit { color: var(--muted); font-size: 12px; }
-.final-stats td.fst-lbl, .final-stats th.fst-lbl { text-align: left; color: var(--muted); background: var(--panel); white-space: nowrap; }
-.final-stats td.fst-val { text-align: center; color: var(--ink); font-variant-numeric: tabular-nums; }
-.final-stats tr.fst-strong td { font-weight: 800; font-size: 15px; }
-.final-stats tr.fst-sub td.fst-lbl { padding-left: 20px; font-size: 12px; }
-.final-stats tr.fst-sub td.fst-val { color: var(--muted); }
-.final-stats tr.fst-detail td.fst-val { font-size: 11.5px; line-height: 1.35; text-align: center; }
+/* Schede statistiche di fine partita (stile allineato ai Batch Test). */
+.final-cards { display: flex; gap: 14px; flex-wrap: wrap; margin: 8px 0 18px; }
+.final-card { flex: 1 1 240px; min-width: 220px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.final-card.win { border-color: var(--good); }
+.final-card-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; padding: 9px 12px; background: var(--panel-2); }
+.final-card.win .final-card-head { background: #4f5a4f; }
+.final-card-head .fc-badge { font-weight: 800; font-size: 14px; }
+.final-card-head .fc-arm { font-size: 12.5px; color: var(--ink); }
+.final-card-head .fc-suit { font-size: 12px; color: var(--muted); margin-left: auto; }
+.final-table { padding: 4px 12px 8px; }
+.final-table tr.fc-strong td { font-weight: 800; font-size: 15px; color: var(--ink); }
+.final-table tr.fc-sub td.bt-k { padding-left: 18px; font-size: 12px; }
+.final-table tr.fc-sub td.bt-v { color: var(--muted); font-weight: 500; }
+.final-table tr.fc-detail td.bt-v { font-size: 11.5px; line-height: 1.35; font-weight: 500; white-space: normal; max-width: 150px; }
+.final-actions { display: flex; gap: 10px; justify-content: center; }
+.final-actions button { min-width: 120px; }
 
 /* config */
 .cfg-label { font-weight: 700; margin: 14px 0 6px; }

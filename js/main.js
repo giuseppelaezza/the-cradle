@@ -291,12 +291,21 @@
       (!st.modules.characters && !st.modules.objects ? 'base' : '') + '. 1° Pilota = ' + st.firstPlayer + '.');
     if (st.modules.characters) st.log.push('ARM: N=' + (Characters.get(st.players.N.character) || {}).label + ' (' + st.players.N.belongingSuit + '), S=' + (Characters.get(st.players.S.character) || {}).label + ' (' + st.players.S.belongingSuit + ').');
 
-    var controller = window.CradleUI.createController(game, { mode: cfg.opponent, cpuId: 'S' });
+    var controller = window.CradleUI.createController(game, { mode: cfg.opponent, cpuId: 'S',
+      onRematch: startGame,      // nuova partita con le impostazioni correnti
+      onBack: backToConfig });   // torna al configuratore
     window.__cradle = { game: game, controller: controller };
     document.body.classList.remove('setup');
     if (rulesBtn) rulesBtn.remove();
     overlay.hidden = true;
     controller.render();
+  }
+
+  // Dalla schermata finale: torna al configuratore (le impostazioni restano quelle correnti).
+  function backToConfig() {
+    if (window.__cradle && window.__cradle.controller && window.__cradle.controller.dispose) window.__cradle.controller.dispose();
+    window.__cradle = null;
+    renderConfig();
   }
 
   // ============================================================ BATCH TEST (2000 partite CPU vs CPU)

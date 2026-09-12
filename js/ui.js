@@ -1572,40 +1572,48 @@
       if (r.tiebreak && r.tiebreak !== 'patta') dom.sheet.appendChild(h('p', null, 'Spareggio: ' + (r.tiebreak === 'centro' ? 'ha conquistato il centro.' : 'più OBIETTIVI.')));
       dom.sheet.appendChild(h('p', 'final-summary', r.summary));
 
-      // Tabella statistiche di partita: una colonna per PILOTA.
-      var table = h('table', 'final-stats');
-      var thead = h('tr');
-      thead.appendChild(h('th', 'fst-lbl', ''));
+      // Due schede separate (una per PILOTA), stile allineato ai Batch Test.
+      var cards = h('div', 'final-cards');
       ['N', 'S'].forEach(function (id) {
-        var p = s.players[id];
-        var th = h('th', 'fst-pl' + (r.winner === id ? ' win' : ''));
-        th.appendChild(h('div', 'fst-name', 'Pilota ' + id + (r.winner === id ? ' 🏆' : '')));
-        th.appendChild(h('div', 'fst-arm', charLabel(p.character)));
-        th.appendChild(h('div', 'fst-suit', SUIT_LABEL[p.belongingSuit] || '—'));
-        thead.appendChild(th);
+        var p = s.players[id], st = p.stats;
+        var card = h('div', 'final-card' + (r.winner === id ? ' win' : ''));
+        var head = h('div', 'final-card-head');
+        head.appendChild(h('span', 'fc-badge', 'Pilota ' + id + (r.winner === id ? ' 🏆' : '')));
+        head.appendChild(h('span', 'fc-arm', charLabel(p.character)));
+        head.appendChild(h('span', 'fc-suit', SUIT_LABEL[p.belongingSuit] || '—'));
+        card.appendChild(head);
+
+        var tbl = h('table', 'batch-table final-table');
+        function frow(k, v, cls) {
+          var tr = h('tr', cls || null);
+          tr.appendChild(h('td', 'bt-k', k));
+          tr.appendChild(h('td', 'bt-v', v));
+          tbl.appendChild(tr);
+        }
+        frow('Punti totali', String(p.score), 'fc-strong');
+        frow('↳ da colpo su avversario', String(st.ptsPawn), 'fc-sub');
+        frow('↳ da colpo su OBIETTIVI', String(st.ptsFigure), 'fc-sub');
+        frow('↳ da CELLE BONUS', String(st.ptsBonus), 'fc-sub');
+        frow('TROFEI', String(p.trophies.length));
+        frow('MOVIMENTI', String(st.moves));
+        frow('ATTACCHI', String(st.attacks));
+        frow('TOOLS usati', String(st.objUses));
+        frow('↳ dettaglio', objDetailText(st), 'fc-sub fc-detail');
+        frow('TURNI a 0 azioni', String(st.zeroActionTurns));
+        card.appendChild(tbl);
+        cards.appendChild(card);
       });
-      table.appendChild(thead);
+      dom.sheet.appendChild(cards);
 
-      function row(label, fn, cls) {
-        var tr = h('tr', cls || null);
-        tr.appendChild(h('td', 'fst-lbl', label));
-        ['N', 'S'].forEach(function (id) { tr.appendChild(h('td', 'fst-val', fn(s.players[id]))); });
-        table.appendChild(tr);
-      }
-      row('Punti totali', function (p) { return String(p.score); }, 'fst-strong');
-      row('↳ da colpo su avversario', function (p) { return String(p.stats.ptsPawn); }, 'fst-sub');
-      row('↳ da colpo su OBIETTIVI', function (p) { return String(p.stats.ptsFigure); }, 'fst-sub');
-      row('↳ da CELLE BONUS', function (p) { return String(p.stats.ptsBonus); }, 'fst-sub');
-      row('TROFEI', function (p) { return String(p.trophies.length); });
-      row('MOVIMENTI', function (p) { return String(p.stats.moves); });
-      row('ATTACCHI', function (p) { return String(p.stats.attacks); });
-      row('TOOLS usati', function (p) { return String(p.stats.objUses); });
-      row('↳ dettaglio', function (p) { return objDetailText(p.stats); }, 'fst-sub fst-detail');
-      row('TURNI a 0 azioni', function (p) { return String(p.stats.zeroActionTurns); });
-      dom.sheet.appendChild(table);
-
-      var again = h('button', 'primary', 'Nuova partita'); again.onclick = function () { location.reload(); };
-      dom.sheet.appendChild(again); showOverlay();
+      var actions = h('div', 'final-actions');
+      var rematch = h('button', 'primary', '↻ Rematch');
+      rematch.title = 'Nuova partita con le stesse impostazioni.';
+      rematch.onclick = function () { if (opts.onRematch) opts.onRematch(); else location.reload(); };
+      var back = h('button', 'ghost', '← Back');
+      back.title = 'Torna alla configurazione della partita.';
+      back.onclick = function () { if (opts.onBack) opts.onBack(); else location.reload(); };
+      actions.appendChild(rematch); actions.appendChild(back);
+      dom.sheet.appendChild(actions); showOverlay();
     }
     function showOverlay() { dom.overlay.hidden = false; }
     function hideOverlay() { dom.overlay.hidden = true; }
@@ -1697,7 +1705,9 @@
       render();
     }
 
-    return { render: render };
+    // Rilascia il controller (usato tornando al configuratore): ferma eventuali timer CPU pendenti.
+    function dispose() { if (ui.cpuTimer) { clearTimeout(ui.cpuTimer); ui.cpuTimer = null; } }
+    return { render: render, dispose: dispose };
   }
 
   return { createController: createController, objectCardEl: objectCardEl, moveSchema: moveSchema, openRulesDialog: openRulesDialog };
