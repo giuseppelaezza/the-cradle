@@ -1566,9 +1566,9 @@
     }
     function renderFinal(s) {
       var r = s.result; dom.sheet.innerHTML = '';
-      dom.sheet.appendChild(h('h2', null, '🏁 Fine partita'));
-      dom.sheet.appendChild(h('div', 'big', r.winner ? '🏆' : '🤝'));
-      dom.sheet.appendChild(h('h2', 'win', r.winner ? '🏆 Vince il Pilota ' + r.winner : '🤝 Patta'));
+      dom.sheet.appendChild(h('h2', 'final-title', 'Fine partita'));
+      dom.sheet.appendChild(h('div', 'setup-divider'));
+      dom.sheet.appendChild(h('h2', 'win', r.winner ? 'Vince il Pilota ' + r.winner : 'Patta'));
       if (r.tiebreak && r.tiebreak !== 'patta') dom.sheet.appendChild(h('p', null, 'Spareggio: ' + (r.tiebreak === 'centro' ? 'ha conquistato il centro.' : 'più OBIETTIVI.')));
       dom.sheet.appendChild(h('p', 'final-summary', r.summary));
 
@@ -1578,7 +1578,7 @@
         var p = s.players[id], st = p.stats;
         var card = h('div', 'final-card' + (r.winner === id ? ' win' : ''));
         var head = h('div', 'final-card-head');
-        head.appendChild(h('span', 'fc-badge', 'Pilota ' + id + (r.winner === id ? ' 🏆' : '')));
+        head.appendChild(h('span', 'fc-badge', 'Pilota ' + id));
         head.appendChild(h('span', 'fc-arm', charLabel(p.character)));
         head.appendChild(h('span', 'fc-suit', SUIT_LABEL[p.belongingSuit] || '—'));
         card.appendChild(head);

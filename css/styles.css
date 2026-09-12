@@ -447,6 +447,7 @@ body.setup .sheet { padding-top: 14px; }
 .setup-sub { text-align: left; color: var(--muted); font-size: 15px; margin: 0 0 8px; letter-spacing: .02em; }
 .big { font-size: 44px; margin: 8px 0; text-align: center; }
 .win { color: var(--good); text-align: center; }
+.final-title { text-align: center; }
 .final-summary { text-align: center; color: var(--muted); margin: 4px 0 14px; }
 /* Schede statistiche di fine partita (stile allineato ai Batch Test). */
 .final-cards { display: flex; gap: 14px; flex-wrap: wrap; margin: 8px 0 18px; }
