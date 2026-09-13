@@ -15,7 +15,7 @@
 
   // Stato della configurazione. I poteri seguono automaticamente il modulo Personaggi.
   var cfg = { opponent: 'cpu', suitMode: 'rotating', characters: true, objects: true, reshuffle: true, reshuffleCount: 2,
-              ruleset: 'C', gridSize: 5, turnMode: '1221', maxRounds: 9, clashOnAttack: true, objectMode: 'random', objectSelection: [], charN: 'runner', charS: 'brawler' };
+              ruleset: 'C', gridSize: 4, turnMode: '1221', maxRounds: 8, clashOnAttack: true, objectMode: 'random', objectSelection: [], charN: 'runner', charS: 'brawler' };
 
   // Icona del seme (SVG inline, colorata dal CSS come in partita).
   function suitIconEl(suit) { var w = h('span', 'suit-ic s-' + suit); if (Suits) w.innerHTML = Suits.svg(suit); return w; }
