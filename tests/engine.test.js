@@ -93,7 +93,7 @@ console.log('# Movimento: figura, centro, riga-bersaglio (regressione)');
   s.players.N.revealedIds = ['h10', 'a', 'b'];
   s.phase = 'move'; s.subPhase = null; s.activePlayer = 'N'; s.actionsLeft = 1; s.moveModifier = null;
   g.move('N', 2, 1, 'h10');
-  eq(s.players.N.score, 3, 'figura 10 → +3');
+  eq(s.players.N.score, 2, 'OBIETTIVO 10 → +2 (punti fissi)');
   ok(g.getCell(2, 1).faceDown, 'figura coperta');
   eq(g.getCell(2, 1).pawn, 'N', 'pedina sopra');
   eq(s.players.N.figuresMatched, 1, 'una figura');
@@ -163,7 +163,7 @@ console.log('# Double kill');
   s.players.N.revealedIds = ['n10', 'a', 'b'];
   s.phase = 'attack'; s.subPhase = null; s.activePlayer = 'N'; s.actionsLeft = 1; s.attackModifier = null;
   g.shoot('N', 3, 1, 'n10');
-  eq(s.players.N.score, 8, 'double kill +5+3');
+  eq(s.players.N.score, 7, 'double kill +5+2');
   ok(g.getCell(3, 1).faceDown, 'figura coperta');
 })();
 
@@ -310,7 +310,7 @@ console.log('# homing missile: punti + cella distrutta + ricollocazione');
   s.players.N.revealedIds = ['h10', 'a', 'b'];
   s.phase = 'attack'; s.subPhase = null; s.activePlayer = 'N'; s.actionsLeft = 1; s.attackModifier = 'homing';
   g.shoot('N', 3, 1, 'h10');
-  eq(s.players.N.score, 8, 'homing: punti double kill comunque assegnati (+5+3)');
+  eq(s.players.N.score, 7, 'homing: punti double kill comunque assegnati (+5+2)');
   ok(g.getCell(3, 1).destroyed, 'cella distrutta');
   eq(g.getCell(3, 1).card, null, 'carta rimossa');
   eq(s.subPhase, 'forced-reloc', 'pedina da ricollocare');
@@ -673,7 +673,7 @@ console.log('# Runner: muovendo su una figura (Ruleset A) può colpirla scartand
   ok(g.runnerFigureOptions().length >= 1, 'runner: carte scelte disponibili da scartare');
   var scoreBefore = s.players.N.score;
   g.runnerFigureHit('x2'); // colpisci scartando x2
-  eq(s.players.N.score - scoreBefore, 3, 'runner: figura 10 → +3');
+  eq(s.players.N.score - scoreBefore, 2, 'runner: OBIETTIVO 10 → +2 (punti fissi)');
   eq(s.players.N.figuresMatched, 1, 'runner: figura conteggiata');
   eq(s.players.N.runnerLeft, 1, 'runner: 1 uso consumato');
   ok(g.getCell(2, 1).faceDown, 'runner: figura girata');

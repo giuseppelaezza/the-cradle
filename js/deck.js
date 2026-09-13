@@ -62,14 +62,9 @@
     return card.value >= 8;
   }
 
-  // Punti per figura: 10 -> 3, 9 -> 2, 8 -> 1.
+  // Punti per OBIETTIVO: 2 punti fissi (8, 9 e 10 valgono uguale); 0 per le altre carte.
   function figurePoints(card) {
-    switch (card.value) {
-      case 10: return 3;
-      case 9: return 2;
-      case 8: return 1;
-      default: return 0;
-    }
+    return isFigure(card) ? 2 : 0;
   }
 
   return {
