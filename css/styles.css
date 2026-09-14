@@ -275,7 +275,7 @@ body.setup .app { visibility: hidden; }
 .ah-char-name { text-transform: none; font-weight: 700; }
 .hand { display: flex; gap: 8px; flex-wrap: wrap; }
 /* Carte in mano nel pannello azione: leggermente più piccole per lasciare spazio ai TOOLS. */
-.act-hand .card { --cs: 58px; width: 58px; height: 58px; }
+.act-hand .card { --cs: 64px; width: 64px; height: 64px; }
 .card { --cs: var(--card); width: var(--card); height: var(--card); border-radius: 9px; background: var(--card-bg); color: var(--card-ink);
   border: 2px solid var(--card-line); position: relative; overflow: hidden; }
 .card.inv { border-color: rgba(255,255,255,.35); }
@@ -336,13 +336,13 @@ body.setup .app { visibility: hidden; }
 .act-row .obj-panel { border-top: 1px solid var(--line); padding-top: 8px; min-width: 150px; }
 /* Pannello conferma/REMIX a dimensione fissa. */
 .act-row .act-actions { margin-top: 0; flex: 0 0 168px; width: 168px; flex-direction: column; align-items: stretch; gap: 8px; }
-.act-actions .sel-count { text-align: center; font-weight: 700; font-size: 12.5px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.act-actions .sel-count { text-align: center; font-weight: 400; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .obj-card { position: relative; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
   background: #4a4436; border: 1px solid #6a6047; color: #ece3c4; border-radius: 8px; padding: 6px 8px; min-width: 84px; }
 .obj-card .obj-name { font-weight: 700; } .obj-card .obj-phase { font-size: 10px; color: var(--muted); }
 /* Slot TOOL uniformi (5 su una riga); il nome più lungo ("Sifone Energetico") sta sempre su una riga. */
 .obj-slots { flex-wrap: nowrap; gap: 6px; overflow-x: auto; }
-.obj-slot { box-sizing: border-box; width: 116px; height: 48px; flex: 0 0 116px; padding: 4px 6px; border-radius: 8px; }
+.obj-slot { box-sizing: border-box; width: 116px; height: 64px; flex: 0 0 116px; padding: 4px 6px; border-radius: 8px; }
 .obj-slot .obj-name { font-size: 10.5px; line-height: 1.1; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .obj-slot.empty { background: transparent; border: 1px dashed var(--line); border-radius: 8px; box-shadow: none; cursor: default; }
 .obj-card.init { box-shadow: inset 0 0 0 1px var(--highlight); }
@@ -423,11 +423,6 @@ body.setup .app { visibility: hidden; }
 .toolchoice-modal { max-width: 620px; padding: 0 0 18px; }
 .toolchoice-modal .rules-head { justify-content: center; }
 .toolchoice-row { display: flex; align-items: stretch; justify-content: center; gap: 12px; padding: 12px 18px 4px; flex-wrap: wrap; }
-.toolchoice-card { flex: 1 1 170px; max-width: 200px; min-width: 150px; height: auto; align-items: flex-start; text-align: left;
-  gap: 4px; padding: 12px; cursor: pointer; }
-.toolchoice-card .obj-name { font-size: 14px; }
-.toolchoice-card .obj-phase { font-size: 11px; }
-.toolchoice-card .oc-desc { font-size: 11.5px; color: var(--muted); line-height: 1.35; margin-top: 4px; }
 .clash-result { text-align: center; font-size: 17px; font-weight: 700; padding: 16px 18px 2px; color: var(--ink); }
 .clash-result.tie { color: var(--muted); }
 .clash-row { display: flex; align-items: stretch; justify-content: center; gap: 12px; padding: 12px 18px 4px; }
@@ -535,20 +530,21 @@ body.setup .overlay { flex-direction: column; gap: 14px; }
 .pile.obj-discard:hover { border-color: var(--highlight); }
 .obj-pile-mark { font-size: 30px; }
 
-/* ---- Card oggetto (dimensione fissa, scrollabile): nome, costo, effetto, schema ---- */
+/* ---- Card oggetto in stile "scheda": badge fase, nome, divisore, COSTO, divisore, EFFETTO (altezza automatica) ---- */
 .obj-card-grid { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0; justify-content: center; }
-.obj-vcard { width: 150px; height: 196px; overflow-y: auto; background: #4a4436; border: 1px solid #6a6047; color: #ece3c4;
-  border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 6px; }
-.obj-vcard .ovc-name { font-weight: 800; font-size: 14px; }
-.obj-vcard .ovc-phase, .obj-vcard .ovc-cost { display: flex; flex-direction: column; gap: 1px; background: rgba(0,0,0,.22); border-radius: 6px; padding: 4px 6px; }
-.obj-vcard .ovc-phase .ovc-lbl { font-size: 9px; text-transform: uppercase; letter-spacing: .06em; color: var(--highlight); }
-.obj-vcard .ovc-cost .ovc-lbl { font-size: 9px; text-transform: uppercase; letter-spacing: .06em; color: var(--warn); }
-.obj-vcard .ovc-phase .ovc-val, .obj-vcard .ovc-cost .ovc-val { font-size: 11.5px; }
-.obj-vcard .ovc-effect { font-size: 11.5px; line-height: 1.35; }
-.obj-vcard .ovc-schema { margin-top: auto; }
+.obj-vcard { box-sizing: border-box; width: 176px; background: var(--panel-2); border: 1px solid var(--line); color: var(--ink);
+  border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 7px; align-items: stretch; }
+.obj-vcard .ovc-phase-badge { align-self: center; background: var(--panel); border: 1px solid var(--line); border-radius: 999px;
+  padding: 2px 12px; font-size: 9.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.obj-vcard .ovc-name { text-align: center; font-weight: 800; font-size: 15px; }
+.obj-vcard .ovc-div { height: 1px; background: var(--line); }
+.obj-vcard .ovc-cost, .obj-vcard .ovc-effect { display: flex; flex-direction: column; gap: 2px; }
+.obj-vcard .ovc-lbl { font-size: 9px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.obj-vcard .ovc-cost .ovc-lbl { color: var(--warn); }
+.obj-vcard .ovc-val { font-size: 11.5px; line-height: 1.35; }
 .obj-vcard.selectable { cursor: pointer; }
 .obj-vcard.selectable:hover { border-color: var(--highlight); }
-.obj-vcard.selected { border-color: var(--good); box-shadow: 0 0 0 2px var(--good) inset; background: #2f4a37; color: #d7f5e2; }
+.obj-vcard.selected { border-color: var(--good); box-shadow: 0 0 0 2px var(--good) inset; }
 .alt-obj { display: flex; flex-direction: column; gap: 10px; }
 .alt-obj-card { min-width: 120px; }
 .tools-foot { padding: 12px 20px; border-top: 1px solid var(--line); display: flex; justify-content: flex-end; }

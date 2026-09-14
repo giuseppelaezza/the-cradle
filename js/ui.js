@@ -81,24 +81,24 @@
     return wrap;
   }
 
-  // Card di un oggetto: rettangolo stondato a dimensione fissa (scrollabile) con nome, costo (se presente),
-  // effetto e — per jetpack/jump — lo schema di abbinamento. `opts.selectable`/`opts.selected` per il dialog Tools.
+  // Card di un oggetto in stile "scheda": badge fase in alto, nome, divisore, COSTO, divisore, EFFETTO.
+  // Altezza automatica: tutto il testo entra senza scroll. `opts.selectable`/`opts.selected` per il dialog Tools.
   function objectCardEl(type, opts) {
     opts = opts || {};
     var def = OBJ ? OBJ.def(type) : null;
     var card = h('div', 'obj-vcard' + (opts.selectable ? ' selectable' : '') + (opts.selected ? ' selected' : ''));
+    card.appendChild(h('div', 'ovc-phase-badge', def ? def.phaseLabel : ''));
     card.appendChild(h('div', 'ovc-name', def ? def.label : type));
-    var phase = h('div', 'ovc-phase');
-    phase.appendChild(h('span', 'ovc-lbl', 'Fase'));
-    phase.appendChild(h('span', 'ovc-val', def ? def.phaseLabel : ''));
-    card.appendChild(phase);
-    if (def && def.cost) {
-      var cost = h('div', 'ovc-cost');
-      cost.appendChild(h('span', 'ovc-lbl', 'Costo'));
-      cost.appendChild(h('span', 'ovc-val', def.cost));
-      card.appendChild(cost);
-    }
-    card.appendChild(h('div', 'ovc-effect', def ? def.effect : type));
+    card.appendChild(h('div', 'ovc-div'));
+    var cost = h('div', 'ovc-cost');
+    cost.appendChild(h('span', 'ovc-lbl', 'Costo'));
+    cost.appendChild(h('span', 'ovc-val', (def && def.cost) ? def.cost : 'Nessuno'));
+    card.appendChild(cost);
+    card.appendChild(h('div', 'ovc-div'));
+    var eff = h('div', 'ovc-effect');
+    eff.appendChild(h('span', 'ovc-lbl', 'Effetto'));
+    eff.appendChild(h('span', 'ovc-val', def ? def.effect : type));
+    card.appendChild(eff);
     return card;
   }
 
@@ -188,7 +188,7 @@
       reshuffleMode: null, reshuffleSel: [], // scelta carte da scartare per il reshuffle
       // stato per le animazioni (diff tra render)
       lastPawns: null, lastFaceDown: null, lastRound: null, pendingShot: null, flashingEnd: false, tlSegs: null,
-      actionH: null, needFit: true // altezza fissa del pannello azione + flag "ricalcola griglia"
+      actionH: null, actRowH: null, needFit: true // altezza fissa del pannello azione + riga interna + flag "ricalcola griglia"
     };
     function isCpu(id) { return ui.mode === 'cpucpu' || (ui.mode === 'cpu' && id !== ui.humanId); }
 
@@ -231,11 +231,16 @@
     // così non cambia tra le fasi. Rimisura il riferimento quando la mano è mostrata in scelta carte.
     function lockActionHeight() {
       var s = game.state;
+      var row = dom.action.querySelector('.act-row');
       if (!s.gameOver && !ui.gate && !s.subPhase && s.phase === 'select' && dom.action.querySelector('.act-hand')) {
         dom.action.style.minHeight = '';
+        if (row) row.style.minHeight = '';
         ui.actionH = Math.ceil(dom.action.getBoundingClientRect().height);
+        if (row) ui.actRowH = Math.ceil(row.getBoundingClientRect().height);
       }
       dom.action.style.minHeight = ui.actionH ? (ui.actionH + 'px') : '';
+      // In MOVIMENTO/ATTACCO mantieni i pannelli interni alti come in DEPLOY (la riga si allunga → i pannelli si stirano).
+      if (row) row.style.minHeight = ui.actRowH ? (ui.actRowH + 'px') : '';
     }
     // Al resize della finestra: ridimensiona la griglia e ri-blocca l'altezza del pannello.
     var _resizeT = null;
@@ -1138,11 +1143,7 @@
       box.appendChild(h('div', 'peek-sub', 'Pilota ' + pa.playerId + ': tieni [1] TOOL; gli altri vanno nella TOOLS HEAP.'));
       var row = h('div', 'toolchoice-row');
       pa.drawn.forEach(function (o) {
-        var def = OBJ ? OBJ.def(o.type) : null;
-        var card = h('div', 'obj-card usable toolchoice-card');
-        card.appendChild(h('span', 'obj-name', def ? def.label : o.type));
-        card.appendChild(h('span', 'obj-phase', objPhaseText(o.type)));
-        card.appendChild(h('div', 'oc-desc', def ? def.desc : o.type));
+        var card = objectCardEl(o.type, { selectable: true });
         card.onclick = function () { game.altMatchPickObject(o.id); render(); };
         row.appendChild(card);
       });
@@ -1274,7 +1275,10 @@
       // Riga: [ mano | TOOLS ] (si avvolgono internamente quando è stretto) | conferma/azioni (fisso).
       var row = h('div', 'act-row');
       var main = h('div', 'act-main');
-      var handCol = h('div', 'act-hand'); handCol.appendChild(body); main.appendChild(handCol);
+      var handCol = h('div', 'act-hand');
+      handCol.appendChild(h('div', 'obj-panel-title', 'STACK'));
+      handCol.appendChild(body);
+      main.appendChild(handCol);
       var pwPanel = powersPanel(s, playerId, mode);
       if (pwPanel) main.appendChild(pwPanel);
       var panel = objectsPanel(s, playerId);
@@ -1289,7 +1293,7 @@
     // La descrizione del potere è nel tooltip che esce all'hover del nome del personaggio.
     function actionTitle(s, p, playerId) {
       var wrap = h('span', 'ah-row');
-      wrap.appendChild(h('span', 'ah-title', 'STACK — Pilota ' + playerId));
+      wrap.appendChild(h('span', 'ah-title', 'Pilota ' + playerId));
       if (p.belongingSuit) {
         var sd = h('span', 'ah-seed bg-' + p.belongingSuit);
         sd.appendChild(suitIcon(p.belongingSuit, true));
