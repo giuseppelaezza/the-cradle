@@ -42,8 +42,18 @@ console.log('# canMatch (seme di turno, seme di appartenenza, celle distrutte)')
 console.log('# resolveClash');
 (function () {
   eq(Engine.resolveClash({ value: 7, suit: 'bastoni' }, { value: 5, suit: 'oro' }), 'attacker', 'valore');
-  eq(Engine.resolveClash({ value: 6, suit: 'oro' }, { value: 6, suit: 'spade' }), 'attacker', 'seme oro>spade');
-  eq(Engine.resolveClash({ value: 6, suit: 'bastoni' }, { value: 6, suit: 'bastoni' }), 'tie', 'parità piena');
+  // Spareggio SUIT ciclico: oro › spade › coppe › bastoni › oro (ognuno batte il successivo).
+  eq(Engine.resolveClash({ value: 6, suit: 'oro' }, { value: 6, suit: 'spade' }), 'attacker', 'oro batte spade');
+  eq(Engine.resolveClash({ value: 6, suit: 'spade' }, { value: 6, suit: 'coppe' }), 'attacker', 'spade batte coppe');
+  eq(Engine.resolveClash({ value: 6, suit: 'coppe' }, { value: 6, suit: 'bastoni' }), 'attacker', 'coppe batte bastoni');
+  eq(Engine.resolveClash({ value: 6, suit: 'bastoni' }, { value: 6, suit: 'oro' }), 'attacker', 'bastoni batte oro (ciclo)');
+  // Simmetria: chi perde da attaccante vince da difensore.
+  eq(Engine.resolveClash({ value: 6, suit: 'spade' }, { value: 6, suit: 'oro' }), 'defender', 'spade perde contro oro');
+  eq(Engine.resolveClash({ value: 6, suit: 'oro' }, { value: 6, suit: 'bastoni' }), 'defender', 'oro perde contro bastoni');
+  // SUIT opposte nel ciclo: pareggio.
+  eq(Engine.resolveClash({ value: 6, suit: 'oro' }, { value: 6, suit: 'coppe' }), 'tie', 'oro/coppe opposte: pareggio');
+  eq(Engine.resolveClash({ value: 6, suit: 'spade' }, { value: 6, suit: 'bastoni' }), 'tie', 'spade/bastoni opposte: pareggio');
+  eq(Engine.resolveClash({ value: 6, suit: 'bastoni' }, { value: 6, suit: 'bastoni' }), 'tie', 'carte identiche: pareggio');
 })();
 
 // -------------------------------------------------------------------- Setup base

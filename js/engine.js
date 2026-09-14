@@ -94,11 +94,22 @@
   }
 
   // ------------------------------------------------------------------ Clash (§4)
+  // Spareggio tra SUIT a parità di VALORE: schema CICLICO oro > spade > coppe > bastoni > oro.
+  // Ogni SUIT batte quella immediatamente successiva nel ciclo (e la più bassa batte la più alta:
+  // bastoni > oro), così ogni SUIT è ugualmente impattante. Le due SUIT "opposte" nel ciclo
+  // (oro/coppe e spade/bastoni) non si battono a vicenda: è pareggio.
+  function suitClash(a, b) {
+    if (a === b) return 'tie';
+    var pa = Deck.SUIT_CYCLE.indexOf(a), pb = Deck.SUIT_CYCLE.indexOf(b);
+    var d = ((pb - pa) % 4 + 4) % 4; // passi in senso orario da a a b
+    if (d === 1) return 'a';   // a è subito prima di b nel ciclo → a vince
+    if (d === 3) return 'b';   // b è subito prima di a → b vince
+    return 'tie';              // opposte (d === 2): pareggio
+  }
   function resolveClash(attCard, defCard) {
     if (attCard.value !== defCard.value) return attCard.value > defCard.value ? 'attacker' : 'defender';
-    var ra = Deck.SUIT_RANK[attCard.suit], rd = Deck.SUIT_RANK[defCard.suit];
-    if (ra !== rd) return ra > rd ? 'attacker' : 'defender';
-    return 'tie';
+    var w = suitClash(attCard.suit, defCard.suit);
+    return w === 'a' ? 'attacker' : (w === 'b' ? 'defender' : 'tie');
   }
 
   // ------------------------------------------------------------------ Setup

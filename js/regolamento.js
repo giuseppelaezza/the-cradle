@@ -13,25 +13,24 @@
 
     s.push(
 "## 1. In breve\n\n" +
-"The Cradle è un duello per **2 PILOTI**. Al centro del tavolo c'è una **griglia** di carte scoperte (5×5 o 4×4): ogni carta scoperta è una **CELLA**.\n\n" +
-"Ogni PILOTA guida un **ARM** — la propria pedina — e a ogni ROUND lo fa **MUOVERE** e **ATTACCARE** giocando carte dalla mano. Giocare una carta che *corrisponde* a una CELLA si chiama **MATCH**: è così che ci si sposta, si colpisce e si segnano punti.\n\n" +
-"Vince chi ha **più punti** al termine dei ROUND previsti.\n\n" +
-"*I termini in maiuscolo sono spiegati nel Glossario, in fondo al regolamento.*");
+
+"In Cradle ogni giocatore assume il ruolo di un **PILOTA** che manovra un **ARM** — un robot da lavoro riconfigurato per il combattimento — che lotta all'interno dell'Arena contro altri **ARMS** per conquistare la gloria. \n\n" +
+"Cradle si gioca utilizzando due mazzi di carte da gioco napoletane e tutte le azioni si eseguno **MATCHANDO** carte dalla propria mano con griglia di gioco.\n\n");
 
     s.push(
 "## 2. Il MATCH\n\n" +
 "Tutto nel gioco ruota attorno al **MATCH**: giocare una carta della mano che corrisponde alla carta di una **CELLA** scoperta. Una tua carta fa MATCH con una CELLA se:\n\n" +
 "- ha lo **stesso VALORE** della carta nella CELLA; **oppure**\n" +
-"- ha la **stessa SUIT** della carta nella CELLA **ed è un jolly**, cioè è della **GLOBAL SUIT** o del tuo **ARM SUIT** (in questo caso il VALORE non conta).\n\n" +
-"Ci sono **due jolly**: la **GLOBAL SUIT**, condivisa dai due PILOTI, che **cambia a ogni ROUND**; e l'**ARM SUIT**, personale e **fissa** per tutta la partita.\n\n" +
+"- ha la **stessa SUIT** della carta nella CELLA **ed è un jolly**, cioè è della **GLOBAL SUIT** o del tuo **ARM SUIT**.\n\n" +
+"Ci sono **due jolly**: la **GLOBAL SUIT**, condivisa dai PILOTI, che **cambia a ogni ROUND**; e l'**ARM SUIT**, personale e **fissa** per tutta la partita.\n\n" +
 "Le carte di **VALORE 8, 9 e 10** sono gli **OBIETTIVI**: sono quelle che, colpite, valgono punti.\n\n" +
-"Una **CELLA OFFLINE** (carta a faccia in giù) fa MATCH **solo con un jolly** e **non dà punti**: serve unicamente per potervi transitare sopra.");
+"Una **CELLA OFFLINE** (carta a faccia in giù) fa MATCH **solo con un jolly**.");
 
     s.push(
 "## 3. Preparazione\n\n" +
-"1. Mescola i due mazzi insieme: è il **DECK** (80 carte).\n" +
+"1. Mescola i due mazzi insieme: questo è il **DECK** (80 carte).\n" +
 "2. Scopri la prima carta: la sua **SUIT** è la **GLOBAL SUIT** del 1° ROUND. Tienila da parte.\n" +
-"3. *(Solo 5×5)* Pesca dal DECK un **asso (1)** di quella SUIT: sarà la **CELLA centrale**.\n" +
+"3. *(Solo variante griglia 5×5)* Pesca dal DECK un **asso (1)** di quella SUIT: sarà la **CELLA centrale**.\n" +
 "4. Rimescola e disponi la **griglia** di CELLE scoperte (nel 5×5 l'asso va al **centro, [3,3]**).\n" +
 "5. Piazza gli ARM agli angoli: **Nord** su **[1,1]**, **Sud** su **[5,5]** (nel 4×4, su **[4,4]**).\n" +
 "6. Ogni PILOTA sceglie un **ARM** (§7): ottiene **ARM SUIT**, **TOOL di partenza** e **SKILL**.\n" +
@@ -63,7 +62,7 @@
 "- **4 giocatori:** tutti e quattro gli angoli.\n" +
 "- **3 giocatori:** tre angoli **scelti a caso** fra i quattro.\n" +
 "- **2 giocatori:** angoli in diagonale (come sempre).\n\n" +
-"Deciso il **1° Pilota**, l'ordine di gioco procede in **senso ORARIO** fra gli angoli occupati (G1, G2, …). Ogni PILOTA ha un **colore** distinto (diverso dai semi) mostrato sulla pedina e nella scheda in alto.\n\n" +
+"Deciso il **1° Pilota**, l'ordine di gioco procede in **senso ORARIO** fra gli angoli occupati.\n\n" +
 "**Struttura del TURNO:** DEPLOY → **M G1 → M G2 → M G3 → M G4** → **A G4 → A G3 → A G2 → A G1** → FINE TURNO (in MOVIMENTO si parte da G1; in ATTACCO l'ordine si inverte). A fine ROUND il segnalino di 1° Pilota passa all'angolo **successivo in senso orario**.\n\n" +
 "Il resto delle regole non cambia. In particolare:\n\n" +
 "- **CLASH:** resta sempre **1 contro 1**, fra chi agisce e l'occupante della CELLA bersaglio; gli altri non partecipano.\n" +
@@ -74,11 +73,11 @@
     s.push(
 "## 4. Il ROUND\n\n" +
 "Ogni ROUND scorre in tre fasi: **DEPLOY → MOVIMENTO → ATTACCO**, poi si chiude il ROUND. In ogni ROUND ciascun PILOTA **MUOVE una volta** e **ATTACCA una volta** (salvo effetti dei TOOLS).\n\n" +
-"**Chi agisce per primo (Turno 1-2-2-1, default):** nel **MOVIMENTO** parte il 1° Pilota, poi l'avversario; nell'**ATTACCO** l'ordine si **inverte**. Così ognuno gioca per secondo in esattamente una fase. *(Con l'opzione Turno 1-2-1-2, invece, l'ATTACCO segue lo stesso ordine del MOVIMENTO.)*");
+"**Chi agisce per primo:** nel **MOVIMENTO** parte il 1° Pilota, poi l'avversario; nell'**ATTACCO** l'ordine si **inverte**. Così ognuno gioca per secondo in esattamente una fase.");
 
     s.push(
 "### 4.1 DEPLOY\n\n" +
-"Ogni PILOTA sceglie **in segreto 3 carte** dalla propria mano, poi entrambi le rivelano insieme. Queste 3 carte sono la **STACK ATTIVA**: sono le uniche che potrai giocare per MUOVERE e ATTACCARE in questo ROUND. Le carte non scelte restano coperte come **STACK DI RISERVA** e serviranno solo nei **CLASH**.\n\n" +
+"Ogni PILOTA sceglie **in segreto 3 carte** dalla propria mano, poi tutti le rivelano insieme. Queste 3 carte sono la **STACK ATTIVA**: sono le uniche che potrai giocare per MUOVERE e ATTACCARE in questo ROUND. Le carte non scelte restano coperte come **STACK DI RISERVA** e serviranno solo nei **CLASH**.\n\n" +
 "**REMIX (prima di scegliere le 3 carte).** Se non ti piace la mano, puoi spenderne uno: **scarti da 1 a tutte** le carte e ne peschi **altrettante** dal DECK. Ogni PILOTA ha un numero fisso di REMIX per partita (**1, 2 o 3**; di norma **2**), deciso in preparazione.");
 
     s.push(
@@ -86,23 +85,21 @@
 "Nell'ordine di TURNO, ogni PILOTA muove una volta. Gioca dalla STACK ATTIVA una carta che fa **MATCH con una CELLA ORTOGONALE** al tuo ARM e spostati su quella CELLA. Se nessuna carta fa MATCH su una CELLA adiacente, **salti il MOVIMENTO**.\n\n" +
 "Quello che trovi arrivando (vale solo per un MOVIMENTO scelto, non per gli spostamenti forzati):\n\n" +
 "- **CELLA centrale:** si **DISATTIVA**; la carta usata resta davanti a te come **trofeo**; scegli **[1] TOOL tra 3**. (I punti per il controllo del centro arrivano a fine ROUND, §4.5.)\n" +
-"- **OBIETTIVO (8/9/10):** **nessun effetto**. Muovendoci sopra non lo colpisci: resta scoperto e tu ci sali.\n" +
-"- **CELLA BONUS non ancora riscossa:** scegli **[1] TOOL tra 3** (una sola volta per CELLA; finché il bonus è disponibile la CELLA mostra un **quadratino nero**).\n" +
-"- **CELLA OFFLINE:** nessun punto; la carta usata va nella HEAP.\n\n" +
+"- **CELLA BONUS non ancora riscossa:** scegli **[1] TOOL tra 3** (una sola volta per CELLA).\n" +
 "Le **CELLE BONUS** sono quelle che a fine ROUND danno punti-posizione: nel **5×5** il centro e le **4 CELLE ORTOGONALI** al centro; nel **4×4** le **4 CELLE centrali**.\n\n" +
-"**CLASH — quando entri su una CELLA occupata dall'ARM avversario.** Non lo scavalchi: si combatte. Entrambi scegliete **[1] carta dalla STACK DI RISERVA** e la rivelate. Vince il **VALORE più alto**; a parità di VALORE vince la **SUIT più forte** (oro > spade > coppe > bastoni); se le carte sono identiche è **pareggio**. Chi non ha carte di RISERVA perde senza combattere. Le carte del CLASH vanno nella HEAP.\n\n" +
-"- **Vinci tu (attaccante):** avanzi sulla CELLA, prendi **+3**, e **decidi tu** su quale CELLA ORTOGONALE spostare l'ARM avversario.\n" +
-"- **Vince il difensore, o pareggio:** **nessuno si muove** e nessuno segna.");
+"**CLASH — quando entri su una CELLA occupata da un ARM avversario si combatte** . Entrambi scegliete **[1] carta dalla STACK DI RISERVA** e la rivelate. Vince il **VALORE più alto**; a parità di VALORE lo spareggio tra SUIT è **CICLICO** — **oro › spade › coppe › bastoni › oro** — dove ogni SUIT batte quella successiva e la più bassa batte la più alta (quindi **bastoni batte oro**), così ogni SUIT è ugualmente forte. Le due SUIT **opposte** nel ciclo (oro/coppe e spade/bastoni), o due carte identiche, danno **pareggio**. Chi non ha carte di RISERVA perde senza combattere. Le carte del CLASH vanno nella HEAP.\n\n" +
+"- **Vinci l'attaccante:** avanza sulla CELLA, prende **+3**, e **decide** su quale CELLA ORTOGONALE spostare l'ARM avversario.\n" +
+"- **Vince il difensore, o pareggio:** **nessuno si muove**.");
 
     s.push(
 "### 4.3 ATTACCO\n\n" +
-"Nell'ordine di TURNO (con l'iniziativa divisa attacca per primo l'avversario del 1° Pilota, §4). Gioca dalla STACK ATTIVA una carta che fa **MATCH con una CELLA qualsiasi** della griglia.\n\n" +
-"**Un ATTACCO DISATTIVA sempre la CELLA colpita**, anche se non è un OBIETTIVO. In base a cosa colpisci:\n\n" +
+"Nell'ordine di TURNO (§4). Gioca dalla STACK ATTIVA una carta che fa **MATCH con una CELLA qualsiasi** della griglia.\n\n" +
+"**Un ATTACCO DISATTIVA sempre la CELLA colpita**. In base a cosa colpisci:\n\n" +
 "- **OBIETTIVO:** **+2 punti**, **+1 trofeo** e scegli **[1] TOOL tra 3**. L'OBIETTIVO si DISATTIVA.\n" +
-"- **ARM avversario:** si apre un **CLASH da ATTACCO** (vedi sotto). Colpire il *proprio* ARM non fa nulla.\n" +
-"- **CELLA OFFLINE, o carta di VALORE 1–7:** si DISATTIVA soltanto, nessun punto.\n\n" +
-"**CLASH da ATTACCO.** Colpire una CELLA su cui c'è l'ARM avversario apre sempre un CLASH — anche quando l'attacco arriva da un TOOL come **Granata** o **Spinta**. Si confrontano le carte come nel CLASH da MOVIMENTO (§4.2, dalla STACK DI RISERVA).\n\n" +
-"- **Vinci tu (attaccante):** prendi **+3** e il colpo va a segno normalmente (se era un OBIETTIVO: si DISATTIVA, ti dà i suoi punti e la scelta di [1] TOOL; gli effetti di Granata/Spinta si applicano).\n" +
+"- **ARM avversario:** si apre un **CLASH da ATTACCO** (vedi sotto). Colpire il *proprio* ARM non fa sortisce effetto.\n" +
+"- **CELLA OFFLINE, o carta di VALORE 1–7:** viene DISATTIVATA.\n\n" +
+"**CLASH da ATTACCO.** Colpire una CELLA su cui c'è un ARM avversario apre sempre un CLASH — anche quando l'attacco arriva da un TOOL come **Granata** o **Spinta**. Si confrontano le carte come nel CLASH da MOVIMENTO (§4.2, dalla STACK DI RISERVA).\n\n" +
+"- **Vinci tu (attaccante):** prendi **+3** e il colpo va a segno normalmente (se era un OBIETTIVO: si DISATTIVA, ti dà i suoi punti e la scelta di [1] TOOL).\n" +
 "- **Vince il difensore, o pareggio:** il colpo è **parato**: nessun punto, nessun effetto.\n\n" +
 "A differenza del CLASH da MOVIMENTO, il CLASH da ATTACCO **non sposta mai** gli ARM.");
 
@@ -113,7 +110,7 @@
 
     s.push(
 "### 4.5 Fine del ROUND\n\n" +
-"**Punti di posizione** (per il controllo del terreno): nel **5×5**, **+3** se il tuo ARM è sul **centro**, **+1** se è su una CELLA ORTOGONALE al centro. Nel **4×4**, **+2** per ciascuna delle 4 CELLE centrali su cui ti trovi.\n\n" +
+"**Punti di posizione** : nel **5×5**, **+3** se il tuo ARM è sul **centro**, **+1** se è su una CELLA ORTOGONALE al centro. Nel **4×4**, **+2** per ciascuna delle 4 CELLE centrali su cui ti trovi.\n\n" +
 "Poi si riordina la mano: **tieni tutte le carte non usate**; se ne hai **più di 6**, scartane a scelta fino a 6. Passa il segnalino di **1° Pilota** all'avversario. Infine ciascuno **pesca fino a 6 carte**, la **GLOBAL SUIT avanza** (§6) e inizia il ROUND successivo.");
 
     s.push(
@@ -129,7 +126,7 @@
 "Ogni PILOTA guida un **ARM**, che gli dà tre cose: una **ARM SUIT** (il jolly personale, §2), un **TOOL di partenza** e una **SKILL**.\n\n" +
 "| ARM | ARM SUIT | TOOL di partenza | SKILL |\n" +
 "|---|---|---|---|\n" +
-"| **E-RUN-01** | spade | Jetpack | *(2 usi)* Quando MATCHI un OBIETTIVO in MOVIMENTO, puoi SCARTARE [1] carta dalla STACK ATTIVA per COLPIRLO subito (prendi i suoi punti e la scelta di [1] TOOL). Se la CELLA è occupata si fa CLASH: la SKILL vale solo se lo vinci. |\n" +
+"| **E-RUN-01** | spade | Jetpack | *(2 usi)* Quando MATCHI un OBIETTIVO in MOVIMENTO, puoi SCARTARE [1] carta dalla STACK ATTIVA per COLPIRLO subito (prendi i punti e la scelta di [1] TOOL). Se la CELLA è occupata si fa CLASH: la SKILL vale solo se lo vinci. |\n" +
 "| **The Sniper** | coppe | Barrage! | *(3 usi)* In MOVIMENTO o ATTACCO, se hai 3 carte nella STACK ATTIVA le SCARTI tutte per MATCHARE una CELLA qualsiasi (SOSTITUISCE l'azione). In ATTACCO su un ARM avversario si apre comunque un CLASH. |\n" +
 "| **Deep Mind** | oro | Manipolatore Temporale | *(3 usi)* Sbircia la STACK DI RISERVA dell'avversario. Inoltre, passiva: quando scegli [1] TOOL, scegli **tra 4** invece che tra 3. |\n" +
 "| **Soldier Boy** | bastoni | Spinta | *Passiva:* in ATTACCO le carte di VALORE **PARI** fanno MATCH tra loro (una carta pari colpisce una CELLA di VALORE pari). |\n\n" +
@@ -167,11 +164,11 @@
 
     s.push(
 "## 9. Fine della partita\n\n" +
-"La partita dura un **numero fisso di ROUND** (di norma **9**, configurabile da **7 a 11**). Chiuso l'ultimo ROUND, vince chi ha **più punti**.\n\n" +
+"La partita dura un **numero fisso di ROUND** (di norma **8**, configurabile da **7 a 11**). Chiuso l'ultimo ROUND, vince chi ha **più punti**.\n\n" +
 "In caso di parità, decide — in quest'ordine:\n\n" +
 "1. chi ha **conquistato la CELLA centrale**;\n" +
 "2. chi ha **più OBIETTIVI** tra i trofei;\n" +
-"3. se ancora pari, è **patta**.");
+"3. se ancora pari, è un **pareggio**.");
 
     s.push(
 "## 10. Riepilogo dei punti\n\n" +

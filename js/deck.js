@@ -12,7 +12,8 @@
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
 
-  // I quattro semi napoletani. SUIT_RANK serve SOLO per lo spareggio del clash.
+  // I quattro semi napoletani. Lo spareggio del clash è CICLICO (vedi engine.resolveClash);
+  // SUIT_RANK resta solo come ordinamento di comodo per le euristiche della CPU (scelta carte a parità di valore).
   var SUITS = ['oro', 'spade', 'coppe', 'bastoni'];
   var SUIT_RANK = { oro: 4, spade: 3, coppe: 2, bastoni: 1 };
   // Sequenza di rotazione del seme di turno (loop oro→spade→coppe→bastoni→oro).
