@@ -799,6 +799,11 @@
     }
 
     // ---- Clash da MOVIMENTO ----
+    // Esci dalla sotto-fase 'clash-cards' PRIMA di avviare la catena post-clash: altrimenti, se la
+    // ricollocazione del difensore non ha destinazioni valide, _advanceChain vedrebbe ancora
+    // subPhase='clash-cards' e si fermerebbe senza chiudere il clash (softlock). pendingClash resta
+    // per il passo di ricollocazione.
+    s.subPhase = null;
     // Pareggio o vittoria del difensore: nessuno si sposta (l'attaccante non arriva).
     if (outcome === 'tie' || outcome === 'defender') {
       this._discard(pc.moveCard);
@@ -806,8 +811,17 @@
       this._advanceChain();
       return;
     }
-    // Vittoria dell'attaccante: arriva sulla cella; è l'ATTACCANTE a scegliere dove spostare il difensore
-    // (tra le celle ortogonalmente adiacenti alla cella conquistata).
+    // Vittoria dell'attaccante: il difensore va spostato su una CELLA ORTOGONALE alla cella conquistata.
+    // Se NON esiste alcuna destinazione valida, l'attaccante vince comunque (+3) ma NON avanza (nessuno
+    // si sposta): così non si sovrascrive/perde la pedina del difensore (coerente con la DISTRUZIONE bloccata).
+    if (this._relocationOptions(pc.x, pc.y).length === 0) {
+      this._discard(pc.moveCard);
+      this._log(attackerId + ' vince il clash ma non c\'è dove spostare il difensore: nessuno avanza.');
+      this._chain = [this._step_finishClashMove(attackerId)];
+      this._advanceChain();
+      return;
+    }
+    // Arriva sulla cella; è l'ATTACCANTE a scegliere dove spostare il difensore.
     var info = this._applyArrival(pc.attackerId, dest, pc.moveCard);
     this._chain = [
       this._step_openReloc(pc.attackerId, pc.defenderId, { x: pc.x, y: pc.y }, false),

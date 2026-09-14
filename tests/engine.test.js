@@ -1247,6 +1247,46 @@ console.log('# Multiplayer: seggi agli angoli, ordine orario, struttura del TURN
   eq(g4x4.state.numPlayers, 2, '4×4: multiplayer disattivato → 2 giocatori');
 })();
 
+// -------------------------------------------------------------------- Regressione: clash da MOVIMENTO senza ricollocazione
+console.log('# Clash MOVIMENTO vinto senza cella per il difensore: nessun softlock, pedine integre');
+(function () {
+  var Cpu = require('../js/cpu.js');
+  function whoActs(s, g) {
+    if (s.gameOver) return null;
+    if (s.subPhase === 'object-discard') return s.pendingObjectDiscard.playerId;
+    if (s.subPhase === 'end-discard') return s.pendingEndDiscard.playerId;
+    if (s.subPhase === 'rebuild-select' || s.subPhase === 'rebuild-place') return s.pendingRebuild.playerId;
+    if (s.subPhase === 'draft-select' || s.subPhase === 'draft-place') return s.pendingDraft.playerId;
+    if (s.subPhase === 'energy-target') return s.pendingEnergy.playerId;
+    if (s.subPhase === 'tool-discard') return s.pendingToolDiscard && s.pendingToolDiscard.playerId;
+    if (s.subPhase === 'runner-figure') return s.pendingRunner && s.pendingRunner.playerId;
+    if (s.subPhase === 'timebomb-suit') return s.pendingTimebomb.playerId;
+    if (s.subPhase === 'elemental-target' || s.subPhase === 'elemental-suit') return s.pendingElemental.playerId;
+    if (s.subPhase === 'barrage-first' || s.subPhase === 'barrage-second' || s.subPhase === 'barrage-third') return s.pendingBarrage.playerId;
+    if (s.subPhase === 'randomizer-select' || s.subPhase === 'randomizer-place') return s.pendingRandomizer.playerId;
+    if (s.subPhase === 'altmatch-object') return s.pendingAltMatch.playerId;
+    if (s.subPhase === 'clash-cards') return g.clashCurrentChooser();
+    if (s.subPhase === 'clash-reloc') return s.pendingClash.relocatorId;
+    if (s.subPhase === 'forced-reloc') return s.pendingForced.chooserId;
+    if (s.subPhase) return null;
+    if (s.phase === 'select') { var o = g.allPlayers(); for (var i = 0; i < o.length; i++) if (s.selected[o[i]] == null) return o[i]; return null; }
+    if (s.phase === 'move' || s.phase === 'attack') return s.activePlayer;
+    return null;
+  }
+  // Semi che in precedenza andavano in softlock (griglia affollata a 4 giocatori).
+  [2565, 3432, 4645, 5295, 5509, 5623, 5664, 5800].forEach(function (seed) {
+    var g = Engine.createGame({ rng: makeRng(seed), numPlayers: 4, suitMode: 'rotating', ruleset: 'C', gridSize: 5, maxRounds: 8,
+      turnMode: '1221', gridMode: 'random', clashOnAttack: true, reshuffleCount: 2,
+      modules: { characters: true, objects: true, powers: true, reshuffle: true }, characters: ['runner', 'brawler', 'tactician', 'fighter'] });
+    var s = g.state, guard = 0, stuck = false;
+    while (!s.gameOver && guard++ < 40000) { var a = whoActs(s, g); if (!a) { stuck = true; break; } Cpu.cpuAct(g, a); }
+    ok(!stuck && s.gameOver, 'seed ' + seed + ': partita conclusa senza softlock');
+    // A fine partita ogni giocatore deve avere ancora la sua pedina sul campo.
+    var allHave = g.allPlayers().every(function (id) { return !!g.pawnCell(id); });
+    ok(allHave, 'seed ' + seed + ': nessuna pedina persa');
+  });
+})();
+
 // --------------------------------------------------------------------
 console.log('\n=== Risultato: ' + passed + ' passati, ' + failed + ' falliti ===');
 process.exit(failed ? 1 : 0);
