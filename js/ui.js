@@ -28,7 +28,7 @@
   // Preferenze di visualizzazione condivise (persistono tra partite nella stessa sessione).
   var VIEW = { showMatches: true, showLabels: false, cardDouble: false, showConditions: true, showActions: false, centerHighlight: true, showCellBonus: true };
   // Descrizione del bonus di fine ROUND per SUIT (usata nel tooltip delle CELLE della griglia).
-  var END_BONUS_BY_SUIT = { oro: '+1 punto', coppe: 'pesca 1 TOOL', bastoni: 'pesca 1 carta', spade: 'togli 1 punto a un avversario' };
+  var END_BONUS_BY_SUIT = { oro: '+1 punto', coppe: 'pesca 1 TOOL', bastoni: 'pesca 1 carta', spade: '-1 punto ad un avversario' };
   // Colori RGB dei giocatori per l'overlay "Mostra azioni" (scuriti in base all'età dell'azione).
   var PLAYER_RGB = { N: [185, 138, 94], S: [160, 108, 213] };
 
@@ -87,7 +87,7 @@
     opts = opts || {};
     var def = OBJ ? OBJ.def(type) : null;
     var card = h('div', 'obj-vcard' + (opts.selectable ? ' selectable' : '') + (opts.selected ? ' selected' : ''));
-    card.appendChild(h('div', 'ovc-phase-badge', objPhaseText(type)));
+    card.appendChild(h('div', 'ovc-phase-badge', def ? def.phaseLabel : ''));
     card.appendChild(h('div', 'ovc-name', def ? def.label : type));
     card.appendChild(h('div', 'ovc-div'));
     var cost = h('div', 'ovc-cost');
@@ -201,6 +201,9 @@
     // ============================================================ RENDER
     // La griglia viene ridimensionata SOLO al primo render e ai resize della finestra (mai tra le fasi).
     function render() {
+      // Ripulisci eventuali tooltip "orfani" spostati sul body da showTip (evita accumuli tra i render).
+      var orphanTips = document.querySelectorAll('body > .tooltip');
+      for (var oi = 0; oi < orphanTips.length; oi++) orphanTips[oi].remove();
       detectClash();
       detectTacticianPeek();
       renderBody();
@@ -452,7 +455,7 @@
         var def = OBJ ? OBJ.def(o.type) : null;
         var box = h('span', 'obj' + (o.fromCharacter ? ' init' : '') + (usable.indexOf(o.id) !== -1 ? ' usable' : ''));
         box.appendChild(h('span', 'obj-name', def ? def.label : o.type));
-        var tip = h('span', 'tooltip', def ? def.desc : o.type);
+        var tip = h('span', 'tooltip card-tip'); tip.appendChild(objectCardEl(o.type));
         box.appendChild(tip);
         container.appendChild(box); bindTip(box);
       });
@@ -1513,6 +1516,9 @@
       parent.addEventListener('mouseleave', function () { tip.style.display = 'none'; });
     }
     function showTip(parent, tip) {
+      // Sposta il tooltip sul body: evita che erediti l'opacità dei contenitori sbiaditi (es. TOOL non usabili)
+      // o venga tagliato da un antenato con overflow/transform. Gli orfani vengono ripuliti a ogni render.
+      if (tip.parentNode !== document.body) document.body.appendChild(tip);
       tip.style.display = 'block'; tip.style.visibility = 'hidden'; tip.style.left = '0'; tip.style.top = '0';
       var r = parent.getBoundingClientRect(), tw = tip.offsetWidth, th = tip.offsetHeight;
       var left = Math.min(Math.max(8, r.left), Math.max(8, window.innerWidth - tw - 8));
