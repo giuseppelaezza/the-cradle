@@ -841,14 +841,22 @@
     }
     function thinking(txt) { setAction(txt, h('div', 'hint', 'Attendi il computer…'), null); }
 
+    // Etichetta capienza TOOLS: (posseduti / massimo). Il TOOL di partenza dell'ARM non conta nel limite,
+    // quindi la capienza è limite + eventuali TOOL iniziali ancora posseduti (es. 4 + 1 = 5).
+    function toolsCapLabel(playerId) {
+      var objs = game.state.players[playerId].objects;
+      var limit = game._objLimit ? game._objLimit() : 4;
+      var charHeld = objs.filter(function (o) { return o.fromCharacter; }).length;
+      return '(' + objs.length + '/' + (limit + charHeld) + ')';
+    }
     // ---- Pannello oggetti sotto la mano: cliccabili quando utilizzabili ----
     function objectsPanel(s, playerId) {
       if (!s.modules.objects) return null;
       var wrap = h('div', 'obj-panel');
-      wrap.appendChild(h('div', 'obj-panel-title', 'TOOLS'));
+      var objs = s.players[playerId].objects;
+      wrap.appendChild(h('div', 'obj-panel-title', 'TOOLS ' + toolsCapLabel(playerId)));
       var row = h('div', 'obj-panel-row');
       var usableIds = game.usableObjects(playerId).map(function (o) { return o.id; });
-      var objs = s.players[playerId].objects;
       if (!objs.length) { row.appendChild(h('div', 'hint', 'Nessun TOOL.')); wrap.appendChild(row); return wrap; }
       objs.forEach(function (o) {
         var def = OBJ ? OBJ.def(o.type) : null;

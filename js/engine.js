@@ -1203,6 +1203,7 @@
         if (!objInPhase(o, 'select')) return false;
         if (o.type === 'timebomb' && s.suitMode !== 'rotating') return false;
         if (o.type === 'encore' && !self._encoreUsable(playerId)) return false;
+        if (o.type === 'remix' && !self._remixUsable(playerId)) return false;
         return true;
       });
     }
@@ -1221,15 +1222,25 @@
         if (o.type === 'energy_drain' && !self._others(playerId).some(function (oid) { return s.players[oid].revealedIds.length > 0; })) return false; // niente da rubare: nessun avversario ha carte scelte
         if (o.type === 'rebuild' && ((s.deck.length === 0 && s.discard.length === 0) || !self._rebuildHasTarget())) return false; // serve una carta e una CELLA DISTRUTTA/OFFLINE
         if (o.type === 'encore' && !self._encoreUsable(playerId)) return false;
+        if (o.type === 'remix' && !self._remixUsable(playerId)) return false;
         return true;
       });
     }
     return [];
   };
-  // Encore! è utile solo se il tuo ARM ha una SKILL con usi (tactician/brawler/runner).
+  // Encore! ripristina un uso della SKILL: usabile solo se c'è un uso già consumato da recuperare.
   Game.prototype._encoreUsable = function (playerId) {
     var p = this.state.players[playerId];
-    return !!this.state.modules.powers && (p.character === 'tactician' || p.character === 'brawler' || p.character === 'runner');
+    if (!this.state.modules.powers) return false;
+    if (p.character === 'tactician') return p.tacticianLeft < p.tacticianTotal;
+    if (p.character === 'brawler') return p.brawlerLeft < p.brawlerTotal;
+    if (p.character === 'runner') return p.runnerLeft < p.runnerTotal;
+    return false;
+  };
+  // Remix! ripristina un uso di REMIX: usabile solo se c'è un uso già consumato da recuperare.
+  Game.prototype._remixUsable = function (playerId) {
+    var p = this.state.players[playerId];
+    return p.reshuffleLeft < p.reshuffleTotal;
   };
   // Ricostruisci ha bisogno di almeno una CELLA DISTRUTTA o OFFLINE dove piazzare la carta.
   Game.prototype._rebuildHasTarget = function () {
@@ -1276,17 +1287,19 @@
         break;
       }
       case 'remix': {
+        // Ripristina un uso di REMIX già consumato (non oltre il totale).
         var pr2 = s.players[playerId];
-        pr2.reshuffleLeft += 1; pr2.reshuffleTotal += 1;
-        this._log(playerId + ' usa Remix!: +1 uso a REMIX (usi: ' + pr2.reshuffleLeft + ').');
+        if (pr2.reshuffleLeft < pr2.reshuffleTotal) pr2.reshuffleLeft += 1;
+        this._log(playerId + ' usa Remix!: ripristina 1 uso di REMIX (usi: ' + pr2.reshuffleLeft + '/' + pr2.reshuffleTotal + ').');
         break;
       }
       case 'encore': {
+        // Ripristina un uso della SKILL già consumato (non oltre il totale).
         var pe = s.players[playerId], ch = pe.character;
-        if (ch === 'tactician') { pe.tacticianLeft += 1; pe.tacticianTotal += 1; }
-        else if (ch === 'brawler') { pe.brawlerLeft += 1; pe.brawlerTotal += 1; }
-        else if (ch === 'runner') { pe.runnerLeft += 1; pe.runnerTotal += 1; }
-        this._log(playerId + ' usa Encore!: +1 uso alla SKILL del proprio ARM.');
+        if (ch === 'tactician' && pe.tacticianLeft < pe.tacticianTotal) pe.tacticianLeft += 1;
+        else if (ch === 'brawler' && pe.brawlerLeft < pe.brawlerTotal) pe.brawlerLeft += 1;
+        else if (ch === 'runner' && pe.runnerLeft < pe.runnerTotal) pe.runnerLeft += 1;
+        this._log(playerId + ' usa Encore!: ripristina 1 uso della SKILL del proprio ARM.');
         break;
       }
       case 'rebuild': {
@@ -1688,8 +1701,7 @@
     this._log(pid + ' usa Barrage: distrugge [' + a.x + ',' + a.y + '].');
     c.card = null; c.faceDown = false; c.destroyed = true;
     s.pendingBarrage = null; s.subPhase = null;
-    this._chain = [this._step_afterAttack(pid)];
-    this._advanceChain();
+    this._promptCurrentPhase(); // Barrage NON consuma l'azione (come Bomba Elementale): puoi ancora attaccare
   };
 
   // ---- Randomizer ----

@@ -156,7 +156,7 @@
 "| **Teletrasporto** | MOVIMENTO | SOSTITUISCE il MOVIMENTO. Salta su una qualsiasi CELLA VUOTA scoperta con lo **stesso VALORE** della CELLA da cui parti. |\n" +
 "| **Spinta** | ATTACCO | Se COLPISCI un ARM avversario, lo sposti su una CELLA ORTOGONALE a DISTANZA [1]. |\n" +
 "| **Granata** | ATTACCO | DISTRUGGE la CELLA colpita. Se era occupata, sposti quell'ARM su una CELLA ORTOGONALE a DISTANZA [1]. |\n" +
-"| **Barrage!** | ATTACCO | SOSTITUISCE l'ATTACCO. Scegli [1] CELLA VUOTA e DISTRUGGILA. |\n" +
+"| **Barrage!** | ATTACCO | Scegli [1] CELLA VUOTA e DISTRUGGILA. Non consuma l'ATTACCO. |\n" +
 "| **Bomba Elementale** | ATTACCO | Scegli [1] CELLA: la sua SUIT e quella delle CELLE ORTOGONALI diventano una SUIT a tua scelta. |\n" +
 "| **Doppio Movimento** | DEPLOY | SOSTITUISCE l'ATTACCO: questo TURNO esegui **[2] MOVIMENTI**. |\n" +
 "| **Doppio Attacco** | DEPLOY | SOSTITUISCE il MOVIMENTO: questo TURNO esegui **[2] ATTACCHI**. |\n" +
@@ -165,8 +165,8 @@
 "| **Ricarica** | MOV / ATT | PESCA [2] carte e aggiungile alla STACK ATTIVA. |\n" +
 "| **Sifone Energetico** | MOV / ATT | RUBA [1] carta all'avversario e aggiungila alla STACK ATTIVA. |\n" +
 "| **Ricostruisci** | MOV / ATT | PESCA [3] carte, scegline [1] e con essa SOVRASCRIVI una CELLA DISTRUTTA o OFFLINE. |\n" +
-"| **Remix!** | qualsiasi | Aggiunge [1] uso di REMIX. |\n" +
-"| **Encore!** | qualsiasi | Aggiunge [1] uso alla SKILL del tuo ARM. |");
+"| **Remix!** | qualsiasi | Ripristina [1] uso di REMIX già consumato (non oltre il totale). |\n" +
+"| **Encore!** | qualsiasi | Ripristina [1] uso della SKILL del tuo ARM già consumato (non oltre il totale). |");
 
     s.push(
 "## 9. Fine della partita\n\n" +

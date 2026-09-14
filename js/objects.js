@@ -62,8 +62,8 @@
     },
     barrage: {
       type: 'barrage', phase: 'attack', label: 'Barrage!',
-      cost: 'SOSTITUISCI l\'ATTACCO',
-      effect: 'Scegli [1] CELLA VUOTA → DISTRUGGILA.'
+      cost: null,
+      effect: 'Scegli [1] CELLA VUOTA → DISTRUGGILA. Non consuma l\'ATTACCO.'
     },
     randomizer: {
       type: 'randomizer', phase: 'attack', phases: ['attack', 'move'], label: 'Randomizzatore',
@@ -88,12 +88,12 @@
     remix: {
       type: 'remix', phase: 'select', phases: ['select', 'move', 'attack'], label: 'Remix!',
       cost: null,
-      effect: 'Aggiungi [1] uso a REMIX.'
+      effect: 'Ripristina [1] uso di REMIX già consumato (non oltre il totale).'
     },
     encore: {
       type: 'encore', phase: 'select', phases: ['select', 'move', 'attack'], label: 'Encore!',
       cost: null,
-      effect: 'Aggiungi [1] uso alla SKILL del tuo ARM.'
+      effect: 'Ripristina [1] uso della SKILL del tuo ARM già consumato (non oltre il totale).'
     },
     // TOOLS disponibili solo nel Ruleset C (cOnly): esclusi dalla selezione manuale e dal DECK casuale negli altri ruleset.
     teleport: {

@@ -497,6 +497,7 @@ console.log('# Oggetti avanzati: elemental bomb, barrage, randomizer');
   ok(s2.subPhase !== 'barrage-first', 'barrage: dopo la cella si risolve subito');
   ok(g2.getCell(2, 2).destroyed, 'barrage: la cella scelta è distrutta');
   ok(!g2.getCell(2, 3).destroyed, 'barrage: nessuna seconda cella distrutta');
+  eq(s2.phase === 'attack' && s2.activePlayer === 'N' && s2.actionsLeft === 1, true, 'barrage NON consuma l\'attacco');
   // randomizer
   var g3 = Engine.createGame({ rng: makeRng(2), firstPlayer: 'N', modules: { objects: true } });
   var s3 = g3.state; s3.players.N.objects = [{ id: 'rz', type: 'randomizer', phase: 'attack', fromCharacter: false }]; atk(g3, 'N');
@@ -874,23 +875,29 @@ console.log('# Clash su Attacco: attacco su pedina → clash, +3 solo se vince l
 })();
 
 // -------------------------------------------------------------------- Nuovi TOOLS: Remix!, Encore!, Ricostruisci
-console.log('# Nuovi TOOLS: Remix! (+1 REMIX), Encore! (+1 SKILL), Ricostruisci (pesca 3, scegli 1, SOVRASCRIVI)');
+console.log('# Nuovi TOOLS: Remix! (ripristina 1 REMIX), Encore! (ripristina 1 SKILL), Ricostruisci (pesca 3, scegli 1, SOVRASCRIVI)');
 (function () {
   var g = Engine.createGame({ rng: makeRng(3), firstPlayer: 'N', modules: { objects: true, reshuffle: true }, reshuffleCount: 2 });
   var s = g.state;
   s.players.N.objects = [{ id: 'rx', type: 'remix', phase: 'select', fromCharacter: false }];
   s.phase = 'select'; s.subPhase = null;
-  var rl0 = s.players.N.reshuffleLeft;
+  // Al massimo (2/2) NON è usabile.
+  ok(!g.usableObjects('N').some(function (o) { return o.type === 'remix'; }), 'Remix!: non usabile con usi al massimo');
+  s.players.N.reshuffleLeft = 1; // un uso consumato
+  ok(g.usableObjects('N').some(function (o) { return o.type === 'remix'; }), 'Remix!: usabile con un uso consumato');
   g.useObject('N', 'rx');
-  eq(s.players.N.reshuffleLeft - rl0, 1, 'Remix!: +1 uso REMIX');
+  eq(s.players.N.reshuffleLeft, 2, 'Remix!: ripristina 1 uso di REMIX');
+  eq(s.players.N.reshuffleTotal, 2, 'Remix!: il totale non aumenta');
 
   var g2 = Engine.createGame({ rng: makeRng(3), firstPlayer: 'N', modules: { characters: true, objects: true, powers: true }, characters: { N: 'tactician', S: 'runner' } });
   var s2 = g2.state;
   s2.players.N.objects = [{ id: 'en', type: 'encore', phase: 'select', fromCharacter: false }];
   s2.phase = 'select'; s2.subPhase = null;
-  var tl0 = s2.players.N.tacticianLeft;
+  ok(!g2.usableObjects('N').some(function (o) { return o.type === 'encore'; }), 'Encore!: non usabile con SKILL al massimo');
+  s2.players.N.tacticianLeft = 2; // un uso consumato (totale 3)
   g2.useObject('N', 'en');
-  eq(s2.players.N.tacticianLeft - tl0, 1, 'Encore!: +1 uso SKILL');
+  eq(s2.players.N.tacticianLeft, 3, 'Encore!: ripristina 1 uso della SKILL');
+  eq(s2.players.N.tacticianTotal, 3, 'Encore!: il totale non aumenta');
 
   var g3 = Engine.createGame({ rng: makeRng(3), firstPlayer: 'N', modules: { objects: true } });
   var s3 = g3.state;
