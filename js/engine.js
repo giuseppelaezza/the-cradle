@@ -771,13 +771,11 @@
     else if (!attCard) outcome = 'defender';
     else if (!defCard) outcome = 'attacker';
     else outcome = resolveClash(attCard, defCard);
-    // Log del clash: "N: 7O x S: 8B - Vince il clash B" (semi: O=Ori, B=Bastoni, C=Coppe, S=Spade).
+    // Log del clash: "<attaccante>: 7O x <difensore>: 8B - Vince il clash B" (semi: O=Ori, B=Bastoni, C=Coppe, S=Spade).
     function lbl(c) { return c ? (c.value + c.suit[0].toUpperCase()) : '—'; }
-    var nCard = pc.attackerId === 'N' ? attCard : defCard;
-    var sCard = pc.attackerId === 'N' ? defCard : attCard;
     var winnerCard = outcome === 'attacker' ? attCard : (outcome === 'defender' ? defCard : null);
     var resTxt = (outcome === 'tie') ? 'Pareggio' : ('Vince il clash ' + winnerCard.suit[0].toUpperCase());
-    this._log('N: ' + lbl(nCard) + ' x S: ' + lbl(sCard) + ' - ' + resTxt);
+    this._log(pc.attackerId + ': ' + lbl(attCard) + ' x ' + pc.defenderId + ': ' + lbl(defCard) + ' - ' + resTxt);
     // Risultato del clash per la UI (finestra di confronto). Fuori dallo stato: non entra negli snapshot.
     this._clashResult = {
       token: (this._clashToken = (this._clashToken || 0) + 1),

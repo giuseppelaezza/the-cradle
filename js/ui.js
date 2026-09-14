@@ -22,6 +22,9 @@
   var PLAYER_COLOR = { N: 'var(--pN)', S: 'var(--pS)', E: 'var(--pE)', W: 'var(--pW)' };
   var PLAYER_TEXT = { N: '#1a1a1a', S: '#ffffff', E: '#1a1a1a', W: '#1a1a1a' };
   var SEAT_LABEL = { N: 'Nord', E: 'Est', S: 'Sud', W: 'Ovest' };
+  // Colori leggibili su sfondo scuro per i token di carta nel log (per iniziale del SUIT).
+  var LOG_SUIT_COLOR = { oro: '#f7931e', spade: '#6a6aff', coppe: '#ff5c5c', bastoni: '#33c06a' };
+  var SUIT_BY_INITIAL = { O: 'oro', S: 'spade', C: 'coppe', B: 'bastoni' };
   // Preferenze di visualizzazione condivise (persistono tra partite nella stessa sessione).
   var VIEW = { showMatches: true, showLabels: false, cardDouble: false, showConditions: true, showActions: false, centerHighlight: true, showCellBonus: false };
   // Descrizione del bonus di fine ROUND per SUIT (usata nel tooltip delle CELLE della griglia).
@@ -577,6 +580,28 @@
       _objLabelMap.forEach(function (m) { line = line.replace(m[0], m[1]); });
       return line;
     }
+    // Aggiunge il testo del log a `node` colorando i token: giocatori (colore-giocatore) e
+    // carte "valore+iniziale-SUIT" es. 7B/10O (colore del seme). "Vince il clash X": X per SUIT.
+    function appendColorizedLog(node, text) {
+      var players = game.allPlayers ? game.allPlayers() : ['N', 'S'];
+      var re = /clash ([OSCB])\b|\b(\d{1,2}[OSCB])\b|\b([NESW])(?![-\w])/g;
+      var last = 0, m;
+      while ((m = re.exec(text)) !== null) {
+        if (m.index > last) node.appendChild(document.createTextNode(text.slice(last, m.index)));
+        if (m[1]) {                                   // "clash X" → iniziale del seme vincente
+          node.appendChild(document.createTextNode('clash '));
+          var cw = h('span', 'log-card'); cw.style.color = LOG_SUIT_COLOR[SUIT_BY_INITIAL[m[1]]]; cw.textContent = m[1]; node.appendChild(cw);
+        } else if (m[2]) {                            // carta: valore + iniziale del seme
+          var suit = SUIT_BY_INITIAL[m[2].charAt(m[2].length - 1)];
+          var cc = h('span', 'log-card'); cc.style.color = LOG_SUIT_COLOR[suit]; cc.textContent = m[2]; node.appendChild(cc);
+        } else if (m[3]) {                            // giocatore (solo se partecipa)
+          if (players.indexOf(m[3]) !== -1) { var pl = h('span', 'log-player'); pl.style.color = PLAYER_COLOR[m[3]]; pl.textContent = m[3]; node.appendChild(pl); }
+          else node.appendChild(document.createTextNode(m[3]));
+        }
+        last = re.lastIndex;
+      }
+      if (last < text.length) node.appendChild(document.createTextNode(text.slice(last)));
+    }
     // Tooltip: a quale azione si torna cliccando la riga (R<n> - <fase> (<giocatore>)).
     function logRestoreTip(ti) {
       var hist = game.history, snap = null;
@@ -595,7 +620,8 @@
       var slice = s.log.slice(start); // dal più vecchio al più recente
       for (var d = slice.length - 1; d >= 0; d--) {
         var ti = start + d;
-        var e = h('div', 'entry log-step' + (d === slice.length - 1 ? ' latest' : ''), prettyLog(slice[d]));
+        var e = h('div', 'entry log-step' + (d === slice.length - 1 ? ' latest' : ''));
+        appendColorizedLog(e, prettyLog(slice[d]));
         e.title = logRestoreTip(ti);
         (function (t) { e.onclick = function () { doRestoreLog(t); }; })(ti);
         dom.log.appendChild(e);
