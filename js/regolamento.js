@@ -49,6 +49,15 @@
 "```");
 
     s.push(
+"### 3.1 Variante: Draft della griglia\n\n" +
+"In alternativa alla griglia generata a caso, i due PILOTI possono **costruirla insieme** prima di giocare. Con il **Draft** attivo, la preparazione cambia così:\n\n" +
+"1. Si determina il **1° Pilota** e ciascuno riceve il **TOOL** iniziale (come sopra), poi la **griglia parte vuota**.\n" +
+"2. A turno — la barra delle fasi mostra **Piazzamento G1 / G2** e l'indicatore di ROUND segna **Draft** — ogni PILOTA **pesca 4 carte** dal DECK, ne **posiziona 2** su CELLE vuote a piacere e **scarta** le altre 2.\n" +
+"3. Nel **5×5** l'ultimo turno completa la griglia con **una sola** carta: chi lo esegue ne piazza 1 e scarta le altre 3.\n" +
+"4. Quando la griglia è **piena**, si **rimescolano gli scarti** del draft nel DECK, ciascuno pesca la mano da **6 carte** e comincia il ROUND 1.\n\n" +
+"*Nota:* nel Draft la CELLA centrale del 5×5 ospita la carta che vi viene piazzata (non l'asso del seme iniziale). Le CELLE BONUS restano quelle di posizione (§4.2).");
+
+    s.push(
 "## 4. Il ROUND\n\n" +
 "Ogni ROUND scorre in tre fasi: **DEPLOY → MOVIMENTO → ATTACCO**, poi si chiude il ROUND. In ogni ROUND ciascun PILOTA **MUOVE una volta** e **ATTACCA una volta** (salvo effetti dei TOOLS).\n\n" +
 "**Chi agisce per primo (Turno 1-2-2-1, default):** nel **MOVIMENTO** parte il 1° Pilota, poi l'avversario; nell'**ATTACCO** l'ordine si **inverte**. Così ognuno gioca per secondo in esattamente una fase. *(Con l'opzione Turno 1-2-1-2, invece, l'ATTACCO segue lo stesso ordine del MOVIMENTO.)*");

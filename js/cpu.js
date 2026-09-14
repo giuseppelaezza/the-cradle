@@ -346,6 +346,16 @@
   // Esegue UNA azione della CPU per il giocatore `id` in base allo stato corrente
   // (sotto-flussi oggetto, selezione, movimento, attacco, poteri). Ritorna un descrittore
   // {type:'shoot', from, to} quando spara/attacca-brawler (per l'animazione della UI).
+  // Draft: piazza la carta scelta sulla CELLA vuota più vicina al proprio ARM
+  // (così gli OBIETTIVI pescati finiscono a portata di mano).
+  function cpuDraftCell(game, id, targets) {
+    var pc = game.pawnCell(id);
+    if (!pc) return targets[0];
+    var best = null, bestD = Infinity;
+    targets.forEach(function (t) { var d = Math.abs(t.x - pc.x) + Math.abs(t.y - pc.y); if (d < bestD) { bestD = d; best = t; } });
+    return best || targets[0];
+  }
+
   function cpuAct(game, id) {
     var s = game.state;
     _SZ = s.gridSize || 5;
@@ -362,6 +372,8 @@
     if (s.subPhase === 'end-discard') { if (s.pendingEndDiscard.playerId === id) { chooseEndDiscard(game, id).forEach(function (cid) { game.endDiscardToggle(cid); }); game.endDiscardConfirm(); } return {}; }
     if (s.subPhase === 'rebuild-select') { if (s.pendingRebuild.playerId === id) { var rd = game.rebuildDrawn(); if (rd.length) game.rebuildSelectCard(maxValueCard(rd).id); } return {}; }
     if (s.subPhase === 'rebuild-place') { if (s.pendingRebuild.playerId === id) { var rt = game.rebuildTargets(); if (rt.length) game.rebuildPlace(rt[0].x, rt[0].y); } return {}; }
+    if (s.subPhase === 'draft-select') { if (s.pendingDraft.playerId === id) { var dd = game.draftDrawn(); if (dd.length) game.draftSelectCard(maxValueCard(dd).id); } return {}; }
+    if (s.subPhase === 'draft-place') { if (s.pendingDraft.playerId === id) { var dt = game.draftTargets(); if (dt.length) { var dp = cpuDraftCell(game, id, dt); game.draftPlace(dp.x, dp.y); } } return {}; }
     if (s.subPhase === 'altmatch-object') { if (s.pendingAltMatch.playerId === id) cpuAltPickObject(game, id); return {}; }
     if (s.subPhase === 'clash-cards') { if (game.clashCurrentChooser() === id) game.clashChoose(id, chooseClashCard(game, id)); return {}; }
     if (s.subPhase === 'clash-reloc') { if (s.pendingClash.relocatorId === id) { var r = chooseRelocation(game); if (r.skip) game.clashSkipRelocate(); else game.clashRelocate(r.x, r.y); } return {}; }

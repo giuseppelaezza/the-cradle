@@ -1179,6 +1179,36 @@ console.log('# The Sniper: in ATTACCO su una CELLA OCCUPATA la SKILL apre un cla
   ok(s.pendingClash && s.pendingClash.isAttack === true && s.pendingClash.attackerId === 'N', 'clash da ATTACCO impostato correttamente');
 })();
 
+// -------------------------------------------------------------------- Variante Draft
+console.log('# Draft: griglia costruita a turno, griglia piena, 5×5 ultimo turno = 1 carta');
+(function () {
+  function driveDraft(gridSize) {
+    var g = Engine.createGame({ rng: makeRng(4), ruleset: 'C', gridSize: gridSize, gridMode: 'draft', maxRounds: 8, firstPlayer: 'N',
+      modules: { characters: true, objects: true, powers: true } });
+    var s = g.state, guard = 0, placedBy = { N: 0, S: 0 };
+    ok(s.phase === 'draft' && s.subPhase === 'draft-select', gridSize + ': parte in fase draft');
+    ok(s.players.N.hand.length === 0 && s.players.S.hand.length === 0, gridSize + ': mani vuote durante il draft');
+    while (s.phase === 'draft' && guard++ < 500) {
+      if (s.subPhase === 'draft-select') { var dd = g.draftDrawn(); ok(dd.length <= 4, gridSize + ': max 4 carte pescate'); g.draftSelectCard(dd[0].id); }
+      else if (s.subPhase === 'draft-place') { var who = s.pendingDraft.playerId; var t = g.draftTargets(); g.draftPlace(t[0].x, t[0].y); placedBy[who]++; }
+      else break;
+    }
+    var filled = 0; for (var x = 1; x <= gridSize; x++) for (var y = 1; y <= gridSize; y++) if (g.getCell(x, y).card) filled++;
+    eq(filled, gridSize * gridSize, gridSize + ': griglia completamente piena');
+    eq(placedBy.N + placedBy.S, gridSize * gridSize, gridSize + ': carte piazzate = celle');
+    eq(s.phase, 'select', gridSize + ': dopo il draft si passa a DEPLOY');
+    eq(s.players.N.hand.length, 6, gridSize + ': mano N da 6 dopo il draft');
+    eq(s.players.S.hand.length, 6, gridSize + ': mano S da 6 dopo il draft');
+    ok(s.deck.length > 0, gridSize + ': mazzo rimescolato non vuoto');
+    return placedBy;
+  }
+  driveDraft(4);
+  var p5 = driveDraft(5);
+  // 5×5 = 25 celle (dispari): il 1° Pilota piazza una carta in più (ultimo turno = 1 carta).
+  eq(p5.N + p5.S, 25, '5×5: 25 carte totali');
+  eq(Math.abs(p5.N - p5.S), 1, '5×5: differenza di 1 carta (ultimo turno singolo)');
+})();
+
 // --------------------------------------------------------------------
 console.log('\n=== Risultato: ' + passed + ' passati, ' + failed + ' falliti ===');
 process.exit(failed ? 1 : 0);

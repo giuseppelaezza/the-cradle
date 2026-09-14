@@ -15,7 +15,7 @@
 
   // Stato della configurazione. I poteri seguono automaticamente il modulo Personaggi.
   var cfg = { opponent: 'cpu', suitMode: 'rotating', characters: true, objects: true, reshuffle: true, reshuffleCount: 2,
-              ruleset: 'C', gridSize: 4, turnMode: '1221', maxRounds: 8, clashOnAttack: true, objectMode: 'random', objectSelection: [], charN: 'runner', charS: 'brawler' };
+              ruleset: 'C', gridSize: 4, gridMode: 'random', turnMode: '1221', maxRounds: 8, clashOnAttack: true, objectMode: 'random', objectSelection: [], charN: 'runner', charS: 'brawler' };
 
   // Icona del seme (SVG inline, colorata dal CSS come in partita).
   function suitIconEl(suit) { var w = h('span', 'suit-ic s-' + suit); if (Suits) w.innerHTML = Suits.svg(suit); return w; }
@@ -94,10 +94,20 @@
     });
     ts.onchange = function () { cfg.turnMode = ts.value; renderConfig(); };
     addl.appendChild(ts);
+    // Modalità griglia: Draft (i PILOTI la costruiscono) o Random (generata a caso).
+    var gm = h('select', 'cfg-select');
+    gm.title = 'Come si forma la griglia: Draft (i PILOTI la costruiscono a turno) o Random (generata a caso).';
+    [['random', 'Griglia Random'], ['draft', 'Griglia Draft']].forEach(function (o) {
+      var op = h('option', null, o[1]); op.value = o[0]; if (cfg.gridMode === o[0]) op.selected = true; gm.appendChild(op);
+    });
+    gm.onchange = function () { cfg.gridMode = gm.value; renderConfig(); };
+    addl.appendChild(gm);
     sheet.appendChild(addl);
-    sheet.appendChild(h('p', 'cfg-desc', cfg.turnMode === '1212'
-      ? 'Struttura del TURNO: DEPLOY → MOVIMENTO G1 → MOVIMENTO G2 → ATTACCO G1 → ATTACCO G2 → Fine ROUND.'
-      : 'Struttura del TURNO: DEPLOY → MOVIMENTO G1 → MOVIMENTO G2 → ATTACCO G2 → ATTACCO G1 → Fine ROUND.'));
+    sheet.appendChild(h('p', 'cfg-desc', cfg.gridMode === 'draft'
+      ? 'Draft: prima si determina il 1° Pilota e il TOOL iniziale, poi a turno (Piazzamento) ognuno pesca 4 carte, ne piazza 2 sulla griglia e scarta le altre. A griglia piena inizia la partita.'
+      : (cfg.turnMode === '1212'
+        ? 'Struttura del TURNO: DEPLOY → MOVIMENTO G1 → MOVIMENTO G2 → ATTACCO G1 → ATTACCO G2 → Fine ROUND.'
+        : 'Struttura del TURNO: DEPLOY → MOVIMENTO G1 → MOVIMENTO G2 → ATTACCO G2 → ATTACCO G1 → Fine ROUND.')));
 
     // Scelta ARM (sempre parte del regolamento).
     sheet.appendChild(fieldLabel('ARM'));
@@ -272,6 +282,7 @@
       reshuffleCount: cfg.reshuffleCount,
       ruleset: cfg.ruleset,
       gridSize: cfg.ruleset === 'C' ? cfg.gridSize : 5,
+      gridMode: cfg.gridMode,
       turnMode: cfg.turnMode,
       maxRounds: cfg.ruleset === 'C' ? cfg.maxRounds : 9,
       clashOnAttack: cfg.clashOnAttack,
@@ -316,6 +327,7 @@
     if (s.subPhase === 'object-discard') return s.pendingObjectDiscard.playerId;
     if (s.subPhase === 'end-discard') return s.pendingEndDiscard.playerId;
     if (s.subPhase === 'rebuild-select' || s.subPhase === 'rebuild-place') return s.pendingRebuild.playerId;
+    if (s.subPhase === 'draft-select' || s.subPhase === 'draft-place') return s.pendingDraft.playerId;
     if (s.subPhase === 'tool-discard') return s.pendingToolDiscard && s.pendingToolDiscard.playerId;
     if (s.subPhase === 'runner-figure') return s.pendingRunner && s.pendingRunner.playerId;
     if (s.subPhase === 'timebomb-suit') return s.pendingTimebomb.playerId;

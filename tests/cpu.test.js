@@ -16,6 +16,7 @@ function whoActs(s, g) {
   if (s.subPhase === 'object-discard') return s.pendingObjectDiscard.playerId;
   if (s.subPhase === 'end-discard') return s.pendingEndDiscard.playerId;
   if (s.subPhase === 'rebuild-select' || s.subPhase === 'rebuild-place') return s.pendingRebuild.playerId;
+  if (s.subPhase === 'draft-select' || s.subPhase === 'draft-place') return s.pendingDraft.playerId;
       if (s.subPhase === 'tool-discard') return s.pendingToolDiscard && s.pendingToolDiscard.playerId;
       if (s.subPhase === 'runner-figure') return s.pendingRunner && s.pendingRunner.playerId;
   if (s.subPhase === 'timebomb-suit') return s.pendingTimebomb.playerId;
@@ -105,6 +106,18 @@ suite('Clash su Attacco (Ruleset B) + Personaggi', function (seed) {
 suite('Nuovi TOOLS (rebuild/remix/encore/elemental/randomizer) + Personaggi', function (seed) {
   return { rng: makeRng(seed), modules: { characters: true, objects: true, powers: true },
            objectSelection: ['rebuild', 'remix', 'encore', 'elemental_bomb', 'randomizer'],
+           characters: { N: CHARS[seed % 4], S: CHARS[(seed + 1) % 4] } };
+});
+
+// Variante Draft: la CPU costruisce la griglia a turno e poi gioca la partita fino in fondo.
+suite('Draft 4×4 + Personaggi + Oggetti', function (seed) {
+  return { rng: makeRng(seed), suitMode: 'rotating', ruleset: 'C', gridSize: 4, gridMode: 'draft', maxRounds: 8, clashOnAttack: true,
+           modules: { characters: true, objects: true, powers: true, reshuffle: true }, reshuffleCount: 2,
+           characters: { N: CHARS[seed % 4], S: CHARS[(seed + 1) % 4] } };
+});
+suite('Draft 5×5 + Personaggi + Oggetti', function (seed) {
+  return { rng: makeRng(seed), suitMode: 'rotating', ruleset: 'C', gridSize: 5, gridMode: 'draft', maxRounds: 9, clashOnAttack: true,
+           modules: { characters: true, objects: true, powers: true, reshuffle: true }, reshuffleCount: 2,
            characters: { N: CHARS[seed % 4], S: CHARS[(seed + 1) % 4] } };
 });
 

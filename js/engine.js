@@ -147,6 +147,8 @@
     var altMatch = ruleset !== 'B'; // A e C usano l'abbinamento alternativo
     // Dimensione griglia: 4×4 solo per il Ruleset C (variante "celle bonus"), 5×5 altrimenti.
     var gridSize = (ruleset === 'C' && (opts.gridSize | 0) === 4) ? 4 : 5;
+    // Modalità griglia: 'random' (generata a caso, default) o 'draft' (i PILOTI la costruiscono a turno).
+    var gridMode = opts.gridMode === 'draft' ? 'draft' : 'random';
 
     // 1-4. Mazzo, seme iniziale, asso centrale, griglia.
     var deck = Deck.shuffle(Deck.buildDeck(), rng);
@@ -154,7 +156,14 @@
     var centerInitialSuit = starter.suit;
     var grid = [];
     for (var gx = 0; gx <= gridSize; gx++) grid[gx] = [];
-    if (gridSize === 5) {
+    if (gridMode === 'draft') {
+      // Draft: la griglia parte VUOTA; i PILOTI la riempiono a turno (§ variante Draft).
+      for (var dxx = 1; dxx <= gridSize; dxx++) for (var dyy = 1; dyy <= gridSize; dyy++) {
+        grid[dxx][dyy] = { x: dxx, y: dyy, card: null, faceDown: false, destroyed: false, pawn: null };
+      }
+      grid[1][1].pawn = 'N';
+      grid[gridSize][gridSize].pawn = 'S';
+    } else if (gridSize === 5) {
       // Griglia 5×5: la cella centrale ospita l'asso del seme iniziale.
       var aceIndex = -1;
       for (var i = 0; i < deck.length; i++) if (deck[i].value === 1 && deck[i].suit === centerInitialSuit) { aceIndex = i; break; }
@@ -207,8 +216,10 @@
       ['N', 'S'].forEach(function (id) { if (objectDeck.length) players[id].objects.push(objectDeck.shift()); });
     }
 
-    // 8. Pesca 6 carte a testa.
-    for (var d = 0; d < 6; d++) { players.N.hand.push(deck.shift()); players.S.hand.push(deck.shift()); }
+    // 8. Pesca 6 carte a testa. Nel Draft le mani si pescano DOPO (a griglia completa, §_finishDraft).
+    if (gridMode !== 'draft') {
+      for (var d = 0; d < 6; d++) { players.N.hand.push(deck.shift()); players.S.hand.push(deck.shift()); }
+    }
 
     var firstPlayer = opts.firstPlayer || (rng() < 0.5 ? 'N' : 'S');
     // Struttura del turno: '1221' (default) = mov G1→G2, att G2→G1 (iniziativa divisa);
@@ -222,7 +233,7 @@
 
     var state = {
       deck: deck, objectDeck: objectDeck, discard: [], objectDiscard: [],
-      grid: grid, gridSize: gridSize, centerInitialSuit: centerInitialSuit,
+      grid: grid, gridSize: gridSize, gridMode: gridMode, centerInitialSuit: centerInitialSuit,
       suitMode: suitMode, currentSuit: centerInitialSuit, turnMode: turnMode, maxRounds: maxRounds, clashOnAttack: clashOnAttack,
       modules: modules, altMatch: altMatch, ruleset: ruleset,
       trail: [],               // storico geometrico di movimenti/spari (per l'overlay "Mostra azioni")
@@ -246,13 +257,14 @@
       pendingTeleport: null,  // {playerId} durante 'teleport-select' (oggetto Teleport, Ruleset C)
       pendingEndDiscard: null, // {playerId,need,sel} durante 'end-discard' (scarto in eccesso a fine turno)
       pendingRebuild: null,    // {playerId,drawn,chosen} durante 'rebuild-select'/'rebuild-place' (TOOL Ricostruisci)
+      pendingDraft: null,      // {playerId,drawn,chosen,placed,need} durante 'draft-select'/'draft-place' (variante Draft)
       pendingElemental: null, pendingBarrage: null, pendingRandomizer: null,
       gameOver: false, endTriggered: false, result: null, log: []
     };
 
     var game = new Game(state);
     game._rng = rng; // per il rimescolo del randomizer (non è parte dello stato clonabile)
-    game._beginSelectPhase();
+    if (gridMode === 'draft') game._beginDraftTurn(); else game._beginSelectPhase();
     return game;
   }
 
@@ -352,6 +364,79 @@
   function findCard(list, id) { for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i]; return null; }
   function removeCard(list, id) { for (var i = 0; i < list.length; i++) if (list[i].id === id) return list.splice(i, 1)[0]; return null; }
   function nonCharObjects(p) { return p.objects.filter(function (o) { return !o.fromCharacter; }); }
+
+  // ================================================================== DRAFT (variante griglia)
+  // CELLE ancora vuote (senza carta, non distrutte) da riempire durante il draft.
+  Game.prototype._draftEmptyCells = function () {
+    var s = this.state, out = [];
+    for (var x = 1; x <= s.gridSize; x++) for (var y = 1; y <= s.gridSize; y++) {
+      var c = s.grid[x][y]; if (!c.destroyed && !c.card) out.push(c);
+    }
+    return out;
+  };
+  // Inizia il turno di draft del PILOTA attivo: pesca 4 carte, deve piazzarne 2 (1 se resta 1 sola CELLA).
+  Game.prototype._beginDraftTurn = function () {
+    var s = this.state;
+    var empty = this._draftEmptyCells();
+    if (empty.length === 0) { this._finishDraft(); return; }
+    var drawn = [];
+    for (var i = 0; i < 4; i++) { var c = this._drawCard(); if (c) drawn.push(c); }
+    s.phase = 'draft';
+    s.subPhase = 'draft-select';
+    s.pendingDraft = { playerId: s.activePlayer, drawn: drawn, chosen: null, placed: 0, need: Math.min(2, empty.length) };
+  };
+  // Le 4 carte pescate nel turno di draft corrente.
+  Game.prototype.draftDrawn = function () {
+    var s = this.state, pd = s.pendingDraft;
+    return (pd && (s.subPhase === 'draft-select' || s.subPhase === 'draft-place')) ? pd.drawn.slice() : [];
+  };
+  // Sceglie quale carta piazzare (poi si clicca la CELLA vuota di destinazione).
+  Game.prototype.draftSelectCard = function (cardId) {
+    var s = this.state, pd = s.pendingDraft;
+    if (s.subPhase !== 'draft-select' || !pd) throw new Error('Nessun draft in corso.');
+    var card = pd.drawn.filter(function (c) { return c.id === cardId; })[0];
+    if (!card) throw new Error('Carta non valida.');
+    pd.chosen = card;
+    s.subPhase = 'draft-place';
+  };
+  // CELLE bersaglio del draft: tutte quelle ancora vuote.
+  Game.prototype.draftTargets = function () {
+    var s = this.state, out = [];
+    if (s.subPhase !== 'draft-place' || !s.pendingDraft) return out;
+    for (var x = 1; x <= s.gridSize; x++) for (var y = 1; y <= s.gridSize; y++) {
+      var c = s.grid[x][y]; if (!c.destroyed && !c.card) out.push({ x: x, y: y, key: cellKey(x, y) });
+    }
+    return out;
+  };
+  // Posiziona la carta scelta sulla CELLA vuota indicata.
+  Game.prototype.draftPlace = function (x, y) {
+    var s = this.state, pd = s.pendingDraft;
+    if (s.subPhase !== 'draft-place' || !pd) throw new Error('Nessun draft in corso.');
+    if (!this.draftTargets().some(function (o) { return o.x === x && o.y === y; })) throw new Error('CELLA non valida (serve una CELLA vuota).');
+    var c = s.grid[x][y];
+    c.card = pd.chosen; c.faceDown = false; c.destroyed = false;
+    pd.drawn = pd.drawn.filter(function (d) { return d.id !== pd.chosen.id; });
+    pd.placed += 1;
+    this._log(pd.playerId + ' piazza ' + pd.chosen.value + pd.chosen.suit[0].toUpperCase() + ' su [' + x + ',' + y + '].');
+    pd.chosen = null;
+    if (pd.placed < pd.need) { s.subPhase = 'draft-select'; return; }
+    // Turno concluso: le carte pescate non piazzate vanno negli scarti, poi tocca all'altro PILOTA.
+    pd.drawn.forEach(function (d) { s.discard.push(d); });
+    s.pendingDraft = null; s.subPhase = null;
+    s.activePlayer = otherPlayer(s.activePlayer);
+    this._beginDraftTurn();
+  };
+  // Fine del draft: si rimescolano gli scarti nel mazzo, si pescano le mani e comincia il ROUND 1.
+  Game.prototype._finishDraft = function () {
+    var s = this.state;
+    s.deck = Deck.shuffle(s.deck.concat(s.discard), this._rng || Math.random);
+    s.discard = [];
+    this._log('Draft completato: griglia pronta, mazzo rimescolato (' + s.deck.length + ' carte).');
+    for (var d = 0; d < 6; d++) { var cn = this._drawCard(); if (cn) s.players.N.hand.push(cn); var cs = this._drawCard(); if (cs) s.players.S.hand.push(cs); }
+    s.pendingDraft = null; s.subPhase = null;
+    s.activePlayer = s.firstPlayer;
+    this._beginSelectPhase();
+  };
 
   // ================================================================== SELECT
   Game.prototype._beginSelectPhase = function () {

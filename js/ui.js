@@ -248,7 +248,7 @@
     function renderHud(s) {
       dom.hud.innerHTML = '';
       var top = h('div', 'hud-top');
-      top.appendChild(pill('Round', s.round + '/' + (s.maxRounds || 9)));
+      top.appendChild(pill('Round', s.phase === 'draft' ? 'Draft' : (s.round + '/' + (s.maxRounds || 9))));
       top.appendChild(pill('Turno', s.gameOver ? '—' : s.activePlayer));
       // Seme di turno: etichetta colorata + icona del seme.
       var sp = h('span', 'pill'); sp.appendChild(document.createTextNode('GLOBAL SUIT: '));
@@ -435,6 +435,7 @@
 
     // Celle "bersaglio" evidenziabili per i flussi oggetto e per il brawler.
     function pickCells(s) {
+      if (s.subPhase === 'draft-place') return game.draftTargets();
       if (s.subPhase === 'teleport-select') return game.teleportTargets();
       if (s.subPhase === 'rebuild-place') return game.rebuildTargets();
       if (s.subPhase === 'elemental-target') return game.elementalTargetOptions();
@@ -759,15 +760,26 @@
       }
       return 'select';
     }
+    var DRAFT_ORDER = ['place1', 'place2'];
     function renderTimeline(s) {
-      if (!ui.tlSegs) {
+      var draft = s.phase === 'draft';
+      if (!ui.tlSegs || ui.tlDraft !== draft) {
         dom.timeline.innerHTML = '';
-        ui.tlSegs = {};
-        TL_ORDER.forEach(function (key, i) {
+        ui.tlSegs = {}; ui.tlDraft = draft;
+        (draft ? DRAFT_ORDER : TL_ORDER).forEach(function (key, i) {
           if (i) dom.timeline.appendChild(h('span', 'tl-arrow', '›'));
-          var seg = h('span', 'tl-seg', tlLabel(key, s));
+          var seg = h('span', 'tl-seg', draft ? (key === 'place1' ? 'Piazzamento G1' : 'Piazzamento G2') : tlLabel(key, s));
           ui.tlSegs[key] = seg; dom.timeline.appendChild(seg);
         });
+      }
+      if (draft) {
+        var dkey = (s.pendingDraft && s.pendingDraft.playerId !== s.firstPlayer) ? 'place2' : 'place1';
+        DRAFT_ORDER.forEach(function (k) {
+          var seg = ui.tlSegs[k];
+          if (k === dkey) { seg.classList.add('cur'); seg.style.background = PLAYER_COLOR[k === 'place1' ? s.firstPlayer : (s.firstPlayer === 'N' ? 'S' : 'N')]; }
+          else { seg.classList.remove('cur'); seg.style.background = ''; }
+        });
+        ui.lastRound = s.round; return;
       }
       var key = getTimelinePhase(s);
       // Flash della fase "fine turno" quando cambia il round (transizione altrimenti istantanea).
@@ -801,6 +813,8 @@
       if (s.subPhase === 'forced-reloc') return renderReloc(s, s.pendingForced.chooserId, s.pendingForced.pawnId, s.pendingForced.optional, false);
       // Oggetti avanzati (attacco)
       if (s.subPhase === 'teleport-select') return renderPickInfo('🌀 Teletrasporto', 'Clicca una CELLA ONLINE VUOTA con lo stesso VALORE della CELLA su cui ti trovi.');
+      if (s.subPhase === 'draft-select') return renderDraftSelect(s);
+      if (s.subPhase === 'draft-place') return renderPickInfo('🃏 Draft', 'Clicca una CELLA VUOTA dove posizionare la carta scelta.');
       if (s.subPhase === 'rebuild-select') return renderRebuildSelect(s);
       if (s.subPhase === 'rebuild-place') return renderPickInfo('🔧 Ricostruisci', 'Clicca la CELLA DISTRUTTA o OFFLINE da SOVRASCRIVERE con la carta scelta.');
       if (s.subPhase === 'elemental-target') return renderPickInfo('💥 Bomba Elementale', 'Clicca la CELLA bersaglio: cambia la sua SUIT e quella delle CELLE ORTOGONALI.');
@@ -954,6 +968,18 @@
     }
 
     // ---- Ricostruisci: scelta di 1 carta tra le pescate ----
+    function renderDraftSelect(s) {
+      var pd = s.pendingDraft, who = pd.playerId;
+      if (isCpu(who)) { thinking('🤖 Il computer costruisce la griglia…'); return; }
+      var body = h('div', 'hand');
+      game.draftDrawn().forEach(function (c) {
+        var card = h('div', 'card selectable ' + (isFigureVal(c.value) ? 'inv suit-bg-' + c.suit : 'suit-' + c.suit));
+        card.appendChild(cardFace(c, isFigureVal(c.value)));
+        card.onclick = function () { game.draftSelectCard(c.id); render(); };
+        body.appendChild(card);
+      });
+      setAction('🃏 Draft — Pilota ' + who + ': scegli una carta da piazzare (' + (pd.placed + 1) + '/' + pd.need + ')', body, null);
+    }
     function renderRebuildSelect(s) {
       var who = s.pendingRebuild.playerId;
       if (isCpu(who)) { thinking('🤖 Il computer sceglie la carta…'); return; }
@@ -1219,6 +1245,7 @@
       if (s.subPhase === 'forced-reloc') { if (!isCpu(s.pendingForced.chooserId) && game.relocationOptions().some(function (o) { return o.x === x && o.y === y; })) { game.forcedRelocate(x, y); render(); } return; }
       // Oggetti avanzati: selezione bersagli sulla griglia.
       if (s.subPhase === 'teleport-select') { if (game.teleportTargets().some(function (o) { return o.x === x && o.y === y; })) { game.teleportTo(x, y); render(); } return; }
+      if (s.subPhase === 'draft-place') { if (!isCpu(s.pendingDraft.playerId) && game.draftTargets().some(function (o) { return o.x === x && o.y === y; })) { game.draftPlace(x, y); render(); } return; }
       if (s.subPhase === 'rebuild-place') { if (game.rebuildTargets().some(function (o) { return o.x === x && o.y === y; })) { game.rebuildPlace(x, y); render(); } return; }
       if (s.subPhase === 'elemental-target') { if (game.elementalTargetOptions().some(function (o) { return o.x === x && o.y === y; })) { game.elementalTarget(x, y); render(); } return; }
       if (s.subPhase === 'barrage-first') { if (game.barrageFirstOptions().some(function (o) { return o.x === x && o.y === y; })) { game.barrageFirst(x, y); render(); } return; }
@@ -1677,6 +1704,7 @@
       if (s.subPhase === 'object-discard') return s.pendingObjectDiscard.playerId;
       if (s.subPhase === 'end-discard') return s.pendingEndDiscard ? s.pendingEndDiscard.playerId : null;
       if (s.subPhase === 'rebuild-select' || s.subPhase === 'rebuild-place') return s.pendingRebuild ? s.pendingRebuild.playerId : null;
+      if (s.subPhase === 'draft-select' || s.subPhase === 'draft-place') return s.pendingDraft ? s.pendingDraft.playerId : null;
       if (s.subPhase === 'tool-discard') return s.pendingToolDiscard && s.pendingToolDiscard.playerId;
       if (s.subPhase === 'runner-figure') return s.pendingRunner && s.pendingRunner.playerId;
       if (s.subPhase === 'timebomb-suit') return s.pendingTimebomb.playerId;
