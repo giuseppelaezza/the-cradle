@@ -448,6 +448,7 @@
     if (s.subPhase === 'rebuild-select') { if (s.pendingRebuild.playerId === id) { var rd = game.rebuildDrawn(); if (rd.length) game.rebuildSelectCard(maxValueCard(rd).id); } return {}; }
     if (s.subPhase === 'rebuild-place') { if (s.pendingRebuild.playerId === id) { var rt = game.rebuildTargets(); if (rt.length) game.rebuildPlace(rt[0].x, rt[0].y); } return {}; }
     if (s.subPhase === 'energy-target') { if (s.pendingEnergy.playerId === id) { var et = game.energyTargetOptions(); if (et.length) { var tgt = et[0]; et.forEach(function (o) { if (s.players[o].score > s.players[tgt].score) tgt = o; }); game.energyDrainTarget(tgt); } } return {}; }
+    if (s.subPhase === 'endbonus-steal') { if (s.pendingEndBonus.playerId === id) { var eb = game.endBonusStealOptions(); if (eb.length) { var vt = eb[0]; eb.forEach(function (o) { if (s.players[o].score > s.players[vt].score) vt = o; }); game.endBonusSteal(vt); } } return {}; }
     if (s.subPhase === 'draft-select') { if (s.pendingDraft.playerId === id) { var dd = game.draftDrawn(); if (dd.length) game.draftSelectCard(maxValueCard(dd).id); } return {}; }
     if (s.subPhase === 'draft-place') { if (s.pendingDraft.playerId === id) { var dt = game.draftTargets(); if (dt.length) { var dp = cpuDraftCell(game, id, dt); game.draftPlace(dp.x, dp.y); } } return {}; }
     if (s.subPhase === 'teleport-select') { if (s.pendingTeleport.playerId === id) { var tt = game.teleportTargets(); if (tt.length) { var tb = cpuTeleportTarget(game, id, tt); game.teleportTo(tb.x, tb.y); } } return {}; }

@@ -111,7 +111,12 @@
     s.push(
 "### 4.5 Fine del ROUND\n\n" +
 "**Punti di posizione** : nel **5×5**, **+3** se il tuo ARM è sul **centro**, **+1** se è su una CELLA ORTOGONALE al centro. Nel **4×4**, **+2** per ciascuna delle 4 CELLE centrali su cui ti trovi.\n\n" +
-"Poi si riordina la mano: **tieni tutte le carte non usate**; se ne hai **più di 6**, scartane a scelta fino a 6. Passa il segnalino di **1° Pilota** all'avversario. Infine ciascuno **pesca fino a 6 carte**, la **GLOBAL SUIT avanza** (§6) e inizia il ROUND successivo.");
+"Poi si riordina la mano: **tieni tutte le carte non usate**; se ne hai **più di 6**, scartane a scelta fino a 6. Passa il segnalino di **1° Pilota** all'avversario. Infine ciascuno **pesca fino a 6 carte**, la **GLOBAL SUIT avanza** (§6) e inizia il ROUND successivo.\n\n" +
+"**Bonus di SUIT (dopo la pesca).** Se dopo la pesca il tuo ARM si trova su una **CELLA ONLINE**, ottieni un bonus in base alla **SUIT** della carta di quella CELLA:\n\n" +
+"- **oro:** guadagni **1 punto**.\n" +
+"- **coppe:** peschi **1 TOOL**.\n" +
+"- **bastoni:** peschi **1 carta** dal DECK.\n" +
+"- **spade:** togli **1 punto** a un avversario, senza scendere sotto 0.");
 
     s.push(
 "## 5. Trofei\n\n" +

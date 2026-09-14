@@ -23,7 +23,9 @@
   var PLAYER_TEXT = { N: '#1a1a1a', S: '#ffffff', E: '#1a1a1a', W: '#1a1a1a' };
   var SEAT_LABEL = { N: 'Nord', E: 'Est', S: 'Sud', W: 'Ovest' };
   // Preferenze di visualizzazione condivise (persistono tra partite nella stessa sessione).
-  var VIEW = { showMatches: true, showLabels: false, cardDouble: false, showConditions: true, showActions: false, centerHighlight: true };
+  var VIEW = { showMatches: true, showLabels: false, cardDouble: false, showConditions: true, showActions: false, centerHighlight: true, showCellBonus: false };
+  // Descrizione del bonus di fine ROUND per SUIT (usata nel tooltip delle CELLE della griglia).
+  var END_BONUS_BY_SUIT = { oro: '+1 punto', coppe: 'pesca 1 TOOL', bastoni: 'pesca 1 carta', spade: 'togli 1 punto a un avversario' };
   // Colori RGB dei giocatori per l'overlay "Mostra azioni" (scuriti in base all'età dell'azione).
   var PLAYER_RGB = { N: [185, 138, 94], S: [160, 108, 213] };
 
@@ -482,8 +484,9 @@
       }
       var rz = s.subPhase === 'randomizer-place' ? s.pendingRandomizer : null;
       if (rz) rz.chosen.forEach(function (o) { if (!rz.placed[o.key]) dropKeys[o.key] = true; });
-      // Tooltip condizioni sulle celle: solo durante il turno umano di movimento/attacco.
-      var cellTipOn = !s.gameOver && !ui.gate && !s.subPhase && (s.phase === 'move' || s.phase === 'attack') && !isCpu(s.activePlayer);
+      // Tooltip sulle CELLE: condizioni di MATCH (turno umano di mov/attacco) e/o bonus di fine ROUND.
+      var condTipOn = !s.gameOver && !ui.gate && !s.subPhase && (s.phase === 'move' || s.phase === 'attack') && !isCpu(s.activePlayer);
+      var cellTipOn = (condTipOn && VIEW.showConditions) || (VIEW.showCellBonus && !s.gameOver && !ui.gate);
 
       for (var y = 1; y <= N; y++) for (var x = 1; x <= N; x++) {
         var cell = game.getCell(x, y), key = x + ',' + y;
@@ -533,7 +536,7 @@
           c.addEventListener('dragover', function (e) { e.preventDefault(); });
           (function (xx, yy) { c.addEventListener('drop', function (e) { e.preventDefault(); var id = e.dataTransfer.getData('text/plain'); if (id) { try { game.randomizerPlace(id, xx, yy); ui.selectedDrawn = null; render(); } catch (err) { } } }); })(x, y);
         }
-        if (cellTipOn && !cell.destroyed && cell.card) attachCellConditionTip(c, s.activePlayer, cell);
+        if (cellTipOn && !cell.destroyed && cell.card) attachCellConditionTip(c, s.activePlayer, cell, condTipOn);
         (function (xx, yy) { c.onclick = function () { onCellClick(xx, yy); }; })(x, y);
         dom.board.appendChild(c);
       }
@@ -712,6 +715,9 @@
       gBoard.appendChild(optCheck('Mostra condizioni di MATCH',
         'Al passaggio del mouse su una carta, mostra un tooltip con le condizioni di MATCH (VALORE, SUIT jolly, SKILL).',
         VIEW.showConditions, function (v) { VIEW.showConditions = v; }));
+      gBoard.appendChild(optCheck('Mostra bonus di fine ROUND',
+        'Nel tooltip delle CELLE della griglia mostra il bonus di fine ROUND della SUIT: oro +1 punto, coppe pesca 1 TOOL, bastoni pesca 1 carta, spade togli 1 punto a un avversario.',
+        VIEW.showCellBonus, function (v) { VIEW.showCellBonus = v; }));
       gBoard.appendChild(optCheck('Mostra azioni',
         'Overlay sul campo con le linee dei MOVIMENTI e i pallini degli ATTACCHI (colori per PILOTA, più scuri le azioni più vecchie).',
         VIEW.showActions, function (v) { VIEW.showActions = v; }));
@@ -811,6 +817,7 @@
       if (s.subPhase === 'draft-select') return renderDraftSelect(s);
       if (s.subPhase === 'draft-place') return renderPickInfo('🃏 Draft', 'Clicca una CELLA VUOTA dove posizionare la carta scelta.');
       if (s.subPhase === 'energy-target') return renderEnergyTarget(s);
+      if (s.subPhase === 'endbonus-steal') return renderEndBonusSteal(s);
       if (s.subPhase === 'rebuild-select') return renderRebuildSelect(s);
       if (s.subPhase === 'rebuild-place') return renderPickInfo('🔧 Ricostruisci', 'Clicca la CELLA DISTRUTTA o OFFLINE da SOVRASCRIVERE con la carta scelta.');
       if (s.subPhase === 'elemental-target') return renderPickInfo('💥 Bomba Elementale', 'Clicca la CELLA bersaglio: cambia la sua SUIT e quella delle CELLE ORTOGONALI.');
@@ -975,6 +982,18 @@
         body.appendChild(b);
       });
       setAction('⚡ Sifone Energetico — scegli da chi rubare una carta', body, null);
+    }
+    function renderEndBonusSteal(s) {
+      var who = s.pendingEndBonus.playerId;
+      if (isCpu(who)) { thinking('🤖 Il computer sceglie a chi togliere il punto…'); return; }
+      var body = h('div', 'choices');
+      game.endBonusStealOptions().forEach(function (oid) {
+        var b = h('button', 'primary', 'Pilota ' + oid + ' (' + (SEAT_LABEL[oid] || oid) + ') — ' + s.players[oid].score + ' pt');
+        b.style.borderColor = PLAYER_COLOR[oid];
+        b.onclick = function () { game.endBonusSteal(oid); render(); };
+        body.appendChild(b);
+      });
+      setAction('♠ Bonus fine ROUND — togli 1 punto a un avversario', body, null);
     }
     function renderDraftSelect(s) {
       var pd = s.pendingDraft, who = pd.playerId;
@@ -1363,13 +1382,23 @@
       });
       return order;
     }
-    // Aggancia a una cella della griglia un tooltip: "Nessun abbinamento" o i motivi del match.
-    function attachCellConditionTip(node, playerId, cell) {
-      if (!VIEW.showConditions) return;
-      var parts = cellConditionParts(playerId, cell);
+    // Aggancia a una cella della griglia un tooltip: motivi del match e/o bonus di fine ROUND.
+    function attachCellConditionTip(node, playerId, cell, condOk) {
+      var wantCond = condOk && VIEW.showConditions, wantBonus = VIEW.showCellBonus && cell.card && !cell.faceDown;
+      if (!wantCond && !wantBonus) return;
       var tip = h('span', 'tooltip cond-tip');
-      if (!parts.length) tip.appendChild(h('span', 'cond-nomatch', 'Nessun MATCH'));
-      else { tip.appendChild(h('span', 'cond-title', 'MATCH perché:')); tip.appendChild(condLine(parts)); }
+      if (wantCond) {
+        var parts = cellConditionParts(playerId, cell);
+        if (!parts.length) tip.appendChild(h('span', 'cond-nomatch', 'Nessun MATCH'));
+        else { tip.appendChild(h('span', 'cond-title', 'MATCH perché:')); tip.appendChild(condLine(parts)); }
+      }
+      if (wantBonus) {
+        var bt = h('span', 'cond-bonus');
+        bt.appendChild(h('span', 'cond-title', 'Bonus fine ROUND: '));
+        var suit = cell.card.suit, bs = h('span', 'suit-' + suit, END_BONUS_BY_SUIT[suit] || '—');
+        bt.appendChild(bs);
+        tip.appendChild(bt);
+      }
       node.appendChild(tip); bindTip(node);
     }
 
@@ -1722,6 +1751,7 @@
       if (s.subPhase === 'rebuild-select' || s.subPhase === 'rebuild-place') return s.pendingRebuild ? s.pendingRebuild.playerId : null;
       if (s.subPhase === 'draft-select' || s.subPhase === 'draft-place') return s.pendingDraft ? s.pendingDraft.playerId : null;
       if (s.subPhase === 'energy-target') return s.pendingEnergy ? s.pendingEnergy.playerId : null;
+      if (s.subPhase === 'endbonus-steal') return s.pendingEndBonus ? s.pendingEndBonus.playerId : null;
       if (s.subPhase === 'tool-discard') return s.pendingToolDiscard && s.pendingToolDiscard.playerId;
       if (s.subPhase === 'runner-figure') return s.pendingRunner && s.pendingRunner.playerId;
       if (s.subPhase === 'timebomb-suit') return s.pendingTimebomb.playerId;

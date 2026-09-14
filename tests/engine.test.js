@@ -788,6 +788,8 @@ console.log('# Ruleset C: centro/riga senza punti (scelta oggetto), controllo ce
   var s3 = g3.state;
   g3.pawnCell('N').pawn = null; g3.getCell(3, 3).pawn = 'N';       // N sul centro
   g3.pawnCell('S').pawn = null; g3.getCell(3, 4).pawn = 'S';       // S adiacente
+  // Neutralizza il bonus di SUIT di fine ROUND (coppe = nessun cambio di punti) per isolare i punti-posizione.
+  g3.getCell(3, 3).card = { id: 'nc', value: 1, suit: 'coppe' }; g3.getCell(3, 4).card = { id: 'na', value: 5, suit: 'coppe' };
   var scN = s3.players.N.score, scS = s3.players.S.score;
   g3._endRound();
   eq(s3.players.N.score - scN, 3, 'Ruleset C: pedina sul centro a fine turno +3');
@@ -984,6 +986,8 @@ console.log('# Ruleset C 4×4: griglia 4×4, niente centro, +2 sulle celle bonus
   // Fine turno: N su cella bonus +2, S fuori dalle bonus nessun bonus.
   g.pawnCell('N').pawn = null; g.getCell(2, 2).pawn = 'N';
   g.pawnCell('S').pawn = null; g.getCell(1, 1).pawn = 'S';
+  // Neutralizza il bonus di SUIT di fine ROUND (coppe) per isolare i punti-posizione.
+  g.getCell(2, 2).card = { id: 'nb', value: 4, suit: 'coppe' }; g.getCell(1, 1).card = { id: 'nd', value: 6, suit: 'coppe' };
   var scN = s.players.N.score, scS = s.players.S.score;
   g._endRound();
   eq(s.players.N.score - scN, 2, '4×4: pedina su cella bonus a fine turno +2');
@@ -1269,6 +1273,7 @@ console.log('# Clash MOVIMENTO vinto senza cella per il difensore: nessun softlo
     if (s.subPhase === 'draft-select' || s.subPhase === 'draft-place') return s.pendingDraft.playerId;
     if (s.subPhase === 'energy-target') return s.pendingEnergy.playerId;
     if (s.subPhase === 'teleport-select') return s.pendingTeleport.playerId;
+    if (s.subPhase === 'endbonus-steal') return s.pendingEndBonus.playerId;
     if (s.subPhase === 'tool-discard') return s.pendingToolDiscard && s.pendingToolDiscard.playerId;
     if (s.subPhase === 'runner-figure') return s.pendingRunner && s.pendingRunner.playerId;
     if (s.subPhase === 'timebomb-suit') return s.pendingTimebomb.playerId;
@@ -1296,6 +1301,37 @@ console.log('# Clash MOVIMENTO vinto senza cella per il difensore: nessun softlo
     var allHave = g.allPlayers().every(function (id) { return !!g.pawnCell(id); });
     ok(allHave, 'seed ' + seed + ': nessuna pedina persa');
   });
+})();
+
+// -------------------------------------------------------------------- Bonus di SUIT di fine ROUND
+console.log('# Bonus di fine ROUND per SUIT della CELLA ONLINE sotto l\'ARM (oro/coppe/bastoni/spade)');
+(function () {
+  // Prepara un game C 5×5 con N su [1,1] (non bonus) e S su [1,5] (non bonus, SUIT neutra coppe).
+  function scenario(nSuit) {
+    var g = Engine.createGame({ rng: makeRng(11), firstPlayer: 'N', ruleset: 'C', gridSize: 5, modules: { objects: true } });
+    var s = g.state;
+    for (var x = 1; x <= 5; x++) for (var y = 1; y <= 5; y++) g.getCell(x, y).pawn = null;
+    g.getCell(1, 1).pawn = 'N'; g.getCell(1, 1).card = { id: 'cn', value: 5, suit: nSuit }; g.getCell(1, 1).faceDown = false; g.getCell(1, 1).destroyed = false;
+    g.getCell(1, 5).pawn = 'S'; g.getCell(1, 5).card = { id: 'cs', value: 5, suit: 'coppe' }; g.getCell(1, 5).faceDown = false; g.getCell(1, 5).destroyed = false;
+    return g;
+  }
+  // oro: +1 punto a N.
+  var go = scenario('oro'); var scoN = go.state.players.N.score; go._endRound();
+  eq(go.state.players.N.score - scoN, 1, 'oro: +1 punto');
+  // bastoni: N inizia il ROUND successivo con 7 carte (pesca extra dopo il refill).
+  var gb = scenario('bastoni'); gb._endRound();
+  eq(gb.state.players.N.hand.length, 7, 'bastoni: 7 carte a inizio ROUND');
+  // coppe: N pesca 1 TOOL (oggetti +1).
+  var gc = scenario('coppe'); var nObj = gc.state.players.N.objects.length; gc._endRound();
+  eq(gc.state.players.N.objects.length - nObj, 1, 'coppe: +1 TOOL');
+  // spade: N toglie 1 punto a S (unico avversario). S non scende sotto 0.
+  var gs = scenario('spade'); gs.state.players.S.score = 3; gs._endRound();
+  eq(gs.state.players.S.score, 2, 'spade: -1 punto all\'avversario');
+  var gs0 = scenario('spade'); gs0.state.players.S.score = 0; gs0._endRound();
+  eq(gs0.state.players.S.score, 0, 'spade: non scende sotto 0');
+  // ARM su CELLA OFFLINE: nessun bonus.
+  var gf = scenario('oro'); gf.getCell(1, 1).faceDown = true; var scF = gf.state.players.N.score; gf._endRound();
+  eq(gf.state.players.N.score - scF, 0, 'CELLA OFFLINE: nessun bonus');
 })();
 
 // --------------------------------------------------------------------

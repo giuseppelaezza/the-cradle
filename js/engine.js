@@ -303,6 +303,7 @@
       pendingRebuild: null,    // {playerId,drawn,chosen} durante 'rebuild-select'/'rebuild-place' (TOOL Ricostruisci)
       pendingDraft: null,      // {playerId,drawn,chosen,placed,need} durante 'draft-select'/'draft-place' (variante Draft)
       pendingEnergy: null,     // {playerId} durante 'energy-target' (Sifone Energetico: scelta del bersaglio in multiplayer)
+      pendingEndBonus: null,   // {playerId, options} durante 'endbonus-steal' (bonus spade di fine ROUND: scelta avversario)
       pendingElemental: null, pendingBarrage: null, pendingRandomizer: null,
       gameOver: false, endTriggered: false, result: null, log: []
     };
@@ -1831,10 +1832,14 @@
     });
     if (s.endTriggered || s.round >= s.maxRounds) { this._finishGame(); return; }
 
-    // Chi ha più di 6 carte sceglie quali scartare fino a 6 (sotto-fase 'end-discard'), poi si pesca
-    // fino a 6 e si passa al round successivo.
+    // Chi ha più di 6 carte sceglie quali scartare fino a 6 (sotto-fase 'end-discard'); poi si pesca
+    // fino a 6; poi, se l'ARM è su una CELLA ONLINE, si applica il bonus di fine ROUND in base alla
+    // SUIT della carta (oro/coppe/bastoni/spade); infine si avvia il ROUND successivo.
     this._chain = everyone.map(function (id) { return self._step_endDiscard(id); });
     this._chain.push(this._step_finishRoundDraw());
+    // Bonus di SUIT di fine ROUND: solo nel regolamento corrente (Ruleset C).
+    if (s.ruleset === 'C') everyone.forEach(function (id) { self._chain.push(self._step_endCellBonus(id)); });
+    this._chain.push(this._step_startNextRound());
     this._advanceChain();
   };
 
@@ -1848,7 +1853,7 @@
       self.state.pendingEndDiscard = { playerId: id, need: need, sel: [] };
     };
   };
-  // Passo: pesca fino a 6, avanza round/seme, apre la scelta carte del nuovo round.
+  // Passo: passa il 1° Pilota, pesca fino a 6 per tutti. (Round/seme/nuova scelta: _step_startNextRound.)
   Game.prototype._step_finishRoundDraw = function () {
     var self = this;
     return function () {
@@ -1859,6 +1864,74 @@
         while (s.players[id].hand.length < 6) { var c = self._drawCard(); if (!c) break; s.players[id].hand.push(c); }
         s.players[id].actedThisRound = false; // nuovo ROUND: azzera il flag azioni
       });
+    };
+  };
+  // Punti/TOOL/carta/rubapunti in base alla SUIT della CELLA ONLINE su cui si trova l'ARM a fine ROUND.
+  // Avviene DOPO la pesca (così il bonus "bastoni" fa iniziare il ROUND con 7 carte).
+  Game.prototype._step_endCellBonus = function (id) {
+    var self = this;
+    return function () {
+      var s = self.state, pc = self.pawnCell(id);
+      if (!pc || pc.destroyed || !pc.card || pc.faceDown) return; // solo su CELLA ONLINE
+      var p = s.players[id], at = '[' + pc.x + ',' + pc.y + ']';
+      switch (pc.card.suit) {
+        case 'oro':
+          self._addScore(id, 1, 'ptsBonus');
+          self._log(id + ' bonus fine ROUND su ' + at + ' (oro): +1 punto.');
+          break;
+        case 'bastoni': {
+          var c = self._drawCard();
+          if (c) { p.hand.push(c); self._log(id + ' bonus fine ROUND su ' + at + ' (bastoni): PESCA 1 carta (' + p.hand.length + ' in mano).'); }
+          else self._log(id + ' bonus fine ROUND su ' + at + ' (bastoni): DECK vuoto, nessuna pesca.');
+          break;
+        }
+        case 'coppe': {
+          if (!s.modules.objects) break;
+          if (s.objectDeck.length === 0) self._reshuffleObjectDiscard();
+          if (s.objectDeck.length === 0) { self._log(id + ' bonus fine ROUND su ' + at + ' (coppe): TOOLS HEAP vuota, nessun TOOL.'); break; }
+          var obj = s.objectDeck.shift();
+          p.objects.push(obj);
+          self._log(id + ' bonus fine ROUND su ' + at + ' (coppe): pesca il TOOL ' + obj.type + '.');
+          if (nonCharObjects(p).length > self._objLimit()) self._step_openDiscard(id)(); // oltre il limite: scarto obbligato
+          break;
+        }
+        case 'spade': {
+          var targets = self._others(id).filter(function (o) { return s.players[o].score > 0; });
+          if (targets.length === 0) { self._log(id + ' bonus fine ROUND su ' + at + ' (spade): nessun avversario con punti.'); break; }
+          if (targets.length === 1) { self._stealPoint(id, targets[0]); break; }
+          s.subPhase = 'endbonus-steal'; s.pendingEndBonus = { playerId: id, options: targets }; // multiplayer: scegli il bersaglio
+          break;
+        }
+      }
+    };
+  };
+  // Toglie 1 punto (mai sotto 0) a `targetId`, mantenendo la coerenza col breakdown statistiche.
+  Game.prototype._stealPoint = function (id, targetId) {
+    var t = this.state.players[targetId];
+    if (t.score <= 0) return;
+    t.score -= 1;
+    var st = t.stats; // scala una categoria positiva per mantenere sum(categorie) === score
+    if (st.ptsBonus > 0) st.ptsBonus -= 1; else if (st.ptsFigure > 0) st.ptsFigure -= 1; else if (st.ptsPawn > 0) st.ptsPawn -= 1;
+    this._log(id + ' bonus fine ROUND (spade): toglie 1 punto a ' + targetId + ' (ora ' + t.score + ').');
+  };
+  // Bonus spade in multiplayer: scelta dell'avversario a cui togliere il punto.
+  Game.prototype.endBonusStealOptions = function () {
+    var s = this.state;
+    return (s.subPhase === 'endbonus-steal' && s.pendingEndBonus) ? s.pendingEndBonus.options.slice() : [];
+  };
+  Game.prototype.endBonusSteal = function (targetId) {
+    var s = this.state, pe = s.pendingEndBonus;
+    if (s.subPhase !== 'endbonus-steal' || !pe) throw new Error('Nessun bonus spade in corso.');
+    if (pe.options.indexOf(targetId) === -1) throw new Error('Bersaglio non valido.');
+    this._stealPoint(pe.playerId, targetId);
+    s.pendingEndBonus = null; s.subPhase = null;
+    this._advanceChain();
+  };
+  // Passo: avanza round/seme e apre la scelta carte del nuovo round.
+  Game.prototype._step_startNextRound = function () {
+    var self = this;
+    return function () {
+      var s = self.state;
       s.round += 1;
       if (s.suitMode === 'rotating') { s.currentSuit = Deck.nextSuit(s.currentSuit); self._log('Il seme di turno avanza a ' + s.currentSuit + '.'); }
       self._log('— Fine round. Primo Giocatore: ' + s.firstPlayer + '. Mazzo: ' + s.deck.length + ' carte.');
