@@ -1209,6 +1209,44 @@ console.log('# Draft: griglia costruita a turno, griglia piena, 5×5 ultimo turn
   eq(Math.abs(p5.N - p5.S), 1, '5×5: differenza di 1 carta (ultimo turno singolo)');
 })();
 
+// -------------------------------------------------------------------- Multiplayer (3-4 giocatori)
+console.log('# Multiplayer: seggi agli angoli, ordine orario, struttura del TURNO M G1..Gk / A Gk..G1');
+(function () {
+  // 4 giocatori: angoli fissi e ordine orario da firstPlayer.
+  var g = Engine.createGame({ rng: makeRng(1), numPlayers: 4, ruleset: 'C', gridSize: 5, firstPlayer: 'N',
+    modules: { characters: true, objects: true, powers: true }, characters: ['runner', 'brawler', 'tactician', 'fighter'] });
+  var s = g.state;
+  eq(s.numPlayers, 4, '4 giocatori');
+  eq(g.allPlayers().join(''), 'NESW', '4 seggi in ordine orario NESW');
+  eq(g.getCell(1, 1).pawn, 'N', 'N su [1,1] (NW)');
+  eq(g.getCell(5, 1).pawn, 'E', 'E su [5,1] (NE)');
+  eq(g.getCell(5, 5).pawn, 'S', 'S su [5,5] (SE)');
+  eq(g.getCell(1, 5).pawn, 'W', 'W su [1,5] (SW)');
+  eq(s.playerOrder.join(''), 'NESW', 'ordine di gioco orario da N');
+  // Struttura del turno 1-2-3-4 in MOVIMENTO, 4-3-2-1 in ATTACCO.
+  ['N', 'E', 'S', 'W'].forEach(function (id) { g.selectCards(id, s.players[id].hand.slice(0, 3).map(function (c) { return c.id; })); });
+  eq(s.phase, 'move', 'dopo il DEPLOY: MOVIMENTO'); eq(s.activePlayer, 'N', 'muove per primo N (G1)');
+  var moveSeq = [];
+  for (var i = 0; i < 4; i++) { moveSeq.push(s.activePlayer); g.passMove(s.activePlayer); }
+  eq(moveSeq.join(''), 'NESW', 'ordine MOVIMENTO: G1→G4 (N,E,S,W)');
+  eq(s.phase, 'attack', 'poi ATTACCO'); eq(s.activePlayer, 'W', 'attacca per primo W (G4, iniziativa divisa)');
+  var atkSeq = [];
+  for (var j = 0; j < 4; j++) { atkSeq.push(s.activePlayer); g.passShoot(s.activePlayer); }
+  eq(atkSeq.join(''), 'WSEN', 'ordine ATTACCO: G4→G1 (W,S,E,N)');
+  // Fine ROUND: il 1° Pilota passa in senso orario (N → E).
+  eq(s.firstPlayer, 'E', 'fine ROUND: 1° Pilota passa orario a E');
+
+  // 3 giocatori: esattamente 3 seggi occupati fra i 4 angoli.
+  var g3 = Engine.createGame({ rng: makeRng(5), numPlayers: 3, ruleset: 'C', gridSize: 5,
+    modules: { characters: true }, characters: ['runner', 'brawler', 'tactician'] });
+  eq(g3.allPlayers().length, 3, '3 giocatori: 3 seggi');
+  var corners = 0; [[1, 1], [5, 1], [5, 5], [1, 5]].forEach(function (c) { if (g3.getCell(c[0], c[1]).pawn) corners++; });
+  eq(corners, 3, '3 pedine sui 4 angoli');
+  // 3-4 giocatori solo su 5×5: richiesta di 4 su 4×4 → ricade a 2.
+  var g4x4 = Engine.createGame({ rng: makeRng(1), numPlayers: 4, ruleset: 'C', gridSize: 4 });
+  eq(g4x4.state.numPlayers, 2, '4×4: multiplayer disattivato → 2 giocatori');
+})();
+
 // --------------------------------------------------------------------
 console.log('\n=== Risultato: ' + passed + ' passati, ' + failed + ' falliti ===');
 process.exit(failed ? 1 : 0);

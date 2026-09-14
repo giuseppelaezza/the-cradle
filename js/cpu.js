@@ -94,22 +94,24 @@
   function chooseMove(game, id) {
     var s = game.state, moves = game.legalMoves(id);
     if (!moves.length) return { action: 'pass' };
-    var pawn = game.pawnCell(id), me = s.players[id], opp = s.players[other(id)];
+    var pawn = game.pawnCell(id), me = s.players[id];
     // Il clash si gioca con le carte della RISERVA (non scelte), non con quelle scelte.
-    var oppBest = maxValueCard(game.availableReserve(other(id)));
     var myClashBest = maxValueCard(game.availableReserve(id));
+    var maxOpp = 0; game._others(id).forEach(function (o) { if (s.players[o].score > maxOpp) maxOpp = s.players[o].score; });
     var best = null;
     moves.forEach(function (m) {
       var value, moveCardId;
       var matchCards = game.availableRevealed(id).filter(function (c) { return m.cardIds.indexOf(c.id) !== -1; });
       if (m.occupied) {
         var moveCard = minValueCard(matchCards); moveCardId = moveCard.id;
+        var defId = game.getCell(m.x, m.y).pawn; // l'occupante è il difensore del clash
+        var oppBest = maxValueCard(game.availableReserve(defId));
         var favorable = myClashBest && (!oppBest || cpuBeats(myClashBest, oppBest, true));
         value = favorable ? arrivalValue(game, id, m.x, m.y).pts + 2 : -100;
       } else {
         moveCardId = minValueCard(matchCards).id;
         var av = arrivalValue(game, id, m.x, m.y); value = av.pts;
-        if (av.endsGame && (me.score + av.pts) <= opp.score) value -= 50;
+        if (av.endsGame && (me.score + av.pts) <= maxOpp) value -= 50;
         // Bias di avvicinamento: nel Ruleset C verso la zona bonus, altrimenti verso la riga-bersaglio.
         if (s.ruleset === 'C') value += (nearestBonusDist(pawn.x, pawn.y) - nearestBonusDist(m.x, m.y)) * 0.2;
         else value += (distToTarget(id, pawn.y) - distToTarget(id, m.y)) * 0.2;
@@ -134,7 +136,8 @@
     var s = game.state, pc = s.pendingClash, opts = game.relocationOptions(), movee = pc.relocateePawn;
     if (!opts.length) return { skip: true };
     if (movee === pc.relocatorId) { // la CPU sposta se stessa
-      var meS = s.players[movee].score, opS = s.players[other(movee)].score, bestSelf = null;
+      var meS = s.players[movee].score, opS = 0; game._others(movee).forEach(function (o) { if (s.players[o].score > opS) opS = s.players[o].score; });
+      var bestSelf = null;
       opts.forEach(function (o) { var ends = o.y === targetRow(movee); var sc = -distToTarget(movee, o.y) + (ends && meS <= opS ? -100 : 0); if (!bestSelf || sc > bestSelf.sc) bestSelf = { o: o, sc: sc }; });
       return { x: bestSelf.o.x, y: bestSelf.o.y };
     }
@@ -168,11 +171,8 @@
   // 6) Spostamento forzato (hook/homing) quando la CPU è chi sceglie
   function chooseForcedReloc(game) {
     var s = game.state, pf = s.pendingForced, opts = game.relocationOptions(), movee = pf.pawnId;
-    if (!opts.length) return pf.optional ? { skip: true } : { skip: true };
-    if (movee === s.players.N.id && false) {} // (segnaposto)
+    if (!opts.length) return { skip: true };
     // Se la CPU muove se stessa: avvicinala alla meta; se muove l'avversario: allontanalo.
-    var cpuId = game._cpuId || null; // opzionale
-    // Regola generale: se la pedina è di chi sceglie? pf.chooserId è la CPU qui.
     var isOwnPawn = (movee === pf.chooserId); // homing su propria pedina o hook che sposta te
     var best = null;
     opts.forEach(function (o) {
@@ -372,6 +372,7 @@
     if (s.subPhase === 'end-discard') { if (s.pendingEndDiscard.playerId === id) { chooseEndDiscard(game, id).forEach(function (cid) { game.endDiscardToggle(cid); }); game.endDiscardConfirm(); } return {}; }
     if (s.subPhase === 'rebuild-select') { if (s.pendingRebuild.playerId === id) { var rd = game.rebuildDrawn(); if (rd.length) game.rebuildSelectCard(maxValueCard(rd).id); } return {}; }
     if (s.subPhase === 'rebuild-place') { if (s.pendingRebuild.playerId === id) { var rt = game.rebuildTargets(); if (rt.length) game.rebuildPlace(rt[0].x, rt[0].y); } return {}; }
+    if (s.subPhase === 'energy-target') { if (s.pendingEnergy.playerId === id) { var et = game.energyTargetOptions(); if (et.length) { var tgt = et[0]; et.forEach(function (o) { if (s.players[o].score > s.players[tgt].score) tgt = o; }); game.energyDrainTarget(tgt); } } return {}; }
     if (s.subPhase === 'draft-select') { if (s.pendingDraft.playerId === id) { var dd = game.draftDrawn(); if (dd.length) game.draftSelectCard(maxValueCard(dd).id); } return {}; }
     if (s.subPhase === 'draft-place') { if (s.pendingDraft.playerId === id) { var dt = game.draftTargets(); if (dt.length) { var dp = cpuDraftCell(game, id, dt); game.draftPlace(dp.x, dp.y); } } return {}; }
     if (s.subPhase === 'altmatch-object') { if (s.pendingAltMatch.playerId === id) cpuAltPickObject(game, id); return {}; }

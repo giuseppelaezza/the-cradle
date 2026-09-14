@@ -18,9 +18,10 @@
   var ENG = (typeof window !== 'undefined' && window.CradleEngine) ? window.CradleEngine : null;
   var CHARS = (typeof window !== 'undefined' && window.CradleCharacters) ? window.CradleCharacters : null;
   var SUITS = (typeof window !== 'undefined' && window.CradleSuits) ? window.CradleSuits : null;
-  // Colore associato a ciascun giocatore (arancione/viola per non confondersi con i semi).
-  var PLAYER_COLOR = { N: 'var(--pN)', S: 'var(--pS)' };
-  var PLAYER_TEXT = { N: '#1a1a1a', S: '#ffffff' };
+  // Colore associato a ciascun giocatore (tinte che non si confondono con i semi né tra loro).
+  var PLAYER_COLOR = { N: 'var(--pN)', S: 'var(--pS)', E: 'var(--pE)', W: 'var(--pW)' };
+  var PLAYER_TEXT = { N: '#1a1a1a', S: '#ffffff', E: '#1a1a1a', W: '#1a1a1a' };
+  var SEAT_LABEL = { N: 'Nord', E: 'Est', S: 'Sud', W: 'Ovest' };
   // Preferenze di visualizzazione condivise (persistono tra partite nella stessa sessione).
   var VIEW = { showMatches: true, showLabels: false, cardDouble: false, showConditions: true, showActions: false, centerHighlight: true };
   // Colori RGB dei giocatori per l'overlay "Mostra azioni" (scuriti in base all'età dell'azione).
@@ -174,15 +175,17 @@
 
   function createController(game, opts) {
     opts = opts || {};
+    // VS CPU: l'umano controlla UN solo PILOTA (Pilota 1 = primo seggio); gli altri sono CPU.
+    var humanId = opts.humanId || (game.allPlayers ? game.allPlayers()[0] : 'N');
     var ui = {
-      mode: opts.mode || '2p', cpuId: opts.cpuId || 'S', humanId: (opts.cpuId === 'N' ? 'S' : 'N'),
+      mode: opts.mode || '2p', humanId: humanId,
       cpuTimer: null, gate: null, chosen: [], selectingPlayer: null, clashChooser: null, armedCardId: null,
       reshuffleMode: null, reshuffleSel: [], // scelta carte da scartare per il reshuffle
       // stato per le animazioni (diff tra render)
       lastPawns: null, lastFaceDown: null, lastRound: null, pendingShot: null, flashingEnd: false, tlSegs: null,
       actionH: null, needFit: true // altezza fissa del pannello azione + flag "ricalcola griglia"
     };
-    function isCpu(id) { return (ui.mode === 'cpu' && id === ui.cpuId) || ui.mode === 'cpucpu'; }
+    function isCpu(id) { return ui.mode === 'cpucpu' || (ui.mode === 'cpu' && id !== ui.humanId); }
 
     var dom = {
       hud: el('hud'), board: el('board'), sideTop: el('sideTop'), sideBottom: el('sideBottom'),
@@ -272,8 +275,8 @@
       top.appendChild(rules);
       dom.hud.appendChild(top);
 
-      var pl = h('div', 'players');
-      ['N', 'S'].forEach(function (id) { pl.appendChild(playerCard(s, id)); });
+      var pl = h('div', 'players' + (game.allPlayers().length > 2 ? ' players-multi' : ''));
+      game.allPlayers().forEach(function (id) { pl.appendChild(playerCard(s, id)); });
       dom.hud.appendChild(pl);
     }
 
@@ -324,8 +327,11 @@
       if (p.belongingSuit) { seed.appendChild(suitIcon(p.belongingSuit, true)); seed.title = 'ARM SUIT: ' + SUIT_LABEL[p.belongingSuit]; }
       else seed.textContent = '—';
       ident.appendChild(seed);
-      // Nome giocatore (pill).
-      ident.appendChild(h('span', 'pc-chip pc-name-chip', 'Pilota ' + id + (id === 'N' ? ' (Nord)' : ' (Sud)')));
+      // Nome giocatore (pill), con un pallino del colore-giocatore.
+      var nameChip = h('span', 'pc-chip pc-name-chip');
+      var pdot = h('span', 'pc-player-dot'); pdot.style.background = PLAYER_COLOR[id] || '#888'; nameChip.appendChild(pdot);
+      nameChip.appendChild(document.createTextNode('Pilota ' + id + ' (' + (SEAT_LABEL[id] || id) + ')'));
+      ident.appendChild(nameChip);
       // Personaggio (pill con tooltip del potere + eventuali usi).
       if (p.character) {
         var chChip = h('span', 'pc-chip pc-char-chip');
@@ -359,12 +365,14 @@
 
       // ---- Riga inferiore: hand | tools ----
       var bottom = h('div', 'pc-bottom');
-      // hand (carte scelte pubbliche: sempre tutte e 3, quelle usate sbarrate)
-      var handCell = h('div', 'pc-cell pc-hand');
+      // hand (carte scelte pubbliche: sempre tutte e 3, quelle usate sbarrate).
+      // Con 3-4 giocatori le schede sono strette: mostra token compatti (es. 7B, 5O) colorati per SUIT.
+      var compact = game.allPlayers().length > 2;
+      var handCell = h('div', 'pc-cell pc-hand' + (compact ? ' pc-hand-compact' : ''));
       if (p.revealedCards && p.revealedCards.length) p.revealedCards.forEach(function (c) {
         if (!c) return;
         var used = !p.hand.some(function (x) { return x.id === c.id; });
-        var mc = miniCard(c, used);
+        var mc = compact ? cardToken(c, used) : miniCard(c, used);
         // Hover sulle carte in anteprima: evidenzia gli abbinamenti del PROPRIETARIO della carta.
         if (!used) {
           (function (cc) { mc.onmouseenter = function () { highlightMatches(id, cc); }; mc.onmouseleave = clearMatchHints; })(c);
@@ -404,6 +412,12 @@
       var m = h('span', 'mini' + (inv ? ' inv suit-bg-' + c.suit : ' suit-' + c.suit) + (used ? ' used' : ''));
       m.appendChild(cardFace(c, inv));
       return m;
+    }
+    // Token compatto (es. "7B") colorato per SUIT, come nel log del clash. Usato con 3-4 giocatori.
+    function cardToken(c, used) {
+      var t = h('span', 'card-token suit-' + c.suit + (used ? ' used' : ''));
+      t.textContent = c.value + c.suit[0].toUpperCase();
+      return t;
     }
     // Carta di anteprima a grandezza mano (per il dialog Opzioni).
     function bigPreviewCard(c) {
@@ -723,81 +737,62 @@
     }
 
     // ---- Timeline del turno (persistente per animare le transizioni) ----
-    // Il movimento va sempre G1→G2. L'attacco dipende dalla struttura del turno:
-    //   '1221' (default) → attacco G2→G1 (iniziativa divisa)
-    //   '1212'           → attacco G1→G2 (stesso ordine del movimento)
-    // atk1 = primo attaccante, atk2 = secondo attaccante.
-    var TL_ORDER = ['select', 'move1', 'move2', 'atk1', 'atk2', 'end'];
-    // Il primo attaccante è G2 in '1221', G1 in '1212'.
-    function attackFirstIsG1(s) { return s.turnMode === '1212'; }
-    function tlLabel(key, s) {
-      switch (key) {
-        case 'select': return 'DEPLOY';
-        case 'move1': return 'MOVIMENTO G1';
-        case 'move2': return 'MOVIMENTO G2';
-        case 'atk1': return attackFirstIsG1(s) ? 'ATTACCO G1' : 'ATTACCO G2';
-        case 'atk2': return attackFirstIsG1(s) ? 'ATTACCO G2' : 'ATTACCO G1';
-        case 'end': return 'FINE TURNO';
+    // Timeline generica (2-4 giocatori). MOVIMENTO: G1→Gk; ATTACCO: Gk→G1 ('1221') o G1→Gk ('1212').
+    // Con 3-4 giocatori le etichette sono abbreviate: "M G1", "A G4"…
+    // Ritorna { segs:[{key,label,color}], active:key } in base allo stato.
+    function timelineModel(s) {
+      var order = (s.playerOrder && s.playerOrder.length) ? s.playerOrder.slice() : ['N', 'S'];
+      var gnum = {}; order.forEach(function (id, i) { gnum[id] = i + 1; });
+      var multi = order.length > 2;
+      if (s.phase === 'draft') {
+        var dsegs = order.map(function (id) { return { key: 'd-' + id, label: 'Piazzamento G' + gnum[id], color: PLAYER_COLOR[id] }; });
+        var dactive = s.pendingDraft ? 'd-' + s.pendingDraft.playerId : dsegs[0].key;
+        return { segs: dsegs, active: dactive };
       }
-      return '';
-    }
-    function tlColorFor(key, s) {
-      var other = s.firstPlayer === 'N' ? 'S' : 'N';
-      var g1First = attackFirstIsG1(s);
-      // atk1 è G1 solo in '1212'; atk2 è G1 solo in '1221'.
-      if (key === 'move1' || (key === 'atk1' && g1First) || (key === 'atk2' && !g1First)) return PLAYER_COLOR[s.firstPlayer]; // G1
-      if (key === 'move2' || (key === 'atk1' && !g1First) || (key === 'atk2' && g1First)) return PLAYER_COLOR[other];         // G2
-      return '#ffffff'; // select / end
-    }
-    function getTimelinePhase(s) {
-      if (s.gameOver || s.phase === 'end') return 'end';
-      if (s.phase === 'select') return 'select';
-      if (s.phase === 'move') return s.activePlayer === s.firstPlayer ? 'move1' : 'move2';
-      if (s.phase === 'attack') {
-        // Il primo attaccante (atk1) è G1 in '1212', G2 in '1221'.
-        var activeIsG1 = s.activePlayer === s.firstPlayer;
-        return (activeIsG1 === attackFirstIsG1(s)) ? 'atk1' : 'atk2';
+      var atkOrder = s.turnMode === '1212' ? order.slice() : order.slice().reverse();
+      var segs = [{ key: 'select', label: 'DEPLOY', color: '#ffffff' }];
+      order.forEach(function (id) { segs.push({ key: 'm-' + id, label: (multi ? 'M G' : 'MOVIMENTO G') + gnum[id], color: PLAYER_COLOR[id] }); });
+      atkOrder.forEach(function (id) { segs.push({ key: 'a-' + id, label: (multi ? 'A G' : 'ATTACCO G') + gnum[id], color: PLAYER_COLOR[id] }); });
+      segs.push({ key: 'end', label: 'FINE TURNO', color: '#ffffff' });
+      var active = 'end';
+      if (!s.gameOver && s.phase !== 'end') {
+        if (s.phase === 'select') active = 'select';
+        else if (s.phase === 'move') active = 'm-' + s.activePlayer;
+        else if (s.phase === 'attack') active = 'a-' + s.activePlayer;
       }
-      return 'select';
+      return { segs: segs, active: active };
     }
-    var DRAFT_ORDER = ['place1', 'place2'];
     function renderTimeline(s) {
-      var draft = s.phase === 'draft';
-      if (!ui.tlSegs || ui.tlDraft !== draft) {
+      var model = timelineModel(s);
+      var sig = model.segs.map(function (x) { return x.key; }).join('|');
+      if (ui.tlSig !== sig) {
         dom.timeline.innerHTML = '';
-        ui.tlSegs = {}; ui.tlDraft = draft;
-        (draft ? DRAFT_ORDER : TL_ORDER).forEach(function (key, i) {
+        ui.tlSegs = {}; ui.tlSig = sig;
+        model.segs.forEach(function (seg, i) {
           if (i) dom.timeline.appendChild(h('span', 'tl-arrow', '›'));
-          var seg = h('span', 'tl-seg', draft ? (key === 'place1' ? 'Piazzamento G1' : 'Piazzamento G2') : tlLabel(key, s));
-          ui.tlSegs[key] = seg; dom.timeline.appendChild(seg);
+          var el = h('span', 'tl-seg', seg.label);
+          ui.tlSegs[seg.key] = el; dom.timeline.appendChild(el);
+        });
+      } else {
+        // aggiorna le etichette (le G-number cambiano quando ruota il 1° Pilota)
+        model.segs.forEach(function (seg) { if (ui.tlSegs[seg.key]) ui.tlSegs[seg.key].textContent = seg.label; });
+      }
+      function setActive(activeKey) {
+        model.segs.forEach(function (seg) {
+          var el = ui.tlSegs[seg.key]; if (!el) return;
+          if (seg.key === activeKey) { el.classList.add('cur'); el.style.background = seg.color; }
+          else { el.classList.remove('cur'); el.style.background = ''; }
         });
       }
-      if (draft) {
-        var dkey = (s.pendingDraft && s.pendingDraft.playerId !== s.firstPlayer) ? 'place2' : 'place1';
-        DRAFT_ORDER.forEach(function (k) {
-          var seg = ui.tlSegs[k];
-          if (k === dkey) { seg.classList.add('cur'); seg.style.background = PLAYER_COLOR[k === 'place1' ? s.firstPlayer : (s.firstPlayer === 'N' ? 'S' : 'N')]; }
-          else { seg.classList.remove('cur'); seg.style.background = ''; }
-        });
-        ui.lastRound = s.round; return;
-      }
-      var key = getTimelinePhase(s);
-      // Flash della fase "fine turno" quando cambia il round (transizione altrimenti istantanea).
-      if (ui.lastRound != null && s.round !== ui.lastRound && !s.gameOver && !ui.flashingEnd) {
+      // Flash della fase "fine turno" quando cambia il round.
+      if (ui.lastRound != null && s.round !== ui.lastRound && !s.gameOver && s.phase !== 'draft' && !ui.flashingEnd && ui.tlSegs['end']) {
         ui.flashingEnd = true;
-        setTimelineActive('end', s);
-        setTimeout(function () { ui.flashingEnd = false; setTimelineActive(getTimelinePhase(game.state), game.state); }, 800);
+        setActive('end');
+        setTimeout(function () { ui.flashingEnd = false; renderTimeline(game.state); }, 800);
       } else if (!ui.flashingEnd) {
-        setTimelineActive(key, s);
+        setActive(model.active);
       }
       ui.lastRound = s.round;
-    }
-    function setTimelineActive(key, s) {
-      TL_ORDER.forEach(function (k) {
-        var seg = ui.tlSegs[k];
-        if (k === key) { seg.classList.add('cur'); seg.style.background = tlColorFor(k, s); }
-        else { seg.classList.remove('cur'); seg.style.background = ''; }
-      });
     }
 
     // ============================================================ ACTION AREA
@@ -815,6 +810,7 @@
       if (s.subPhase === 'teleport-select') return renderPickInfo('🌀 Teletrasporto', 'Clicca una CELLA ONLINE VUOTA con lo stesso VALORE della CELLA su cui ti trovi.');
       if (s.subPhase === 'draft-select') return renderDraftSelect(s);
       if (s.subPhase === 'draft-place') return renderPickInfo('🃏 Draft', 'Clicca una CELLA VUOTA dove posizionare la carta scelta.');
+      if (s.subPhase === 'energy-target') return renderEnergyTarget(s);
       if (s.subPhase === 'rebuild-select') return renderRebuildSelect(s);
       if (s.subPhase === 'rebuild-place') return renderPickInfo('🔧 Ricostruisci', 'Clicca la CELLA DISTRUTTA o OFFLINE da SOVRASCRIVERE con la carta scelta.');
       if (s.subPhase === 'elemental-target') return renderPickInfo('💥 Bomba Elementale', 'Clicca la CELLA bersaglio: cambia la sua SUIT e quella delle CELLE ORTOGONALI.');
@@ -968,6 +964,18 @@
     }
 
     // ---- Ricostruisci: scelta di 1 carta tra le pescate ----
+    function renderEnergyTarget(s) {
+      var who = s.pendingEnergy.playerId;
+      if (isCpu(who)) { thinking('🤖 Il computer sceglie da chi rubare…'); return; }
+      var body = h('div', 'choices');
+      game.energyTargetOptions().forEach(function (oid) {
+        var b = h('button', 'primary', 'Pilota ' + oid + ' (' + (SEAT_LABEL[oid] || oid) + ')');
+        b.style.borderColor = PLAYER_COLOR[oid];
+        b.onclick = function () { game.energyDrainTarget(oid); render(); };
+        body.appendChild(b);
+      });
+      setAction('⚡ Sifone Energetico — scegli da chi rubare una carta', body, null);
+    }
     function renderDraftSelect(s) {
       var pd = s.pendingDraft, who = pd.playerId;
       if (isCpu(who)) { thinking('🤖 Il computer costruisce la griglia…'); return; }
@@ -1068,7 +1076,8 @@
 
     // ---- Selezione 3 carte (segreta) ----
     function renderSelect(s) {
-      var next = s.selected.N == null ? 'N' : (s.selected.S == null ? 'S' : null);
+      var next = null, ap = game.allPlayers();
+      for (var ni = 0; ni < ap.length; ni++) if (s.selected[ap[ni]] == null) { next = ap[ni]; break; }
       if (next == null) return;
       if (isCpu(next)) { thinking('🤖 Il computer sceglie le carte…'); return; }
       var who = ui.selectingPlayer;
@@ -1383,7 +1392,7 @@
     // Dopo ogni render: anima gli spostamenti pedina (diff), i flip delle carte (diff) e l'eventuale sparo.
     function postRenderAnimations() {
       var s = game.state;
-      ['N', 'S'].forEach(function (id) {
+      game.allPlayers().forEach(function (id) {
         var pc = game.pawnCell(id), cur = pc ? { x: pc.x, y: pc.y } : null;
         var prev = ui.lastPawns && ui.lastPawns[id];
         if (prev && cur && (prev.x !== cur.x || prev.y !== cur.y)) flyPawn(prev, cur, id);
@@ -1552,12 +1561,16 @@
     function buildPeekModal(r) {
       var back = h('div', 'dialog-back peek-modal-back');
       var box = h('div', 'dialog peek-modal');
-      var head = h('div', 'rules-head'); head.appendChild(h('h2', null, 'STACK DI RISERVA di ' + r.opponentId)); box.appendChild(head);
-      box.appendChild(h('div', 'peek-sub', 'Carte non scelte dell\'avversario (' + r.cards.length + ')'));
-      var row = h('div', 'peek-row');
-      if (!r.cards.length) row.appendChild(h('div', 'hint', 'Nessuna carta nella STACK DI RISERVA.'));
-      r.cards.forEach(function (c) { row.appendChild(clashCardEl(c)); });
-      box.appendChild(row);
+      var head = h('div', 'rules-head'); head.appendChild(h('h2', null, 'STACK DI RISERVA avversarie')); box.appendChild(head);
+      // Multiplayer: mostra la riserva di TUTTI gli altri giocatori; fallback al formato 2 giocatori.
+      var hands = r.hands || [{ playerId: r.opponentId, cards: r.cards || [] }];
+      hands.forEach(function (hnd) {
+        box.appendChild(h('div', 'peek-sub', 'Pilota ' + hnd.playerId + ' (' + (SEAT_LABEL[hnd.playerId] || hnd.playerId) + ') — ' + hnd.cards.length + ' carte'));
+        var row = h('div', 'peek-row');
+        if (!hnd.cards.length) row.appendChild(h('div', 'hint', 'Nessuna carta nella STACK DI RISERVA.'));
+        hnd.cards.forEach(function (c) { row.appendChild(clashCardEl(c)); });
+        box.appendChild(row);
+      });
       var cont = h('button', 'primary clash-continue', 'Chiudi');
       cont.onclick = closePeekModal;
       box.appendChild(cont);
@@ -1599,13 +1612,16 @@
       if (r.tiebreak && r.tiebreak !== 'patta') dom.sheet.appendChild(h('p', 'final-tiebreak', 'Spareggio: ' + (r.tiebreak === 'centro' ? 'ha conquistato il centro.' : 'più OBIETTIVI.')));
       dom.sheet.appendChild(h('p', 'final-summary', r.summary));
 
-      // Due schede separate (una per PILOTA), stile allineato ai Batch Test.
-      var cards = h('div', 'final-cards');
-      ['N', 'S'].forEach(function (id) {
+      // Una scheda per PILOTA (ordinate per classifica finale), stile allineato ai Batch Test.
+      var cards = h('div', 'final-cards' + (game.allPlayers().length > 2 ? ' final-cards-multi' : ''));
+      (r.ranking && r.ranking.length ? r.ranking : game.allPlayers()).forEach(function (id) {
         var p = s.players[id], st = p.stats;
         var card = h('div', 'final-card' + (r.winner === id ? ' win' : ''));
         var head = h('div', 'final-card-head');
-        head.appendChild(h('span', 'fc-badge', 'Pilota ' + id));
+        var badge = h('span', 'fc-badge');
+        var fdot = h('span', 'pc-player-dot'); fdot.style.background = PLAYER_COLOR[id] || '#888'; badge.appendChild(fdot);
+        badge.appendChild(document.createTextNode('Pilota ' + id));
+        head.appendChild(badge);
         head.appendChild(h('span', 'fc-arm', charLabel(p.character)));
         head.appendChild(h('span', 'fc-suit', SUIT_LABEL[p.belongingSuit] || '—'));
         card.appendChild(head);
@@ -1705,6 +1721,7 @@
       if (s.subPhase === 'end-discard') return s.pendingEndDiscard ? s.pendingEndDiscard.playerId : null;
       if (s.subPhase === 'rebuild-select' || s.subPhase === 'rebuild-place') return s.pendingRebuild ? s.pendingRebuild.playerId : null;
       if (s.subPhase === 'draft-select' || s.subPhase === 'draft-place') return s.pendingDraft ? s.pendingDraft.playerId : null;
+      if (s.subPhase === 'energy-target') return s.pendingEnergy ? s.pendingEnergy.playerId : null;
       if (s.subPhase === 'tool-discard') return s.pendingToolDiscard && s.pendingToolDiscard.playerId;
       if (s.subPhase === 'runner-figure') return s.pendingRunner && s.pendingRunner.playerId;
       if (s.subPhase === 'timebomb-suit') return s.pendingTimebomb.playerId;
@@ -1717,7 +1734,7 @@
       if (s.subPhase === 'clash-reloc') return s.pendingClash.relocatorId;
       if (s.subPhase === 'forced-reloc') return s.pendingForced.chooserId;
       if (s.subPhase) return null;
-      if (s.phase === 'select') return s.selected.N == null ? 'N' : (s.selected.S == null ? 'S' : null);
+      if (s.phase === 'select') { var ap = game.allPlayers(); for (var i = 0; i < ap.length; i++) if (s.selected[ap[i]] == null) return ap[i]; return null; }
       if (s.phase === 'move' || s.phase === 'attack') return s.activePlayer;
       return null;
     }

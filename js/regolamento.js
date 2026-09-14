@@ -58,6 +58,20 @@
 "*Nota:* nel Draft la CELLA centrale del 5×5 ospita la carta che vi viene piazzata (non l'asso del seme iniziale). Le CELLE BONUS restano quelle di posizione (§4.2).");
 
     s.push(
+"### 3.2 Variante: 3-4 giocatori\n\n" +
+"Si può giocare in **2, 3 o 4**, ma **solo su griglia 5×5**. Ogni PILOTA parte da un **angolo**:\n\n" +
+"- **4 giocatori:** tutti e quattro gli angoli.\n" +
+"- **3 giocatori:** tre angoli **scelti a caso** fra i quattro.\n" +
+"- **2 giocatori:** angoli in diagonale (come sempre).\n\n" +
+"Deciso il **1° Pilota**, l'ordine di gioco procede in **senso ORARIO** fra gli angoli occupati (G1, G2, …). Ogni PILOTA ha un **colore** distinto (diverso dai semi) mostrato sulla pedina e nella scheda in alto.\n\n" +
+"**Struttura del TURNO:** DEPLOY → **M G1 → M G2 → M G3 → M G4** → **A G4 → A G3 → A G2 → A G1** → FINE TURNO (in MOVIMENTO si parte da G1; in ATTACCO l'ordine si inverte). A fine ROUND il segnalino di 1° Pilota passa all'angolo **successivo in senso orario**.\n\n" +
+"Il resto delle regole non cambia. In particolare:\n\n" +
+"- **CLASH:** resta sempre **1 contro 1**, fra chi agisce e l'occupante della CELLA bersaglio; gli altri non partecipano.\n" +
+"- **Sifone Energetico:** se più avversari hanno carte scelte, **scegli tu** da quale rubare.\n" +
+"- **Deep Mind:** la sua SKILL mostra la **STACK DI RISERVA di tutti** gli altri giocatori.\n" +
+"- **Fine partita:** nessuna eliminazione — tutti giocano fino all'ultimo ROUND e si stila la **classifica per punti** (spareggi come al §9).");
+
+    s.push(
 "## 4. Il ROUND\n\n" +
 "Ogni ROUND scorre in tre fasi: **DEPLOY → MOVIMENTO → ATTACCO**, poi si chiude il ROUND. In ogni ROUND ciascun PILOTA **MUOVE una volta** e **ATTACCA una volta** (salvo effetti dei TOOLS).\n\n" +
 "**Chi agisce per primo (Turno 1-2-2-1, default):** nel **MOVIMENTO** parte il 1° Pilota, poi l'avversario; nell'**ATTACCO** l'ordine si **inverte**. Così ognuno gioca per secondo in esattamente una fase. *(Con l'opzione Turno 1-2-1-2, invece, l'ATTACCO segue lo stesso ordine del MOVIMENTO.)*");

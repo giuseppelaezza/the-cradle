@@ -15,7 +15,8 @@
 
   // Stato della configurazione. I poteri seguono automaticamente il modulo Personaggi.
   var cfg = { opponent: 'cpu', suitMode: 'rotating', characters: true, objects: true, reshuffle: true, reshuffleCount: 2,
-              ruleset: 'C', gridSize: 4, gridMode: 'random', turnMode: '1221', maxRounds: 8, clashOnAttack: true, objectMode: 'random', objectSelection: [], charN: 'runner', charS: 'brawler' };
+              ruleset: 'C', gridSize: 4, gridMode: 'random', turnMode: '1221', maxRounds: 8, clashOnAttack: true, objectMode: 'random', objectSelection: [],
+              numPlayers: 2, chars: ['runner', 'brawler', 'tactician', 'fighter'] };
 
   // Icona del seme (SVG inline, colorata dal CSS come in partita).
   function suitIconEl(suit) { var w = h('span', 'suit-ic s-' + suit); if (Suits) w.innerHTML = Suits.svg(suit); return w; }
@@ -53,6 +54,16 @@
     [7, 8, 9, 10, 11].forEach(function (n) { var op = h('option', null, n + ' ROUND'); op.value = n; if (cfg.maxRounds === n) op.selected = true; nr.appendChild(op); });
     nr.onchange = function () { cfg.maxRounds = parseInt(nr.value, 10); };
     rsRow.appendChild(nr);
+    // Numero di giocatori: 2/3/4, SOLO su griglia 5×5.
+    if (cfg.gridSize === 5) {
+      var np = h('select', 'cfg-select');
+      np.title = 'Numero di giocatori (solo su griglia 5×5). Ogni PILOTA parte da un angolo.';
+      [[2, '2 giocatori'], [3, '3 giocatori'], [4, '4 giocatori']].forEach(function (o) {
+        var op = h('option', null, o[1]); op.value = o[0]; if (cfg.numPlayers === o[0]) op.selected = true; np.appendChild(op);
+      });
+      np.onchange = function () { cfg.numPlayers = parseInt(np.value, 10); renderConfig(); };
+      rsRow.appendChild(np);
+    }
     sheet.appendChild(rsRow);
 
     // TOOLS: DECK casuale o selezione manuale.
@@ -109,10 +120,10 @@
         ? 'Struttura del TURNO: DEPLOY → MOVIMENTO G1 → MOVIMENTO G2 → ATTACCO G1 → ATTACCO G2 → Fine ROUND.'
         : 'Struttura del TURNO: DEPLOY → MOVIMENTO G1 → MOVIMENTO G2 → ATTACCO G2 → ATTACCO G1 → Fine ROUND.')));
 
-    // Scelta ARM (sempre parte del regolamento).
+    // Scelta ARM (sempre parte del regolamento): uno slot per Pilota.
     sheet.appendChild(fieldLabel('ARM'));
-    sheet.appendChild(charSelect('N', 'charN'));
-    sheet.appendChild(charSelect('S', 'charS'));
+    var effNP = cfg.gridSize === 5 ? cfg.numPlayers : 2;
+    for (var sidx = 0; sidx < effNP; sidx++) sheet.appendChild(charSelect(sidx));
 
     var startRow = h('div', 'start-row');
     var start = h('button', 'primary big-btn start-main', '▶ Inizia partita');
@@ -149,23 +160,23 @@
     l.appendChild(r); l.appendChild(document.createTextNode(' ' + label)); return l;
   }
 
-  function charSelect(playerId, cfgKey) {
+  // Selettore ARM per lo slot (0-based) "Pilota N". In VS CPU solo il Pilota 1 è umano.
+  function charSelect(slot) {
     var box = h('div', 'char-block');
-    var isCpuSlot = cfg.opponent === 'cpucpu' || (cfg.opponent === 'cpu' && playerId === 'S');
-    // Titolo su una riga a sé; dropdown e card sotto.
-    box.appendChild(h('div', 'char-who', 'Pilota ' + playerId + (playerId === 'N' ? ' (Nord)' : ' (Sud)') + (isCpuSlot ? ' — CPU' : '')));
+    var isCpuSlot = cfg.opponent === 'cpucpu' || (cfg.opponent === 'cpu' && slot > 0);
+    box.appendChild(h('div', 'char-who', 'Pilota ' + (slot + 1) + (isCpuSlot ? ' — CPU' : (cfg.opponent === '2p' ? '' : ' — Tu'))));
     var sel = h('select', 'cfg-select char-select');
     sel.title = 'Scegli l\'ARM.';
-    // "Random": ARM scelto casualmente a inizio partita.
-    var rop = h('option', null, 'Random'); rop.value = 'random'; if (cfg[cfgKey] === 'random') rop.selected = true; sel.appendChild(rop);
+    var cur = cfg.chars[slot] || 'random';
+    var rop = h('option', null, 'Random'); rop.value = 'random'; if (cur === 'random') rop.selected = true; sel.appendChild(rop);
     Characters.ORDER.forEach(function (type) {
       var ch = Characters.get(type);
-      var op = h('option', null, ch.label); op.value = type; if (cfg[cfgKey] === type) op.selected = true;
+      var op = h('option', null, ch.label); op.value = type; if (cur === type) op.selected = true;
       sel.appendChild(op);
     });
-    sel.onchange = function () { cfg[cfgKey] = sel.value; renderConfig(); };
+    sel.onchange = function () { cfg.chars[slot] = sel.value; renderConfig(); };
     box.appendChild(sel);
-    box.appendChild(charDescription(cfg[cfgKey]));
+    box.appendChild(charDescription(cur));
     return box;
   }
 
@@ -276,6 +287,7 @@
   // Costruisce le opzioni per createGame dalla configurazione corrente.
   function buildOpts(extra) {
     var useSelection = cfg.objects && cfg.objectMode === 'select' && cfg.objectSelection.length > 0;
+    var effNP = cfg.gridSize === 5 ? cfg.numPlayers : 2;
     var opts = {
       suitMode: cfg.suitMode,
       modules: { characters: cfg.characters, objects: cfg.objects, powers: cfg.characters, reshuffle: cfg.reshuffle },
@@ -283,11 +295,12 @@
       ruleset: cfg.ruleset,
       gridSize: cfg.ruleset === 'C' ? cfg.gridSize : 5,
       gridMode: cfg.gridMode,
+      numPlayers: effNP,
       turnMode: cfg.turnMode,
       maxRounds: cfg.ruleset === 'C' ? cfg.maxRounds : 9,
       clashOnAttack: cfg.clashOnAttack,
       objectSelection: useSelection ? cfg.objectSelection.slice() : null,
-      characters: { N: cfg.charN, S: cfg.charS }
+      characters: cfg.chars.slice(0, effNP) // array per indice (Pilota 1..n)
     };
     if (extra) for (var k in extra) opts[k] = extra[k];
     return opts;
@@ -300,9 +313,9 @@
     st.log.push('Setup: GLOBAL SUIT iniziale = ' + st.centerInitialSuit + ' · modalità ' + st.suitMode +
       ' · moduli: ' + (st.modules.characters ? 'ARM ' : '') + (st.modules.objects ? 'TOOLS' : '') +
       (!st.modules.characters && !st.modules.objects ? 'base' : '') + '. 1° Pilota = ' + st.firstPlayer + '.');
-    if (st.modules.characters) st.log.push('ARM: N=' + (Characters.get(st.players.N.character) || {}).label + ' (' + st.players.N.belongingSuit + '), S=' + (Characters.get(st.players.S.character) || {}).label + ' (' + st.players.S.belongingSuit + ').');
+    if (st.modules.characters) st.log.push('ARM: ' + game.allPlayers().map(function (id) { return id + '=' + (Characters.get(st.players[id].character) || {}).label + ' (' + st.players[id].belongingSuit + ')'; }).join(', ') + '.');
 
-    var controller = window.CradleUI.createController(game, { mode: cfg.opponent, cpuId: 'S',
+    var controller = window.CradleUI.createController(game, { mode: cfg.opponent, humanId: game.allPlayers()[0],
       onRematch: startGame,      // nuova partita con le impostazioni correnti
       onBack: backToConfig });   // torna al configuratore
     window.__cradle = { game: game, controller: controller };
@@ -328,32 +341,38 @@
     if (s.subPhase === 'end-discard') return s.pendingEndDiscard.playerId;
     if (s.subPhase === 'rebuild-select' || s.subPhase === 'rebuild-place') return s.pendingRebuild.playerId;
     if (s.subPhase === 'draft-select' || s.subPhase === 'draft-place') return s.pendingDraft.playerId;
+    if (s.subPhase === 'energy-target') return s.pendingEnergy.playerId;
     if (s.subPhase === 'tool-discard') return s.pendingToolDiscard && s.pendingToolDiscard.playerId;
     if (s.subPhase === 'runner-figure') return s.pendingRunner && s.pendingRunner.playerId;
     if (s.subPhase === 'timebomb-suit') return s.pendingTimebomb.playerId;
     if (s.subPhase === 'elemental-target' || s.subPhase === 'elemental-suit') return s.pendingElemental.playerId;
-    if (s.subPhase === 'barrage-first' || s.subPhase === 'barrage-second') return s.pendingBarrage.playerId;
+    if (s.subPhase === 'barrage-first' || s.subPhase === 'barrage-second' || s.subPhase === 'barrage-third') return s.pendingBarrage.playerId;
     if (s.subPhase === 'randomizer-select' || s.subPhase === 'randomizer-place') return s.pendingRandomizer.playerId;
     if (s.subPhase === 'altmatch-object') return s.pendingAltMatch.playerId;
     if (s.subPhase === 'clash-cards') return g.clashCurrentChooser();
     if (s.subPhase === 'clash-reloc') return s.pendingClash.relocatorId;
     if (s.subPhase === 'forced-reloc') return s.pendingForced.chooserId;
     if (s.subPhase) return null;
-    if (s.phase === 'select') return s.selected.N == null ? 'N' : (s.selected.S == null ? 'S' : null);
+    if (s.phase === 'select') { var ap = g.allPlayers(); for (var i = 0; i < ap.length; i++) if (s.selected[ap[i]] == null) return ap[i]; return null; }
     if (s.phase === 'move' || s.phase === 'attack') return s.activePlayer;
     return null;
   }
   function batchNewAcc() {
-    var randomChars = cfg.charN === 'random' || cfg.charS === 'random';
+    var randomChars = cfg.chars.some(function (c) { return c === 'random'; });
     return { completed: 0, errors: 0, rounds: 0, combined: 0, winner: 0, loser: 0, margin: 0,
              ties: 0, decided: 0, startFirstWins: 0, figures: 0,
              emptyPass: 0, emptyPassMove: 0, emptyPassShoot: 0,
              objUses: {}, perChar: randomChars ? {} : null };
   }
   function batchPlay(seed, acc) {
-    var firstPlayer = (seed % 2 === 0) ? 'N' : 'S', g, s;
-    try { g = Engine.createGame(buildOpts({ rng: makeRng(seed), firstPlayer: firstPlayer })); s = g.state; }
+    var effNP = cfg.gridSize === 5 ? cfg.numPlayers : 2;
+    var g, s;
+    // Con 2 giocatori alterniamo chi inizia; con 3-4 lo decide il motore.
+    var seedOpts = { rng: makeRng(seed) };
+    if (effNP === 2) seedOpts.firstPlayer = (seed % 2 === 0) ? 'N' : 'S';
+    try { g = Engine.createGame(buildOpts(seedOpts)); s = g.state; }
     catch (e) { acc.errors++; return; }
+    var fp0 = s.firstPlayer; // 1° Pilota iniziale (per la stat "vittorie di chi inizia")
     // Strumenta l'uso oggetti (conteggio per tipo) e segnala se un oggetto è stato usato nell'azione corrente.
     var objUsedThisAction = false;
     var origUse = g.useObject.bind(g);
@@ -382,12 +401,13 @@
     catch (e) { acc.errors++; return; }
     if (!s.gameOver) { acc.errors++; return; }
     acc.completed++; acc.rounds += s.round;
-    var N = s.players.N.score, S = s.players.S.score;
-    acc.combined += N + S; acc.winner += Math.max(N, S); acc.loser += Math.min(N, S); acc.margin += Math.abs(N - S);
+    var ids = g.allPlayers(), scores = ids.map(function (id) { return s.players[id].score; });
+    var mx = Math.max.apply(null, scores), mn = Math.min.apply(null, scores), sum = scores.reduce(function (a, b) { return a + b; }, 0);
+    acc.combined += sum; acc.winner += mx; acc.loser += mn; acc.margin += (mx - mn);
     var tie = s.result.tiebreak === 'patta';
-    if (tie) acc.ties++; else { acc.decided++; if (s.result.winner === firstPlayer) acc.startFirstWins++; }
-    acc.figures += (s.players.N.figuresMatched + s.players.S.figuresMatched) / 2;
-    if (acc.perChar) ['N', 'S'].forEach(function (id) {
+    if (tie) acc.ties++; else { acc.decided++; if (s.result.winner === fp0) acc.startFirstWins++; }
+    acc.figures += ids.reduce(function (a, id) { return a + s.players[id].figuresMatched; }, 0) / ids.length;
+    if (acc.perChar) ids.forEach(function (id) {
       var c = s.players[id].character; if (!c) return;
       var e = acc.perChar[c] = acc.perChar[c] || { games: 0, wins: 0 };
       e.games++; if (!tie && s.result.winner === id) e.wins++;
@@ -454,11 +474,13 @@
     return rows;
   }
   function batchSettingsRows() {
+    var effNP = cfg.gridSize === 5 ? cfg.numPlayers : 2;
+    var armList = cfg.chars.slice(0, effNP).map(function (c) { return c === 'random' ? 'Random' : (Characters.get(c) || {}).label; }).join(', ');
     return [
       ['Griglia', cfg.gridSize + '×' + cfg.gridSize],
+      ['Giocatori', String(effNP)],
       ['ROUND', String(cfg.maxRounds)],
-      ['ARM N', cfg.charN === 'random' ? 'Random' : (Characters.get(cfg.charN) || {}).label],
-      ['ARM S', cfg.charS === 'random' ? 'Random' : (Characters.get(cfg.charS) || {}).label],
+      ['ARM', armList],
       ['TOOLS', cfg.objectMode === 'select' ? ('Selezione (' + cfg.objectSelection.length + ')') : 'Random'],
       ['REMIX', cfg.reshuffleCount + '/partita'],
       ['Turno', cfg.turnMode === '1212' ? '1-2-1-2' : '1-2-2-1'],

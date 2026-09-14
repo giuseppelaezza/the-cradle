@@ -43,6 +43,17 @@
   function targetRow(playerId, size) { return playerId === 'N' ? (size || DEFAULT_SIZE) : 1; }
   function isTargetCell(playerId, cell, size) { return cell.y === targetRow(playerId, size); }
   function otherPlayer(id) { return id === 'N' ? 'S' : 'N'; }
+  // Multiplayer: i 4 angoli in ordine ORARIO (NW, NE, SE, SW) e le loro coordinate.
+  var SEAT_CW = ['N', 'E', 'S', 'W'];
+  function seatCorner(id, size) {
+    switch (id) {
+      case 'N': return [1, 1];        // NW
+      case 'E': return [size, 1];     // NE
+      case 'S': return [size, size];  // SE
+      case 'W': return [1, size];     // SW
+    }
+    return [1, 1];
+  }
   function inBounds(x, y, size) { size = size || DEFAULT_SIZE; return x >= 1 && x <= size && y >= 1 && y <= size; }
 
   function orthogonalNeighbors(x, y, size) {
@@ -150,6 +161,23 @@
     // Modalità griglia: 'random' (generata a caso, default) o 'draft' (i PILOTI la costruiscono a turno).
     var gridMode = opts.gridMode === 'draft' ? 'draft' : 'random';
 
+    // Numero di giocatori: 2 (default). 3-4 SOLO su griglia 5×5.
+    var numPlayers = Math.max(2, Math.min(4, (opts.numPlayers | 0) || 2));
+    if (numPlayers > 2 && gridSize !== 5) numPlayers = 2;
+    // Angoli di partenza (seggi), in ordine orario:
+    //  - 2 giocatori: diagonale N/S (come sempre);
+    //  - 4 giocatori: tutti e 4 gli angoli;
+    //  - 3 giocatori: 3 dei 4 angoli scelti a caso (mantenendo l'ordine orario).
+    var seats;
+    if (numPlayers === 2) seats = ['N', 'S'];
+    else if (numPlayers === 4) seats = SEAT_CW.slice();
+    else { seats = SEAT_CW.slice(); seats.splice(Math.floor(rng() * 4), 1); }
+    // Personaggi: accetta sia una mappa per-seggio ({N:..,S:..}) sia un array per indice (Pilota 1..n).
+    var charList;
+    if (Array.isArray(opts.characters)) charList = opts.characters.slice();
+    else if (opts.characters) charList = seats.map(function (id) { return opts.characters[id]; });
+    else charList = [];
+
     // 1-4. Mazzo, seme iniziale, asso centrale, griglia.
     var deck = Deck.shuffle(Deck.buildDeck(), rng);
     var starter = deck.shift();
@@ -161,8 +189,6 @@
       for (var dxx = 1; dxx <= gridSize; dxx++) for (var dyy = 1; dyy <= gridSize; dyy++) {
         grid[dxx][dyy] = { x: dxx, y: dyy, card: null, faceDown: false, destroyed: false, pawn: null };
       }
-      grid[1][1].pawn = 'N';
-      grid[gridSize][gridSize].pawn = 'S';
     } else if (gridSize === 5) {
       // Griglia 5×5: la cella centrale ospita l'asso del seme iniziale.
       var aceIndex = -1;
@@ -173,28 +199,27 @@
         var card = isCenter(x, y, 5) ? aceCard : deck.shift();
         grid[x][y] = { x: x, y: y, card: card, faceDown: false, destroyed: false, pawn: null };
       }
-      grid[1][1].pawn = 'N';
-      grid[5][5].pawn = 'S';
     } else {
       // Griglia 4×4: nessuna cella centrale; tutte e 16 le celle sono carte normali.
       Deck.shuffle(deck, rng);
       for (var x4 = 1; x4 <= 4; x4++) for (var y4 = 1; y4 <= 4; y4++) {
         grid[x4][y4] = { x: x4, y: y4, card: deck.shift(), faceDown: false, destroyed: false, pawn: null };
       }
-      grid[1][1].pawn = 'N';
-      grid[4][4].pawn = 'S';
     }
+    // Pedine agli angoli (un seggio per giocatore).
+    seats.forEach(function (id) { var c = seatCorner(id, gridSize); grid[c[0]][c[1]].pawn = id; });
 
-    var players = { N: makePlayer('N'), S: makePlayer('S') };
+    var players = {};
+    seats.forEach(function (id) { players[id] = makePlayer(id); });
 
     // Modulo Reshuffle: numero di usi per partita (1-3, default 2).
     var reshuffleCount = opts.reshuffleCount ? Math.max(1, Math.min(3, opts.reshuffleCount | 0)) : 2;
-    ['N', 'S'].forEach(function (id) { players[id].reshuffleLeft = reshuffleCount; players[id].reshuffleTotal = reshuffleCount; });
+    seats.forEach(function (id) { players[id].reshuffleLeft = reshuffleCount; players[id].reshuffleTotal = reshuffleCount; });
 
     // 6-7. Personaggi e oggetto iniziale.
     if (modules.characters) {
-      ['N', 'S'].forEach(function (id) {
-        var type = opts.characters && opts.characters[id];
+      seats.forEach(function (id, si) {
+        var type = charList[si];
         // "random": personaggio scelto a caso per questo giocatore.
         if (type === 'random') type = Characters.ORDER[Math.floor(rng() * Characters.ORDER.length)];
         var ch = Characters.get(type) || Characters.get('runner');
@@ -213,15 +238,15 @@
     var objectDeck = modules.objects ? Objects.buildObjectDeck(rng, opts.objectSelection, ruleset) : [];
     // Ruleset A (abbinamento alternativo): ogni giocatore pesca 1 oggetto extra a inizio partita.
     if (modules.objects && altMatch) {
-      ['N', 'S'].forEach(function (id) { if (objectDeck.length) players[id].objects.push(objectDeck.shift()); });
+      seats.forEach(function (id) { if (objectDeck.length) players[id].objects.push(objectDeck.shift()); });
     }
 
     // 8. Pesca 6 carte a testa. Nel Draft le mani si pescano DOPO (a griglia completa, §_finishDraft).
     if (gridMode !== 'draft') {
-      for (var d = 0; d < 6; d++) { players.N.hand.push(deck.shift()); players.S.hand.push(deck.shift()); }
+      for (var d = 0; d < 6; d++) seats.forEach(function (id) { players[id].hand.push(deck.shift()); });
     }
 
-    var firstPlayer = opts.firstPlayer || (rng() < 0.5 ? 'N' : 'S');
+    var firstPlayer = opts.firstPlayer && players[opts.firstPlayer] ? opts.firstPlayer : seats[Math.floor(rng() * seats.length)];
     // Struttura del turno: '1221' (default) = mov G1→G2, att G2→G1 (iniziativa divisa);
     // '1212' = mov G1→G2, att G1→G2 (stesso ordine in movimento e attacco).
     var turnMode = opts.turnMode === '1212' ? '1212' : '1221';
@@ -231,9 +256,17 @@
     // Regola opzionale "Clash su Attacco": attaccare una pedina avversaria apre un clash.
     var clashOnAttack = !!opts.clashOnAttack;
 
+    // Ordine di gioco: in senso orario a partire dal 1° Pilota (G1..Gk).
+    var seatsCW = SEAT_CW.filter(function (id) { return players[id]; });
+    var fi = seatsCW.indexOf(firstPlayer); if (fi < 0) fi = 0;
+    var playerOrder = seatsCW.slice(fi).concat(seatsCW.slice(0, fi));
+    var selectedInit = {}, selUsedInit = {};
+    seats.forEach(function (id) { selectedInit[id] = null; selUsedInit[id] = false; });
+
     var state = {
       deck: deck, objectDeck: objectDeck, discard: [], objectDiscard: [],
       grid: grid, gridSize: gridSize, gridMode: gridMode, centerInitialSuit: centerInitialSuit,
+      numPlayers: numPlayers, playerOrder: playerOrder,
       suitMode: suitMode, currentSuit: centerInitialSuit, turnMode: turnMode, maxRounds: maxRounds, clashOnAttack: clashOnAttack,
       modules: modules, altMatch: altMatch, ruleset: ruleset,
       trail: [],               // storico geometrico di movimenti/spari (per l'overlay "Mostra azioni")
@@ -242,8 +275,8 @@
       phase: 'select',        // 'select'|'move'|'attack'|'end'
       subPhase: null,         // null|'clash-cards'|'clash-reloc'|'object-discard'|'forced-reloc'|'timebomb-suit'
       activePlayer: firstPlayer,
-      selected: { N: null, S: null },
-      selectObjectUsed: { N: false, S: false }, // max 1 oggetto select per giocatore/round
+      selected: selectedInit,
+      selectObjectUsed: selUsedInit, // max 1 oggetto select per giocatore/round
       actionsLeft: 0,
       moveModifier: null,     // 'jetpack'|'jump'|'grapple' (armato per l'azione di movimento corrente)
       attackModifier: null,   // 'hook'|'homing' (armato per l'attacco corrente)
@@ -258,6 +291,7 @@
       pendingEndDiscard: null, // {playerId,need,sel} durante 'end-discard' (scarto in eccesso a fine turno)
       pendingRebuild: null,    // {playerId,drawn,chosen} durante 'rebuild-select'/'rebuild-place' (TOOL Ricostruisci)
       pendingDraft: null,      // {playerId,drawn,chosen,placed,need} durante 'draft-select'/'draft-place' (variante Draft)
+      pendingEnergy: null,     // {playerId} durante 'energy-target' (Sifone Energetico: scelta del bersaglio in multiplayer)
       pendingElemental: null, pendingBarrage: null, pendingRandomizer: null,
       gameOver: false, endTriggered: false, result: null, log: []
     };
@@ -286,6 +320,27 @@
   };
   // Segna che il PILOTA ha compiuto almeno un'azione (MOVIMENTO / ATTACCO / uso TOOL) nel ROUND.
   Game.prototype._markActed = function (id) { var p = this.state.players[id]; if (p) p.actedThisRound = true; };
+  // ---- Ordine di gioco (multiplayer) ----
+  // Ordine ORARIO a partire dal 1° Pilota, calcolato SEMPRE da firstPlayer (nessuna cache che
+  // possa diventare stale se firstPlayer viene cambiato direttamente).
+  Game.prototype._seatOrder = function () {
+    var s = this.state;
+    var seats = SEAT_CW.filter(function (id) { return s.players[id]; });
+    var i = seats.indexOf(s.firstPlayer); if (i < 0) i = 0;
+    return seats.slice(i).concat(seats.slice(0, i));
+  };
+  Game.prototype._computeOrder = function () { this.state.playerOrder = this._seatOrder(); };
+  Game.prototype._moveOrder = function () { return this._seatOrder(); };
+  Game.prototype._attackOrder = function () { var o = this._seatOrder(); return this.state.turnMode === '1212' ? o : o.reverse(); };
+  Game.prototype._nextInOrder = function (order, id) { var i = order.indexOf(id); return (i >= 0 && i < order.length - 1) ? order[i + 1] : null; };
+  Game.prototype._others = function (id) { return this._seatOrder().filter(function (p) { return p !== id; }); };
+  // Prossimo seggio in senso orario (per passare il segnalino 1° Pilota a fine ROUND).
+  Game.prototype._nextSeatCW = function (id) {
+    var s = this.state, seats = SEAT_CW.filter(function (p) { return s.players[p]; });
+    var i = seats.indexOf(id); return seats[(i + 1) % seats.length];
+  };
+  // Lista dei giocatori nell'ordine dei seggi orario (per iterazioni "per tutti i giocatori").
+  Game.prototype.allPlayers = function () { var s = this.state; return SEAT_CW.filter(function (p) { return s.players[p]; }); };
   // Le carte che escono dal gioco finiscono nella pila degli scarti.
   Game.prototype._discard = function (card) { if (card) this.state.discard.push(card); };
   // Le carte Oggetto che escono dal gioco (usate, scartate oltre il limite, non scelte) vanno nella pila scarti Oggetti.
@@ -420,10 +475,11 @@
     this._log(pd.playerId + ' piazza ' + pd.chosen.value + pd.chosen.suit[0].toUpperCase() + ' su [' + x + ',' + y + '].');
     pd.chosen = null;
     if (pd.placed < pd.need) { s.subPhase = 'draft-select'; return; }
-    // Turno concluso: le carte pescate non piazzate vanno negli scarti, poi tocca all'altro PILOTA.
+    // Turno concluso: le carte pescate non piazzate vanno negli scarti, poi tocca al PILOTA successivo (orario).
     pd.drawn.forEach(function (d) { s.discard.push(d); });
     s.pendingDraft = null; s.subPhase = null;
-    s.activePlayer = otherPlayer(s.activePlayer);
+    var order = this._seatOrder(), oi = order.indexOf(s.activePlayer);
+    s.activePlayer = order[(oi + 1) % order.length];
     this._beginDraftTurn();
   };
   // Fine del draft: si rimescolano gli scarti nel mazzo, si pescano le mani e comincia il ROUND 1.
@@ -432,7 +488,8 @@
     s.deck = Deck.shuffle(s.deck.concat(s.discard), this._rng || Math.random);
     s.discard = [];
     this._log('Draft completato: griglia pronta, mazzo rimescolato (' + s.deck.length + ' carte).');
-    for (var d = 0; d < 6; d++) { var cn = this._drawCard(); if (cn) s.players.N.hand.push(cn); var cs = this._drawCard(); if (cs) s.players.S.hand.push(cs); }
+    var self = this;
+    for (var d = 0; d < 6; d++) this.allPlayers().forEach(function (id) { var c = self._drawCard(); if (c) s.players[id].hand.push(c); });
     s.pendingDraft = null; s.subPhase = null;
     s.activePlayer = s.firstPlayer;
     this._beginSelectPhase();
@@ -442,8 +499,9 @@
   Game.prototype._beginSelectPhase = function () {
     var s = this.state;
     s.phase = 'select'; s.subPhase = null;
-    s.selected = { N: null, S: null };
-    s.selectObjectUsed = { N: false, S: false };
+    this._computeOrder(); // aggiorna l'ordine di gioco (per la UI) in base al 1° Pilota corrente
+    s.selected = {}; s.selectObjectUsed = {};
+    this.allPlayers().forEach(function (id) { s.selected[id] = null; s.selectObjectUsed[id] = false; });
     s.activePlayer = s.firstPlayer;
     // Nessuna "finestra oggetto": gli oggetti si usano dal pannello sotto la mano,
     // durante la propria selezione segreta e prima di confermare le 3 carte.
@@ -459,18 +517,18 @@
     var p = s.players[id];
     for (var i = 0; i < ids.length; i++) if (!findCard(p.hand, ids[i])) throw new Error('Carta non in mano: ' + ids[i]);
     s.selected[id] = ids.slice();
-    if (s.selected.N && s.selected.S) this._reveal();
+    if (this.allPlayers().every(function (pid) { return s.selected[pid]; })) this._reveal();
   };
 
   Game.prototype._reveal = function () {
     var s = this.state;
-    ['N', 'S'].forEach(function (id) {
+    this.allPlayers().forEach(function (id) {
       var p = s.players[id];
       p.revealedIds = s.selected[id].slice();
       // Snapshot delle 3 carte scelte (per la preview pubblica, anche dopo l'uso).
       p.revealedCards = p.revealedIds.map(function (cid) { return findCard(p.hand, cid); });
+      s.selected[id] = null;
     });
-    s.selected = { N: null, S: null };
     this._log('Carte rivelate. Fase movimento; inizia ' + s.firstPlayer + '.');
     this._beginMovePhase();
   };
@@ -494,7 +552,8 @@
   };
   Game.prototype._endMoveSegment = function () {
     var s = this.state;
-    if (s.activePlayer === s.firstPlayer) this._beginMoveSegment(otherPlayer(s.firstPlayer));
+    var next = this._nextInOrder(this._moveOrder(), s.activePlayer);
+    if (next) this._beginMoveSegment(next);
     else this._beginAttackPhase();
   };
   Game.prototype._afterMoveAction = function (id) {
@@ -513,10 +572,15 @@
     if (s.moveModifier === 'grapple') {
       var out = orthogonalNeighbors(pc.x, pc.y, s.gridSize).slice(), seen = {};
       out.forEach(function (d) { seen[d[0] + ',' + d[1]] = true; });
-      var opp = this.pawnCell(otherPlayer(id));
-      if (opp) orthogonalNeighbors(opp.x, opp.y, s.gridSize).forEach(function (d) {
-        var k = d[0] + ',' + d[1];
-        if (!seen[k] && !(d[0] === pc.x && d[1] === pc.y)) { seen[k] = true; out.push(d); }
+      var self = this;
+      // Arpione: aggiunge le CELLE ORTOGONALI a QUALSIASI ARM avversario.
+      this._others(id).forEach(function (oid) {
+        var opp = self.pawnCell(oid);
+        if (!opp) return;
+        orthogonalNeighbors(opp.x, opp.y, s.gridSize).forEach(function (d) {
+          var k = d[0] + ',' + d[1];
+          if (!seen[k] && !(d[0] === pc.x && d[1] === pc.y)) { seen[k] = true; out.push(d); }
+        });
       });
       return out;
     }
@@ -537,7 +601,7 @@
       var cell = s.grid[dests[i][0]][dests[i][1]];
       var okIds = [];
       for (var j = 0; j < revealed.length; j++) if (self._matches(id, revealed[j], cell)) okIds.push(revealed[j].id);
-      if (okIds.length) out.push({ x: cell.x, y: cell.y, key: cellKey(cell.x, cell.y), cardIds: okIds, occupied: cell.pawn === otherPlayer(id) });
+      if (okIds.length) out.push({ x: cell.x, y: cell.y, key: cellKey(cell.x, cell.y), cardIds: okIds, occupied: !!cell.pawn && cell.pawn !== id });
     }
     return out;
   };
@@ -554,11 +618,12 @@
     removeCard(s.players[id].hand, cardId);
     this._markActed(id); s.players[id].stats.moves += 1;
 
-    if (dest.pawn === otherPlayer(id)) {
+    if (dest.pawn && dest.pawn !== id) {
+      var defId = dest.pawn;
       s.subPhase = 'clash-cards';
-      s.pendingClash = { attackerId: id, defenderId: otherPlayer(id), x: x, y: y, moveCard: card,
+      s.pendingClash = { attackerId: id, defenderId: defId, x: x, y: y, moveCard: card,
                          attackerCardId: null, defenderCardId: null, whoChooses: id };
-      this._log(id + ' attacca ' + otherPlayer(id) + ' su [' + x + ',' + y + '] → clash.');
+      this._log(id + ' attacca ' + defId + ' su [' + x + ',' + y + '] → clash.');
       this._clashAdvanceAuto(); // chi non ha carte disponibili non contesta (perde di default)
       return { type: 'clash' };
     }
@@ -823,8 +888,7 @@
   // Chi attacca per primo: nella struttura '1221' (iniziativa divisa) è l'ALTRO giocatore,
   // nella '1212' è il Primo Giocatore (stesso ordine del movimento).
   Game.prototype._attackLeader = function () {
-    var s = this.state;
-    return s.turnMode === '1212' ? s.firstPlayer : otherPlayer(s.firstPlayer);
+    return this._attackOrder()[0];
   };
   Game.prototype._beginAttackPhase = function () {
     this.state.phase = 'attack';
@@ -844,9 +908,10 @@
     s.subPhase = null; // pronto ad attaccare; gli oggetti attack si usano dal pannello
   };
   Game.prototype._endAttackSegment = function () {
-    var s = this.state, attackLeader = this._attackLeader();
-    // Dopo il primo attaccante tocca all'altro; poi fine round.
-    if (s.activePlayer === attackLeader) this._beginAttackSegment(otherPlayer(attackLeader));
+    var s = this.state;
+    // Ordine di attacco: G(k)→G1 in '1221', G1→G(k) in '1212'. Poi fine ROUND.
+    var next = this._nextInOrder(this._attackOrder(), s.activePlayer);
+    if (next) this._beginAttackSegment(next);
     else this._endRound();
   };
   Game.prototype._afterAttackAction = function (id) {
@@ -884,11 +949,12 @@
     // Regola "Clash su Attacco": colpire una cella con la pedina avversaria apre un clash — anche con
     // homing/hook armati. Se vince l'attaccante il colpo si risolve normalmente (+3 al posto dei +5
     // pedina, più gli effetti su figura/oggetto/modificatore); se perde o pareggia il colpo è parato.
-    if (s.clashOnAttack && cell.pawn === otherPlayer(id)) {
+    if (s.clashOnAttack && cell.pawn && cell.pawn !== id) {
+      var defA = cell.pawn;
       s.subPhase = 'clash-cards';
-      s.pendingClash = { attackerId: id, defenderId: otherPlayer(id), x: x, y: y, moveCard: card, isAttack: true, attackMod: mod,
+      s.pendingClash = { attackerId: id, defenderId: defA, x: x, y: y, moveCard: card, isAttack: true, attackMod: mod,
                          attackerCardId: null, defenderCardId: null, whoChooses: id };
-      this._log(id + ' attacca la pedina di ' + otherPlayer(id) + ' su [' + x + ',' + y + '] → clash.');
+      this._log(id + ' attacca la pedina di ' + defA + ' su [' + x + ',' + y + '] → clash.');
       this._clashAdvanceAuto();
       return { type: 'clash' };
     }
@@ -1063,7 +1129,7 @@
       var c = s.grid[x][y];
       if (c.destroyed || !c.card || c.faceDown) continue;
       if (x === pc.x && y === pc.y) continue;
-      if (c.pawn === otherPlayer(playerId)) continue;
+      if (c.pawn && c.pawn !== playerId) continue;
       if (c.card.value === val) out.push({ x: x, y: y, key: cellKey(x, y) });
     }
     return out;
@@ -1086,14 +1152,18 @@
   };
 
   // ---- Grappling Hook (Ruleset C) ----
-  // C'è almeno una casella ortogonalmente adiacente alla pedina avversaria dove poter arrivare?
+  // C'è almeno una casella ortogonalmente adiacente a UN ARM avversario dove poter arrivare?
   Game.prototype._grappleHasTarget = function (playerId) {
-    var s = this.state, opp = this.pawnCell(otherPlayer(playerId)), pc = this.pawnCell(playerId);
-    if (!opp || !pc) return false;
-    return orthogonalNeighbors(opp.x, opp.y, s.gridSize).some(function (d) {
-      if (d[0] === pc.x && d[1] === pc.y) return false;
-      var cell = s.grid[d[0]][d[1]];
-      return !cell.destroyed && cell.card && cell.pawn !== playerId;
+    var s = this.state, pc = this.pawnCell(playerId), self = this;
+    if (!pc) return false;
+    return this._others(playerId).some(function (oid) {
+      var opp = self.pawnCell(oid);
+      if (!opp) return false;
+      return orthogonalNeighbors(opp.x, opp.y, s.gridSize).some(function (d) {
+        if (d[0] === pc.x && d[1] === pc.y) return false;
+        var cell = s.grid[d[0]][d[1]];
+        return !cell.destroyed && cell.card && cell.pawn !== playerId;
+      });
     });
   };
 
@@ -1122,7 +1192,7 @@
         if (o.type === 'teleport' && self._teleportTargetsFor(playerId).length === 0) return false; // serve almeno una carta di ugual valore
         if (o.type === 'randomizer' && s.deck.length === 0 && s.discard.length === 0) return false; // serve almeno una carta
         if (o.type === 'energy_boost' && s.deck.length === 0 && s.discard.length === 0) return false; // niente da pescare
-        if (o.type === 'energy_drain' && s.players[otherPlayer(playerId)].revealedIds.length === 0) return false; // niente da rubare: l'avversario non ha carte scelte
+        if (o.type === 'energy_drain' && !self._others(playerId).some(function (oid) { return s.players[oid].revealedIds.length > 0; })) return false; // niente da rubare: nessun avversario ha carte scelte
         if (o.type === 'rebuild' && ((s.deck.length === 0 && s.discard.length === 0) || !self._rebuildHasTarget())) return false; // serve una carta e una CELLA DISTRUTTA/OFFLINE
         if (o.type === 'encore' && !self._encoreUsable(playerId)) return false;
         return true;
@@ -1202,18 +1272,18 @@
         break;
       }
       case 'energy_drain': {
-        var me = s.players[playerId], opp = s.players[otherPlayer(playerId)];
-        // Ruba SOLO tra le carte SCELTE (rivelate) dell'avversario.
-        var pool = opp.hand.filter(function (cc) { return opp.revealedIds.indexOf(cc.id) !== -1; });
-        if (pool.length) {
-          var pick = pool[Math.floor((this._rng || Math.random)() * pool.length)];
-          removeCard(opp.hand, pick.id);
-          var ri = opp.revealedIds.indexOf(pick.id); if (ri !== -1) opp.revealedIds.splice(ri, 1);
-          // Rimuovi la carta rubata anche dallo snapshot pubblico (preview della scheda): sparisce dalla mano avversaria.
-          opp.revealedCards = opp.revealedCards.filter(function (c) { return c && c.id !== pick.id; });
-          me.hand.push(pick); me.revealedIds.push(pick.id);
-          this._log(playerId + ' usa Energy Drain: ruba una carta scelta dalla mano di ' + otherPlayer(playerId) + ' (usabile ora).');
-        } else this._log(playerId + ' usa Energy Drain: l\'avversario non ha carte scelte.');
+        // Sifone Energetico: ruba SOLO tra le carte SCELTE (rivelate) dell'avversario.
+        // In multiplayer, se più avversari hanno carte scelte, il PILOTA sceglie il bersaglio.
+        var self2 = this;
+        var eligible = this._others(playerId).filter(function (oid) { return s.players[oid].revealedIds.length > 0; });
+        if (eligible.length > 1) {
+          s.subPhase = 'energy-target'; s.pendingEnergy = { playerId: playerId };
+          this._log(playerId + ' usa Sifone Energetico: scegli da chi rubare.');
+        } else if (eligible.length === 1) {
+          this._energyDrainFrom(playerId, eligible[0]);
+        } else {
+          this._log(playerId + ' usa Sifone Energetico: nessun avversario ha carte scelte.');
+        }
         break;
       }
       // Oggetti d'attacco interattivi: avviano un sotto-flusso e "consumano" l'azione d'attacco.
@@ -1221,6 +1291,35 @@
       case 'barrage': s.subPhase = 'barrage-first'; s.pendingBarrage = { playerId: playerId, first: null, second: null }; break;
       case 'randomizer': s.subPhase = 'randomizer-select'; s.pendingRandomizer = { playerId: playerId, chosen: [], drawn: null, placed: {} }; break;
     }
+  };
+
+  // ---- Sifone Energetico (energy_drain): ruba 1 carta scelta dal bersaglio ----
+  Game.prototype._energyDrainFrom = function (playerId, targetId) {
+    var s = this.state, me = s.players[playerId], opp = s.players[targetId];
+    var pool = opp.hand.filter(function (cc) { return opp.revealedIds.indexOf(cc.id) !== -1; });
+    if (!pool.length) { this._log(playerId + ' usa Sifone Energetico: ' + targetId + ' non ha carte scelte.'); return; }
+    var pick = pool[Math.floor((this._rng || Math.random)() * pool.length)];
+    removeCard(opp.hand, pick.id);
+    var ri = opp.revealedIds.indexOf(pick.id); if (ri !== -1) opp.revealedIds.splice(ri, 1);
+    opp.revealedCards = opp.revealedCards.filter(function (c) { return c && c.id !== pick.id; });
+    me.hand.push(pick); me.revealedIds.push(pick.id);
+    this._log(playerId + ' usa Sifone Energetico: ruba una carta scelta da ' + targetId + '.');
+  };
+  // Bersagli possibili del Sifone (avversari con almeno una carta scelta).
+  Game.prototype.energyTargetOptions = function () {
+    var s = this.state;
+    if (s.subPhase !== 'energy-target' || !s.pendingEnergy) return [];
+    var pid = s.pendingEnergy.playerId;
+    return this._others(pid).filter(function (oid) { return s.players[oid].revealedIds.length > 0; });
+  };
+  Game.prototype.energyDrainTarget = function (targetId) {
+    var s = this.state, pe = s.pendingEnergy;
+    if (s.subPhase !== 'energy-target' || !pe) throw new Error('Nessun Sifone Energetico in corso.');
+    if (this.energyTargetOptions().indexOf(targetId) === -1) throw new Error('Bersaglio non valido.');
+    var pid = pe.playerId;
+    this._energyDrainFrom(pid, targetId);
+    s.pendingEnergy = null; s.subPhase = null;
+    this._promptCurrentPhase(); // Sifone: effetto immediato, non consuma l'azione
   };
 
   Game.prototype.timebombChoose = function (suit) {
@@ -1385,16 +1484,22 @@
   };
   Game.prototype.activatePower = function (playerId) {
     if (!this.canActivatePower(playerId)) throw new Error('Potere non attivabile ora.');
-    var s = this.state, p = s.players[playerId], oppId = otherPlayer(playerId), opp = s.players[oppId];
+    var s = this.state, p = s.players[playerId], self = this;
     p.tacticianLeft -= 1;
-    var reserve = this.availableReserve(oppId);
+    // Deep Mind: guarda la STACK DI RISERVA di TUTTI gli altri giocatori.
+    var hands = this._others(playerId).map(function (oid) {
+      var reserve = self.availableReserve(oid);
+      return { playerId: oid, cards: reserve.map(function (c) { return { value: c.value, suit: c.suit }; }) };
+    });
     // Risultato per la UI (modale): fuori dallo stato, non entra negli snapshot.
     this._tacticianPeek = {
       token: (this._tacticianToken = (this._tacticianToken || 0) + 1),
-      viewerId: playerId, opponentId: oppId,
-      cards: reserve.map(function (c) { return { value: c.value, suit: c.suit }; })
+      viewerId: playerId, hands: hands,
+      // Compat 2 giocatori: primo avversario.
+      opponentId: hands.length ? hands[0].playerId : null,
+      cards: hands.length ? hands[0].cards : []
     };
-    this._log(playerId + ' (tactician) guarda la riserva di ' + oppId + ' (' + reserve.length + ' carte; attivazioni rimaste: ' + p.tacticianLeft + ').');
+    this._log(playerId + ' (tactician) guarda la STACK DI RISERVA degli avversari (attivazioni rimaste: ' + p.tacticianLeft + ').');
   };
 
   // Brawler: scarta 3 carte disponibili per abbinare QUALSIASI cella (rinuncia a un'azione).
@@ -1412,7 +1517,7 @@
     if (s.phase === 'move') {
       this._moveDestList(playerId).forEach(function (d) {
         var cell = s.grid[d[0]][d[1]];
-        if (cell.destroyed || cell.pawn === otherPlayer(playerId)) return; // no distrutte, no clash (0 carte)
+        if (cell.destroyed || (cell.pawn && cell.pawn !== playerId)) return; // no distrutte, no clash (0 carte)
         out.push({ x: d[0], y: d[1], key: cellKey(d[0], d[1]) });
       });
     } else {
@@ -1441,11 +1546,12 @@
       this._recordTrail('shot', playerId, this.pawnCell(playerId), cell);
       // Clash su Attacco: se il bersaglio è occupato dall'ARM avversario, la SKILL apre un clash
       // (come un attacco normale). L'attaccante ha già scartato le 3 carte attive: il clash usa la RISERVA.
-      if (s.clashOnAttack && cell.pawn === otherPlayer(playerId)) {
+      if (s.clashOnAttack && cell.pawn && cell.pawn !== playerId) {
+        var defB = cell.pawn;
         s.subPhase = 'clash-cards';
-        s.pendingClash = { attackerId: playerId, defenderId: otherPlayer(playerId), x: x, y: y, moveCard: null, isAttack: true, attackMod: null,
+        s.pendingClash = { attackerId: playerId, defenderId: defB, x: x, y: y, moveCard: null, isAttack: true, attackMod: null,
                            attackerCardId: null, defenderCardId: null, whoChooses: playerId };
-        this._log(playerId + ' (brawler) attacca la pedina di ' + otherPlayer(playerId) + ' su [' + x + ',' + y + '] → clash.');
+        this._log(playerId + ' (brawler) attacca la pedina di ' + defB + ' su [' + x + ',' + y + '] → clash.');
         this._clashAdvanceAuto();
         return;
       }
@@ -1678,13 +1784,14 @@
   // ================================================================== FINE ROUND / PARTITA
   Game.prototype._endRound = function () {
     var s = this.state, self = this;
+    var everyone = this.allPlayers();
     // Statistiche: conta i ROUND passati senza alcuna azione (nè MOVIMENTO nè ATTACCO nè uso TOOL).
-    ['N', 'S'].forEach(function (id) { if (!s.players[id].actedThisRound) s.players[id].stats.zeroActionTurns += 1; });
+    everyone.forEach(function (id) { if (!s.players[id].actedThisRound) s.players[id].stats.zeroActionTurns += 1; });
     // Ruleset C: punteggio di posizione a fine turno.
     // 5×5 → controllo del centro: sul centro +3, adiacente ortogonale al centro +1.
     // 4×4 → celle bonus: +2 se ti trovi su una delle 4 celle centrali ([2,2],[2,3],[3,2],[3,3]).
     if (s.ruleset === 'C') {
-      ['N', 'S'].forEach(function (id) {
+      everyone.forEach(function (id) {
         var pc = self.pawnCell(id); if (!pc) return;
         var pts = positionBonusPoints(pc.x, pc.y, s.gridSize);
         if (pts > 0) { self._addScore(id, pts, 'ptsBonus'); self._log(id + ' a fine turno è su una cella bonus [' + pc.x + ',' + pc.y + ']: +' + pts + '.'); }
@@ -1692,7 +1799,7 @@
     }
     // Le carte non usate restano in mano (non si scartano più le rivelate non giocate). Le carte
     // non sono più "scelte" per il prossimo round.
-    ['N', 'S'].forEach(function (id) {
+    everyone.forEach(function (id) {
       var p = s.players[id];
       p.revealedIds = []; p.revealedCards = [];
       p.pendingActions = { moves: 1, attacks: 1 };
@@ -1701,7 +1808,8 @@
 
     // Chi ha più di 6 carte sceglie quali scartare fino a 6 (sotto-fase 'end-discard'), poi si pesca
     // fino a 6 e si passa al round successivo.
-    this._chain = [this._step_endDiscard('N'), this._step_endDiscard('S'), this._step_finishRoundDraw()];
+    this._chain = everyone.map(function (id) { return self._step_endDiscard(id); });
+    this._chain.push(this._step_finishRoundDraw());
     this._advanceChain();
   };
 
@@ -1720,12 +1828,13 @@
     var self = this;
     return function () {
       var s = self.state;
-      s.firstPlayer = otherPlayer(s.firstPlayer);
-      ['N', 'S'].forEach(function (id) {
+      s.firstPlayer = self._nextSeatCW(s.firstPlayer); // il segnalino 1° Pilota passa in senso orario
+      self._computeOrder();
+      self.allPlayers().forEach(function (id) {
         while (s.players[id].hand.length < 6) { var c = self._drawCard(); if (!c) break; s.players[id].hand.push(c); }
+        s.players[id].actedThisRound = false; // nuovo ROUND: azzera il flag azioni
       });
       s.round += 1;
-      s.players.N.actedThisRound = false; s.players.S.actedThisRound = false; // nuovo ROUND: azzera il flag azioni
       if (s.suitMode === 'rotating') { s.currentSuit = Deck.nextSuit(s.currentSuit); self._log('Il seme di turno avanza a ' + s.currentSuit + '.'); }
       self._log('— Fine round. Primo Giocatore: ' + s.firstPlayer + '. Mazzo: ' + s.deck.length + ' carte.');
       self._beginSelectPhase();
@@ -1763,12 +1872,33 @@
   };
 
   function computeResult(s) {
-    var N = s.players.N, S = s.players.S;
-    var res = { winner: null, tiebreak: null, scores: { N: N.score, S: S.score }, summary: '' };
-    if (N.score !== S.score) { res.winner = N.score > S.score ? 'N' : 'S'; res.summary = 'Vince ' + res.winner + ' per punti (' + N.score + '–' + S.score + ').'; return res; }
-    if (N.matchedCenter !== S.matchedCenter) { res.winner = N.matchedCenter ? 'N' : 'S'; res.tiebreak = 'centro'; res.summary = 'Parità ' + N.score + '–' + S.score + '. Vince ' + res.winner + ' (ha abbinato il centro).'; return res; }
-    if (N.figuresMatched !== S.figuresMatched) { res.winner = N.figuresMatched > S.figuresMatched ? 'N' : 'S'; res.tiebreak = 'figure'; res.summary = 'Parità ' + N.score + '–' + S.score + '. Vince ' + res.winner + ' (più figure: ' + N.figuresMatched + '–' + S.figuresMatched + ').'; return res; }
-    res.tiebreak = 'patta'; res.summary = 'Partita PATTA (' + N.score + '–' + S.score + ').'; return res;
+    var ids = SEAT_CW.filter(function (id) { return s.players[id]; });
+    var scores = {}; ids.forEach(function (id) { scores[id] = s.players[id].score; });
+    // Confronto: punti, poi controllo del centro, poi numero di OBIETTIVI (figuresMatched).
+    function cmp(a, b) {
+      var pa = s.players[a], pb = s.players[b];
+      if (pb.score !== pa.score) return pb.score - pa.score;
+      if (!!pb.matchedCenter !== !!pa.matchedCenter) return (pb.matchedCenter ? 1 : 0) - (pa.matchedCenter ? 1 : 0);
+      if (pb.figuresMatched !== pa.figuresMatched) return pb.figuresMatched - pa.figuresMatched;
+      return 0;
+    }
+    var order = ids.slice().sort(cmp);
+    var res = { winner: null, tiebreak: null, scores: scores, ranking: order, summary: '' };
+    var top = order[0], second = order[1];
+    var scoreStr = order.map(function (id) { return id + ' ' + scores[id]; }).join(' · ');
+    if (cmp(top, second) === 0) { // vertice pienamente in parità → patta
+      res.tiebreak = 'patta';
+      res.summary = ids.length > 2 ? ('Partita PATTA in vetta (' + scoreStr + ').') : ('Partita PATTA (' + scoreStr + ').');
+      return res;
+    }
+    res.winner = top;
+    if (s.players[top].score === s.players[second].score) {
+      res.tiebreak = (!!s.players[top].matchedCenter !== !!s.players[second].matchedCenter) ? 'centro' : 'figure';
+      res.summary = 'Parità in vetta. Vince ' + top + (res.tiebreak === 'centro' ? ' (ha abbinato il centro).' : ' (più OBIETTIVI).');
+    } else {
+      res.summary = 'Vince ' + top + ' per punti (' + scoreStr + ').';
+    }
+    return res;
   }
 
   // ================================================================== Utility

@@ -17,6 +17,7 @@ function whoActs(s, g) {
   if (s.subPhase === 'end-discard') return s.pendingEndDiscard.playerId;
   if (s.subPhase === 'rebuild-select' || s.subPhase === 'rebuild-place') return s.pendingRebuild.playerId;
   if (s.subPhase === 'draft-select' || s.subPhase === 'draft-place') return s.pendingDraft.playerId;
+  if (s.subPhase === 'energy-target') return s.pendingEnergy.playerId;
       if (s.subPhase === 'tool-discard') return s.pendingToolDiscard && s.pendingToolDiscard.playerId;
       if (s.subPhase === 'runner-figure') return s.pendingRunner && s.pendingRunner.playerId;
   if (s.subPhase === 'timebomb-suit') return s.pendingTimebomb.playerId;
@@ -28,7 +29,7 @@ function whoActs(s, g) {
   if (s.subPhase === 'clash-reloc') return s.pendingClash.relocatorId;
   if (s.subPhase === 'forced-reloc') return s.pendingForced.chooserId;
   if (s.subPhase) return null;
-  if (s.phase === 'select') return s.selected.N == null ? 'N' : (s.selected.S == null ? 'S' : null);
+  if (s.phase === 'select') { var o = g.allPlayers(); for (var i = 0; i < o.length; i++) if (s.selected[o[i]] == null) return o[i]; return null; }
   if (s.phase === 'move' || s.phase === 'attack') return s.activePlayer;
   return null;
 }
@@ -119,6 +120,22 @@ suite('Draft 5×5 + Personaggi + Oggetti', function (seed) {
   return { rng: makeRng(seed), suitMode: 'rotating', ruleset: 'C', gridSize: 5, gridMode: 'draft', maxRounds: 9, clashOnAttack: true,
            modules: { characters: true, objects: true, powers: true, reshuffle: true }, reshuffleCount: 2,
            characters: { N: CHARS[seed % 4], S: CHARS[(seed + 1) % 4] } };
+});
+
+// Multiplayer: 3 e 4 giocatori (random e draft) portati a termine dalla CPU senza eccezioni.
+var C4 = ['runner', 'brawler', 'tactician', 'fighter'];
+suite('Multiplayer 3 giocatori (5×5)', function (seed) {
+  return { rng: makeRng(seed), numPlayers: 3, suitMode: 'rotating', ruleset: 'C', gridSize: 5, maxRounds: 9, clashOnAttack: true,
+           modules: { characters: true, objects: true, powers: true, reshuffle: true }, reshuffleCount: 2, characters: C4.slice(0, 3) };
+});
+suite('Multiplayer 4 giocatori (5×5)', function (seed) {
+  return { rng: makeRng(seed), numPlayers: 4, suitMode: 'rotating', ruleset: 'C', gridSize: 5, maxRounds: 9, clashOnAttack: true,
+           modules: { characters: true, objects: true, powers: true, reshuffle: true }, reshuffleCount: 2, characters: C4.slice(0, 4) };
+});
+suite('Multiplayer 4 giocatori + Draft + Sifone/Randomizer', function (seed) {
+  return { rng: makeRng(seed), numPlayers: 4, gridMode: 'draft', suitMode: 'rotating', ruleset: 'C', gridSize: 5, maxRounds: 9, clashOnAttack: true, turnMode: '1212',
+           modules: { characters: true, objects: true, powers: true, reshuffle: true }, reshuffleCount: 2,
+           objectSelection: ['energy_drain', 'randomizer', 'hook', 'homing_missile', 'grapple'], characters: C4.slice(0, 4) };
 });
 
 console.log('\n=== Risultato CPU: ' + passed + ' passati, ' + failed + ' falliti ===');
