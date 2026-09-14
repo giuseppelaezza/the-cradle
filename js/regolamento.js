@@ -116,7 +116,8 @@
 "- **oro:** guadagni **1 punto**.\n" +
 "- **coppe:** peschi **1 TOOL**.\n" +
 "- **bastoni:** peschi **1 carta** dal DECK.\n" +
-"- **spade:** togli **1 punto** a un avversario, senza scendere sotto 0.");
+"- **spade:** togli **1 punto** a un avversario, senza scendere sotto 0.\n\n" +
+"Dopo l'**ultimo ROUND** non c'è pesca, ma i bonus che valgono punti — **oro** e **spade** — si applicano comunque prima del conteggio finale (coppe e bastoni no).");
 
     s.push(
 "## 5. Trofei\n\n" +

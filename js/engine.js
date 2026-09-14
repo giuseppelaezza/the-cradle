@@ -1830,7 +1830,14 @@
       p.revealedIds = []; p.revealedCards = [];
       p.pendingActions = { moves: 1, attacks: 1 };
     });
-    if (s.endTriggered || s.round >= s.maxRounds) { this._finishGame(); return; }
+    if (s.endTriggered || s.round >= s.maxRounds) {
+      // Ultimo ROUND: nessuna pesca, ma i bonus di SUIT che valgono punti (oro, spade) contano lo stesso.
+      this._chain = [];
+      if (s.ruleset === 'C') everyone.forEach(function (id) { self._chain.push(self._step_endCellBonus(id, true)); });
+      this._chain.push(this._step_finishGame());
+      this._advanceChain();
+      return;
+    }
 
     // Chi ha più di 6 carte sceglie quali scartare fino a 6 (sotto-fase 'end-discard'); poi si pesca
     // fino a 6; poi, se l'ARM è su una CELLA ONLINE, si applica il bonus di fine ROUND in base alla
@@ -1842,6 +1849,8 @@
     this._chain.push(this._step_startNextRound());
     this._advanceChain();
   };
+  // Passo: conclude la partita (usato dopo i bonus di SUIT dell'ultimo ROUND).
+  Game.prototype._step_finishGame = function () { var self = this; return function () { self._finishGame(); }; };
 
   // Passo: apre lo scarto in eccesso di fine turno per `id` (se ha più di 6 carte).
   Game.prototype._step_endDiscard = function (id) {
@@ -1868,13 +1877,17 @@
   };
   // Punti/TOOL/carta/rubapunti in base alla SUIT della CELLA ONLINE su cui si trova l'ARM a fine ROUND.
   // Avviene DOPO la pesca (così il bonus "bastoni" fa iniziare il ROUND con 7 carte).
-  Game.prototype._step_endCellBonus = function (id) {
+  // pointsOnly: dopo l'ULTIMO ROUND (nessuna pesca) si applicano solo i bonus che valgono punti
+  // (oro e spade); coppe/bastoni (pesca TOOL/carta) sarebbero inutili a partita finita.
+  Game.prototype._step_endCellBonus = function (id, pointsOnly) {
     var self = this;
     return function () {
       var s = self.state, pc = self.pawnCell(id);
       if (!pc || pc.destroyed || !pc.card || pc.faceDown) return; // solo su CELLA ONLINE
       var p = s.players[id], at = '[' + pc.x + ',' + pc.y + ']';
-      switch (pc.card.suit) {
+      var suit = pc.card.suit;
+      if (pointsOnly && (suit === 'coppe' || suit === 'bastoni')) return;
+      switch (suit) {
         case 'oro':
           self._addScore(id, 1, 'ptsBonus');
           self._log(id + ' bonus fine ROUND su ' + at + ' (oro): +1 punto.');

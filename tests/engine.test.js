@@ -1332,6 +1332,17 @@ console.log('# Bonus di fine ROUND per SUIT della CELLA ONLINE sotto l\'ARM (oro
   // ARM su CELLA OFFLINE: nessun bonus.
   var gf = scenario('oro'); gf.getCell(1, 1).faceDown = true; var scF = gf.state.players.N.score; gf._endRound();
   eq(gf.state.players.N.score - scF, 0, 'CELLA OFFLINE: nessun bonus');
+
+  // Ultimo ROUND: oro e spade contano comunque; coppe/bastoni no (nessuna pesca).
+  var glo = scenario('oro'); glo.state.round = glo.state.maxRounds; var scLo = glo.state.players.N.score; glo._endRound();
+  ok(glo.state.gameOver, 'ultimo ROUND: partita conclusa');
+  eq(glo.state.players.N.score - scLo, 1, 'ultimo ROUND oro: +1 punto');
+  var gls = scenario('spade'); gls.state.round = gls.state.maxRounds; gls.state.players.S.score = 3; gls._endRound();
+  eq(gls.state.players.S.score, 2, 'ultimo ROUND spade: -1 all\'avversario');
+  var glc = scenario('coppe'); glc.state.round = glc.state.maxRounds; var nObjL = glc.state.players.N.objects.length; glc._endRound();
+  eq(glc.state.players.N.objects.length - nObjL, 0, 'ultimo ROUND coppe: nessun TOOL (niente pesca)');
+  var glb = scenario('bastoni'); glb.state.round = glb.state.maxRounds; var handL = glb.state.players.N.hand.length; glb._endRound();
+  eq(glb.state.players.N.hand.length, handL, 'ultimo ROUND bastoni: nessuna carta extra');
 })();
 
 // --------------------------------------------------------------------
