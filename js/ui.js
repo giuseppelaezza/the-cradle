@@ -209,6 +209,7 @@
       if (ui.needFit) { fitLayout(); if (ui.actionH) ui.needFit = false; }
       renderClashModal();
       renderTacticianModal();
+      renderToolChoiceModal(game.state);
       postRenderAnimations(); renderActionsOverlay(); scheduleCpu();
     }
     // Quando un clash si risolve (nuovo token), mostra la finestra di confronto (tranne in CPU vs CPU,
@@ -774,17 +775,17 @@
     // 3-4 giocatori ("M N", "A W"). Ritorna { segs:[{key,label,color}], active:key }.
     function timelineModel(s) {
       var order = (s.playerOrder && s.playerOrder.length) ? s.playerOrder.slice() : ['N', 'S'];
-      var multi = order.length > 2;
+      function seg(key, full, abbr, color) { return { key: key, full: full, abbr: abbr, color: color }; }
       if (s.phase === 'draft') {
-        var dsegs = order.map(function (id) { return { key: 'd-' + id, label: (multi ? 'Piazz. ' : 'Piazzamento ') + id, color: PLAYER_COLOR[id] }; });
+        var dsegs = order.map(function (id) { return seg('d-' + id, 'Piazzamento ' + id, 'Piazz. ' + id, PLAYER_COLOR[id]); });
         var dactive = s.pendingDraft ? 'd-' + s.pendingDraft.playerId : dsegs[0].key;
         return { segs: dsegs, active: dactive };
       }
       var atkOrder = s.turnMode === '1212' ? order.slice() : order.slice().reverse();
-      var segs = [{ key: 'select', label: 'DEPLOY', color: '#ffffff' }];
-      order.forEach(function (id) { segs.push({ key: 'm-' + id, label: (multi ? 'M ' : 'MOVIMENTO ') + id, color: PLAYER_COLOR[id] }); });
-      atkOrder.forEach(function (id) { segs.push({ key: 'a-' + id, label: (multi ? 'A ' : 'ATTACCO ') + id, color: PLAYER_COLOR[id] }); });
-      segs.push({ key: 'end', label: 'FINE TURNO', color: '#ffffff' });
+      var segs = [seg('select', 'DEPLOY', 'DEPLOY', '#ffffff')];
+      order.forEach(function (id) { segs.push(seg('m-' + id, 'MOVIMENTO ' + id, 'M ' + id, PLAYER_COLOR[id])); });
+      atkOrder.forEach(function (id) { segs.push(seg('a-' + id, 'ATTACCO ' + id, 'A ' + id, PLAYER_COLOR[id])); });
+      segs.push(seg('end', 'FINE TURNO', 'FINE', '#ffffff'));
       var active = 'end';
       if (!s.gameOver && s.phase !== 'end') {
         if (s.phase === 'select') active = 'select';
@@ -805,11 +806,22 @@
         ui.tlSegRow.innerHTML = ''; ui.tlSegs = {}; ui.tlSig = sig;
         model.segs.forEach(function (seg, i) {
           if (i) ui.tlSegRow.appendChild(h('span', 'tl-arrow', '›'));
-          var el = h('span', 'tl-seg', seg.label);
-          ui.tlSegs[seg.key] = el; ui.tlSegRow.appendChild(el);
+          var el = h('span', 'tl-seg'); ui.tlSegs[seg.key] = el; ui.tlSegRow.appendChild(el);
         });
-      } else {
-        model.segs.forEach(function (seg) { if (ui.tlSegs[seg.key]) ui.tlSegs[seg.key].textContent = seg.label; });
+      }
+      // Etichette: nomi estesi; se la barra andrebbe su 2 righe, passa alle abbreviazioni (una riga).
+      function applyLabels(abbr) { model.segs.forEach(function (seg) { if (ui.tlSegs[seg.key]) ui.tlSegs[seg.key].textContent = abbr ? seg.abbr : seg.full; }); }
+      var forceAbbr = (s.playerOrder && s.playerOrder.length > 2);
+      applyLabels(forceAbbr);
+      if (!forceAbbr) {
+        // Con le etichette estese la barra sta su una riga? Misura la larghezza a riga singola (nowrap)
+        // e confrontala con lo spazio disponibile; se non ci sta, passa alle abbreviazioni.
+        var avail = (ui.tlSegRow.parentNode && ui.tlSegRow.parentNode.clientWidth) || ui.tlSegRow.clientWidth;
+        var prev = ui.tlSegRow.style.flexWrap;
+        ui.tlSegRow.style.flexWrap = 'nowrap';
+        var oneLine = ui.tlSegRow.scrollWidth;
+        ui.tlSegRow.style.flexWrap = prev;
+        if (oneLine > avail + 1) applyLabels(true);
       }
       function setActive(activeKey) {
         model.segs.forEach(function (seg) {
@@ -1111,23 +1123,39 @@
     function renderPickInfo(title, hintText) { setAction(title, h('div', 'hint', hintText), null); }
 
     // ---- Abbinamento alternativo (Ruleset A): scelta di 1 oggetto su 3 ----
+    // La scelta del TOOL avviene in un modale (renderToolChoiceModal); qui il pannello mostra solo un avviso.
     function renderAltObject(s) {
       var who = s.pendingAltMatch.playerId;
       if (isCpu(who)) { thinking('🤖 Il computer sceglie un TOOL…'); return; }
-      var body = h('div', 'alt-obj');
-      body.appendChild(h('div', 'hint', 'Scegli [1] TOOL da tenere; gli altri vanno nella TOOLS HEAP.'));
-      var row = h('div', 'obj-panel-row');
-      s.pendingAltMatch.drawn.forEach(function (o) {
+      renderPickInfo('🎁 Scegli un TOOL', 'Scegli il TOOL da tenere nella finestra.');
+    }
+    // ---- Modale scelta TOOL (come il clash): 3 scelte cliccabili ----
+    function buildToolChoiceModal(s) {
+      var pa = s.pendingAltMatch;
+      var back = h('div', 'dialog-back toolchoice-modal-back');
+      var box = h('div', 'dialog toolchoice-modal');
+      var head = h('div', 'rules-head'); head.appendChild(h('h2', null, 'Scegli un TOOL')); box.appendChild(head);
+      box.appendChild(h('div', 'peek-sub', 'Pilota ' + pa.playerId + ': tieni [1] TOOL; gli altri vanno nella TOOLS HEAP.'));
+      var row = h('div', 'toolchoice-row');
+      pa.drawn.forEach(function (o) {
         var def = OBJ ? OBJ.def(o.type) : null;
-        var card = h('div', 'obj-card usable alt-obj-card');
+        var card = h('div', 'obj-card usable toolchoice-card');
         card.appendChild(h('span', 'obj-name', def ? def.label : o.type));
         card.appendChild(h('span', 'obj-phase', objPhaseText(o.type)));
-        var tip = h('span', 'tooltip', def ? def.desc : o.type);        card.appendChild(tip);
+        card.appendChild(h('div', 'oc-desc', def ? def.desc : o.type));
         card.onclick = function () { game.altMatchPickObject(o.id); render(); };
-        row.appendChild(card); bindTip(card);
+        row.appendChild(card);
       });
-      body.appendChild(row);
-      setAction('🎁 Scegli un TOOL — Pilota ' + who, body, null);
+      box.appendChild(row);
+      back.appendChild(box);
+      return back;
+    }
+    function renderToolChoiceModal(s) {
+      var existing = document.querySelector('.toolchoice-modal-back');
+      var show = s.subPhase === 'altmatch-object' && s.pendingAltMatch && !isCpu(s.pendingAltMatch.playerId) && !ui.gate;
+      if (!show) { if (existing) existing.remove(); return; }
+      if (existing) return;
+      document.body.appendChild(buildToolChoiceModal(s));
     }
 
     // ---- Randomizer ----
@@ -1243,13 +1271,15 @@
         body.appendChild(card);
       });
       var layout = h('div', 'act-layout');
-      // Riga: hand | tools | confirm/azioni
+      // Riga: [ mano | TOOLS ] (si avvolgono internamente quando è stretto) | conferma/azioni (fisso).
       var row = h('div', 'act-row');
-      var handCol = h('div', 'act-hand'); handCol.appendChild(body); row.appendChild(handCol);
+      var main = h('div', 'act-main');
+      var handCol = h('div', 'act-hand'); handCol.appendChild(body); main.appendChild(handCol);
       var pwPanel = powersPanel(s, playerId, mode);
-      if (pwPanel) row.appendChild(pwPanel);
+      if (pwPanel) main.appendChild(pwPanel);
       var panel = objectsPanel(s, playerId);
-      if (panel) row.appendChild(panel);
+      if (panel) main.appendChild(panel);
+      row.appendChild(main);
       row.appendChild(handActions(s, playerId, mode));
       layout.appendChild(row);
       setAction(actionTitle(s, p, playerId), layout, null);
