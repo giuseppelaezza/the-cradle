@@ -87,7 +87,7 @@
     opts = opts || {};
     var def = OBJ ? OBJ.def(type) : null;
     var card = h('div', 'obj-vcard' + (opts.selectable ? ' selectable' : '') + (opts.selected ? ' selected' : ''));
-    card.appendChild(h('div', 'ovc-phase-badge', def ? def.phaseLabel : ''));
+    card.appendChild(h('div', 'ovc-phase-badge', objPhaseText(type)));
     card.appendChild(h('div', 'ovc-name', def ? def.label : type));
     card.appendChild(h('div', 'ovc-div'));
     var cost = h('div', 'ovc-cost');
@@ -945,7 +945,7 @@
         var box = h('div', 'obj-card obj-slot' + (o.fromCharacter ? ' init' : '') + (usable ? ' usable' : ' disabled'));
         box.appendChild(h('span', 'obj-name', def ? def.label : o.type));
         box.appendChild(h('span', 'obj-phase', objPhaseText(o.type)));
-        box.appendChild(h('span', 'tooltip', def ? def.desc : o.type));
+        var tip = h('span', 'tooltip card-tip'); tip.appendChild(objectCardEl(o.type)); box.appendChild(tip);
         if (usable) box.onclick = function () { game.useObject(playerId, o.id); ui.armedCardId = null; render(); };
         row.appendChild(box); bindTip(box);
       });
