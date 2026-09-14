@@ -17,6 +17,7 @@
 
   // Etichetta della fase (per la scheda del TOOL).
   var PHASE_TXT = { select: 'DEPLOY', move: 'MOVIMENTO', attack: 'ATTACCO' };
+  var PHASE_ABBR = { select: 'D', move: 'M', attack: 'A' }; // abbreviazioni per le schede TOOL
 
   // I TOOLS: phase (fase primaria), phases (tutte le fasi in cui è usabile), cost, effect.
   var OBJECT_DEFS = {
@@ -51,7 +52,7 @@
       effect: 'Questo TURNO esegui [2] ATTACCHI.'
     },
     timebomb: {
-      type: 'timebomb', phase: 'select', label: 'Manipolatore Temporale',
+      type: 'timebomb', phase: 'select', label: 'Cronobomba',
       cost: null,
       effect: 'Sposta la GLOBAL SUIT su una SUIT a tua scelta; la rotazione prosegue da lì.'
     },
@@ -112,6 +113,7 @@
     var d = OBJECT_DEFS[k];
     var ps = d.phases || [d.phase];
     d.phaseLabel = ps.map(function (p) { return PHASE_TXT[p]; }).join(' / ');
+    d.phaseAbbr = ps.map(function (p) { return PHASE_ABBR[p]; }).join('/');
     d.desc = 'FASE: ' + d.phaseLabel + '. ' + (d.cost ? 'COSTO: ' + d.cost + '. ' : '') + d.effect;
   });
 

@@ -26,7 +26,7 @@
   var LOG_SUIT_COLOR = { oro: '#f7931e', spade: '#6a6aff', coppe: '#ff5c5c', bastoni: '#33c06a' };
   var SUIT_BY_INITIAL = { O: 'oro', S: 'spade', C: 'coppe', B: 'bastoni' };
   // Preferenze di visualizzazione condivise (persistono tra partite nella stessa sessione).
-  var VIEW = { showMatches: true, showLabels: false, cardDouble: false, showConditions: true, showActions: false, centerHighlight: true, showCellBonus: false };
+  var VIEW = { showMatches: true, showLabels: false, cardDouble: false, showConditions: true, showActions: false, centerHighlight: true, showCellBonus: true };
   // Descrizione del bonus di fine ROUND per SUIT (usata nel tooltip delle CELLE della griglia).
   var END_BONUS_BY_SUIT = { oro: '+1 punto', coppe: 'pesca 1 TOOL', bastoni: 'pesca 1 carta', spade: 'togli 1 punto a un avversario' };
   // Colori RGB dei giocatori per l'overlay "Mostra azioni" (scuriti in base all'età dell'azione).
@@ -102,10 +102,10 @@
     return card;
   }
 
-  // Etichetta della fase di un TOOL: DEPLOY / MOVIMENTO / ATTACCO (combinazioni con " / ").
+  // Etichetta ABBREVIATA della fase di un TOOL per le schede: D / M / A (combinazioni con "/").
   function objPhaseText(type) {
     var def = OBJ ? OBJ.def(type) : null;
-    return def ? def.phaseLabel : '';
+    return def ? (def.phaseAbbr || def.phaseLabel) : '';
   }
 
   // Tasto "conferma" colorato col colore del giocatore (come la barra delle fasi del turno).
@@ -294,7 +294,7 @@
       if (s.subPhase === 'object-discard') return 'Scarto TOOL';
       if (s.subPhase === 'end-discard') return 'Scarto fine TURNO';
       if (s.subPhase === 'rebuild-select' || s.subPhase === 'rebuild-place') return 'Ricostruisci';
-      if (s.subPhase === 'timebomb-suit') return 'Manipolatore Temporale';
+      if (s.subPhase === 'timebomb-suit') return 'Cronobomba';
       return base;
     }
 
@@ -769,22 +769,21 @@
     }
 
     // ---- Timeline del turno (persistente per animare le transizioni) ----
-    // Timeline generica (2-4 giocatori). MOVIMENTO: G1→Gk; ATTACCO: Gk→G1 ('1221') o G1→Gk ('1212').
-    // Con 3-4 giocatori le etichette sono abbreviate: "M G1", "A G4"…
-    // Ritorna { segs:[{key,label,color}], active:key } in base allo stato.
+    // Timeline generica (2-4 giocatori). MOVIMENTO: primo→ultimo; ATTACCO: ultimo→primo ('1221') o
+    // stesso ordine ('1212'). Le etichette mostrano il NOME del giocatore (N/S/E/W); abbreviate a
+    // 3-4 giocatori ("M N", "A W"). Ritorna { segs:[{key,label,color}], active:key }.
     function timelineModel(s) {
       var order = (s.playerOrder && s.playerOrder.length) ? s.playerOrder.slice() : ['N', 'S'];
-      var gnum = {}; order.forEach(function (id, i) { gnum[id] = i + 1; });
       var multi = order.length > 2;
       if (s.phase === 'draft') {
-        var dsegs = order.map(function (id) { return { key: 'd-' + id, label: 'Piazzamento G' + gnum[id], color: PLAYER_COLOR[id] }; });
+        var dsegs = order.map(function (id) { return { key: 'd-' + id, label: (multi ? 'Piazz. ' : 'Piazzamento ') + id, color: PLAYER_COLOR[id] }; });
         var dactive = s.pendingDraft ? 'd-' + s.pendingDraft.playerId : dsegs[0].key;
         return { segs: dsegs, active: dactive };
       }
       var atkOrder = s.turnMode === '1212' ? order.slice() : order.slice().reverse();
       var segs = [{ key: 'select', label: 'DEPLOY', color: '#ffffff' }];
-      order.forEach(function (id) { segs.push({ key: 'm-' + id, label: (multi ? 'M G' : 'MOVIMENTO G') + gnum[id], color: PLAYER_COLOR[id] }); });
-      atkOrder.forEach(function (id) { segs.push({ key: 'a-' + id, label: (multi ? 'A G' : 'ATTACCO G') + gnum[id], color: PLAYER_COLOR[id] }); });
+      order.forEach(function (id) { segs.push({ key: 'm-' + id, label: (multi ? 'M ' : 'MOVIMENTO ') + id, color: PLAYER_COLOR[id] }); });
+      atkOrder.forEach(function (id) { segs.push({ key: 'a-' + id, label: (multi ? 'A ' : 'ATTACCO ') + id, color: PLAYER_COLOR[id] }); });
       segs.push({ key: 'end', label: 'FINE TURNO', color: '#ffffff' });
       var active = 'end';
       if (!s.gameOver && s.phase !== 'end') {
@@ -795,18 +794,21 @@
       return { segs: segs, active: active };
     }
     function renderTimeline(s) {
+      if (!ui.tlSegRow) { // struttura: riga fasi + pillola descrizione
+        dom.timeline.innerHTML = '';
+        ui.tlSegRow = h('div', 'tl-segrow'); ui.tlHint = h('div', 'phase-hint'); ui.tlHint.hidden = true;
+        dom.timeline.appendChild(ui.tlSegRow); dom.timeline.appendChild(ui.tlHint); ui.tlSig = null;
+      }
       var model = timelineModel(s);
       var sig = model.segs.map(function (x) { return x.key; }).join('|');
       if (ui.tlSig !== sig) {
-        dom.timeline.innerHTML = '';
-        ui.tlSegs = {}; ui.tlSig = sig;
+        ui.tlSegRow.innerHTML = ''; ui.tlSegs = {}; ui.tlSig = sig;
         model.segs.forEach(function (seg, i) {
-          if (i) dom.timeline.appendChild(h('span', 'tl-arrow', '›'));
+          if (i) ui.tlSegRow.appendChild(h('span', 'tl-arrow', '›'));
           var el = h('span', 'tl-seg', seg.label);
-          ui.tlSegs[seg.key] = el; dom.timeline.appendChild(el);
+          ui.tlSegs[seg.key] = el; ui.tlSegRow.appendChild(el);
         });
       } else {
-        // aggiorna le etichette (le G-number cambiano quando ruota il 1° Pilota)
         model.segs.forEach(function (seg) { if (ui.tlSegs[seg.key]) ui.tlSegs[seg.key].textContent = seg.label; });
       }
       function setActive(activeKey) {
@@ -824,7 +826,40 @@
       } else if (!ui.flashingEnd) {
         setActive(model.active);
       }
+      renderPhaseHint(s);
       ui.lastRound = s.round;
+    }
+    // Pillola sotto la barra delle fasi: descrive cosa fare nel turno corrente.
+    function renderPhaseHint(s) {
+      var node = ui.tlHint; if (!node) return;
+      node.innerHTML = '';
+      var info = phaseHintInfo(s);
+      if (!info || !info.text) { node.hidden = true; return; }
+      node.hidden = false;
+      if (info.playerId) { var dot = h('span', 'ph-dot'); dot.style.background = PLAYER_COLOR[info.playerId] || '#888'; node.appendChild(dot); }
+      node.appendChild(document.createTextNode(info.text));
+    }
+    function phaseHintInfo(s) {
+      if (s.gameOver || ui.gate) return null;
+      if (s.phase === 'draft') { var dw = s.pendingDraft && s.pendingDraft.playerId; return dw ? { playerId: dw, text: isCpu(dw) ? 'Piazzamento — il computer sta costruendo la griglia…' : ('Piazzamento — Pilota ' + dw + ': pesca 4 carte e posizionane 2 sulla griglia') } : null; }
+      if (s.subPhase) return null; // gli interrupt mostrano l'istruzione nel pannello azione
+      if (s.phase === 'select') {
+        var next = null, ap = game.allPlayers();
+        for (var i = 0; i < ap.length; i++) if (s.selected[ap[i]] == null) { next = ap[i]; break; }
+        if (!next) return null;
+        if (isCpu(next)) return { playerId: next, text: 'DEPLOY — il computer sta scegliendo le carte…' };
+        return { playerId: next, text: 'DEPLOY — Pilota ' + next + ': scegli ' + game.selectCount(next) + ' carte per il ROUND' };
+      }
+      if (s.phase === 'move' || s.phase === 'attack') {
+        var who = s.activePlayer, phName = s.phase === 'move' ? 'MOVIMENTO' : 'ATTACCO', word = s.phase === 'move' ? 'MUOVERE' : 'ATTACCARE';
+        if (isCpu(who)) return { playerId: who, text: phName + ' — il computer sta giocando…' };
+        var can = (s.phase === 'move' ? game.legalMoves(who) : game.legalShots(who)).length > 0;
+        var extra = s.actionsLeft > 1 ? ' · azioni rimaste: ' + s.actionsLeft : '';
+        var t = ui.armedCardId ? ('Clicca una CELLA evidenziata per ' + word)
+              : (can ? ('Scegli una carta, poi la CELLA dove ' + word) : 'Nessuna azione: puoi passare');
+        return { playerId: who, text: phName + ' — ' + t + extra };
+      }
+      return null;
     }
 
     // ============================================================ ACTION AREA
@@ -875,22 +910,25 @@
       var charHeld = objs.filter(function (o) { return o.fromCharacter; }).length;
       return '(' + objs.length + '/' + (limit + charHeld) + ')';
     }
-    // ---- Pannello oggetti sotto la mano: cliccabili quando utilizzabili ----
+    // ---- Pannello oggetti sotto la mano: 5 slot fissi su una riga; gli slot vuoti sono tratteggiati. ----
+    var TOOL_SLOTS = 5;
     function objectsPanel(s, playerId) {
       if (!s.modules.objects) return null;
-      var wrap = h('div', 'obj-panel');
+      var wrap = h('div', 'obj-panel tools-panel');
       var objs = s.players[playerId].objects;
       wrap.appendChild(h('div', 'obj-panel-title', 'TOOLS ' + toolsCapLabel(playerId)));
-      var row = h('div', 'obj-panel-row');
+      var row = h('div', 'obj-panel-row obj-slots');
       var usableIds = game.usableObjects(playerId).map(function (o) { return o.id; });
-      if (!objs.length) { row.appendChild(h('div', 'hint', 'Nessun TOOL.')); wrap.appendChild(row); return wrap; }
-      objs.forEach(function (o) {
+      var slots = [];
+      for (var i = 0; i < Math.max(TOOL_SLOTS, objs.length); i++) slots.push(objs[i] || null);
+      slots.forEach(function (o) {
+        if (!o) { row.appendChild(h('div', 'obj-slot empty')); return; }
         var def = OBJ ? OBJ.def(o.type) : null;
         var usable = usableIds.indexOf(o.id) !== -1;
-        var box = h('div', 'obj-card' + (o.fromCharacter ? ' init' : '') + (usable ? ' usable' : ' disabled'));
+        var box = h('div', 'obj-card obj-slot' + (o.fromCharacter ? ' init' : '') + (usable ? ' usable' : ' disabled'));
         box.appendChild(h('span', 'obj-name', def ? def.label : o.type));
         box.appendChild(h('span', 'obj-phase', objPhaseText(o.type)));
-        var tip = h('span', 'tooltip', def ? def.desc : o.type);        box.appendChild(tip);
+        box.appendChild(h('span', 'tooltip', def ? def.desc : o.type));
         if (usable) box.onclick = function () { game.useObject(playerId, o.id); ui.armedCardId = null; render(); };
         row.appendChild(box); bindTip(box);
       });
@@ -1068,7 +1106,7 @@
     function renderTimebomb(s) {
       var who = s.pendingTimebomb.playerId;
       if (isCpu(who)) { thinking('🤖 Il computer sposta la GLOBAL SUIT…'); return; }
-      renderSuitChoice('⏱️ Manipolatore Temporale — scegli la nuova GLOBAL SUIT', function (su) { game.timebombChoose(su); render(); });
+      renderSuitChoice('⏱️ Cronobomba — scegli la nuova GLOBAL SUIT', function (su) { game.timebombChoose(su); render(); });
     }
     function renderPickInfo(title, hintText) { setAction(title, h('div', 'hint', hintText), null); }
 
@@ -1257,7 +1295,7 @@
       if (mode === 'select') {
         var need = game.selectCount(playerId), k = ui.chosen.length;
         var canResh = s.modules.reshuffle && game.canReshuffle && game.canReshuffle(playerId);
-        wrap.appendChild(h('span', 'hint', 'DEPLOY: seleziona ' + need + ' carte (' + k + '/' + need + ')'));
+        wrap.appendChild(h('span', 'sel-count', '(' + k + '/' + need + ')')); // solo il conteggio; la descrizione è nella pillola sotto le fasi
         var conf = confirmBtn('Conferma', playerId);
         conf.disabled = k !== need;
         conf.onclick = function () { game.selectCards(playerId, ui.chosen.slice()); ui.selectingPlayer = null; ui.chosen = []; render(); };
@@ -1275,14 +1313,12 @@
           wrap.appendChild(ctl);
         }
       } else {
-        var word = s.phase === 'move' ? 'MUOVERE' : 'ATTACCARE';
         var list = s.phase === 'move' ? game.legalMoves(playerId) : game.legalShots(playerId);
         var can = list.length > 0;
-        wrap.appendChild(h('span', 'hint', ui.armedCardId ? 'Carta scelta: clicca una CELLA evidenziata per ' + word + '.' : (can ? 'Scegli una carta rivelata, poi la CELLA dove ' + word + '.' : 'Nessuna azione') + (s.actionsLeft > 1 ? ' (azioni rimaste: ' + s.actionsLeft + ')' : '')));
         var pass = h('button', can ? 'ghost' : 'primary', 'Passa');
         pass.onclick = function () { ui.armedCardId = null; if (s.phase === 'move') game.passMove(playerId); else game.passShoot(playerId); render(); };
         wrap.appendChild(pass);
-        // I poteri attivi (tactician / brawler) sono ora nel pannello "Attiva Potere".
+        // La descrizione dell'azione è nella pillola sotto la barra delle fasi.
       }
       return wrap;
     }

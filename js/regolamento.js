@@ -134,7 +134,7 @@
 "|---|---|---|---|\n" +
 "| **E-RUN-01** | spade | Jetpack | *(2 usi)* Quando MATCHI un OBIETTIVO in MOVIMENTO, puoi SCARTARE [1] carta dalla STACK ATTIVA per COLPIRLO subito (prendi i punti e la scelta di [1] TOOL). Se la CELLA è occupata si fa CLASH: la SKILL vale solo se lo vinci. |\n" +
 "| **The Sniper** | coppe | Barrage! | *(3 usi)* In MOVIMENTO o ATTACCO, se hai 3 carte nella STACK ATTIVA le SCARTI tutte per MATCHARE una CELLA qualsiasi (SOSTITUISCE l'azione). In ATTACCO su un ARM avversario si apre comunque un CLASH. |\n" +
-"| **Deep Mind** | oro | Manipolatore Temporale | *(3 usi)* Sbircia la STACK DI RISERVA dell'avversario. Inoltre, passiva: quando scegli [1] TOOL, scegli **tra 4** invece che tra 3. |\n" +
+"| **Deep Mind** | oro | Cronobomba | *(3 usi)* Sbircia la STACK DI RISERVA dell'avversario. Inoltre, passiva: quando scegli [1] TOOL, scegli **tra 4** invece che tra 3. |\n" +
 "| **Soldier Boy** | bastoni | Spinta | *Passiva:* in ATTACCO le carte di VALORE **PARI** fanno MATCH tra loro (una carta pari colpisce una CELLA di VALORE pari). |\n\n" +
 "Il TOOL di partenza si usa **una sola volta** e **non occupa** posto nel limite dei TOOLS (§8).");
 
@@ -160,7 +160,7 @@
 "| **Bomba Elementale** | ATTACCO | Scegli [1] CELLA: la sua SUIT e quella delle CELLE ORTOGONALI diventano una SUIT a tua scelta. |\n" +
 "| **Doppio Movimento** | DEPLOY | SOSTITUISCE l'ATTACCO: questo TURNO esegui **[2] MOVIMENTI**. |\n" +
 "| **Doppio Attacco** | DEPLOY | SOSTITUISCE il MOVIMENTO: questo TURNO esegui **[2] ATTACCHI**. |\n" +
-"| **Manipolatore Temporale** | DEPLOY | Sposta subito la GLOBAL SUIT su una SUIT a tua scelta; la rotazione prosegue da lì. |\n" +
+"| **Cronobomba** | DEPLOY | Sposta subito la GLOBAL SUIT su una SUIT a tua scelta; la rotazione prosegue da lì. |\n" +
 "| **Randomizzatore** | MOV / ATT | SOSTITUISCE l'azione. Scegli fino a [3] CELLE scoperte e SOVRASCRIVILE (le carte tornano nel DECK, si mescola e si pesca per rimpiazzarle). |\n" +
 "| **Ricarica** | MOV / ATT | PESCA [2] carte e aggiungile alla STACK ATTIVA. |\n" +
 "| **Sifone Energetico** | MOV / ATT | RUBA [1] carta all'avversario e aggiungila alla STACK ATTIVA. |\n" +
