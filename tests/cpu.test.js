@@ -18,6 +18,7 @@ function whoActs(s, g) {
   if (s.subPhase === 'rebuild-select' || s.subPhase === 'rebuild-place') return s.pendingRebuild.playerId;
   if (s.subPhase === 'draft-select' || s.subPhase === 'draft-place') return s.pendingDraft.playerId;
   if (s.subPhase === 'energy-target') return s.pendingEnergy.playerId;
+  if (s.subPhase === 'teleport-select') return s.pendingTeleport.playerId;
       if (s.subPhase === 'tool-discard') return s.pendingToolDiscard && s.pendingToolDiscard.playerId;
       if (s.subPhase === 'runner-figure') return s.pendingRunner && s.pendingRunner.playerId;
   if (s.subPhase === 'timebomb-suit') return s.pendingTimebomb.playerId;

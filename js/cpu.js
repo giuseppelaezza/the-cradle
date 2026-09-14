@@ -57,15 +57,27 @@
     }
     return { pts: pts, endsGame: ends };
   }
+  var CLASH_WIN = 3; // punti a chi vince un clash da attaccante
+  // La CPU può vincere un clash 1v1 contro oppId? (usa le carte di RISERVA, con info perfetta).
+  function clashWinnable(game, id, oppId) {
+    var mine = maxValueCard(game.availableReserve(id));
+    if (!mine) return false;               // senza riserva non contesto: perdo
+    var ob = maxValueCard(game.availableReserve(oppId));
+    return !ob || cpuBeats(mine, ob, true); // l'avversario senza riserva perde
+  }
   function shotValue(game, id, x, y) {
-    var cell = game.getCell(x, y);
-    var opp = cell.pawn && cell.pawn !== id;
+    var cell = game.getCell(x, y), s = game.state;
     if (cell.destroyed || !cell.card) return 0;
-    if (cell.faceDown) return opp ? 5 : 0;
-    var pts = 0; if (opp) pts += 5;
-    // In entrambi i ruleset colpire una figura scoperta dà i suoi punti (in Ruleset A anche 1 oggetto a scelta).
-    if (Deck.isFigure(cell.card)) pts += Deck.figurePoints(cell.card);
-    return pts;
+    var opp = cell.pawn && cell.pawn !== id;
+    var figPts = (!cell.faceDown && Deck.isFigure(cell.card)) ? Deck.figurePoints(cell.card) : 0;
+    if (opp) {
+      // Con "Clash su Attacco" colpire una pedina apre un clash: conviene solo se possiamo vincerlo
+      // (allora +3 e il colpo va a segno, con i punti figura se è un OBIETTIVO). Se non è vincibile,
+      // sprecheremmo l'attacco: valore negativo così la CPU non lo sceglie.
+      if (s.clashOnAttack) return clashWinnable(game, id, cell.pawn) ? (CLASH_WIN + figPts) : -1;
+      return 5 + figPts; // regola senza clash su attacco: +5 pedina
+    }
+    return figPts;
   }
   function maxValueCard(cards) { var b = null; cards.forEach(function (c) { if (!b || c.value > b.value || (c.value === b.value && Deck.SUIT_RANK[c.suit] > Deck.SUIT_RANK[b.suit])) b = c; }); return b; }
   function minValueCard(cards) { var b = null; cards.forEach(function (c) { if (!b || c.value < b.value || (c.value === b.value && Deck.SUIT_RANK[c.suit] < Deck.SUIT_RANK[b.suit])) b = c; }); return b; }
@@ -90,13 +102,14 @@
     return scored.slice(0, need).map(function (o) { return o.c.id; });
   }
 
-  // 2) Movimento
+  // 2) Movimento (con modificatore opzionale già armato).
+  // `stayValue` = punti-posizione che otterrei restando fermo: nel Ruleset C conviene MUOVERE solo se
+  // arrivo a qualcosa di meglio (evita di abbandonare una CELLA BONUS).
   function chooseMove(game, id) {
     var s = game.state, moves = game.legalMoves(id);
-    if (!moves.length) return { action: 'pass' };
     var pawn = game.pawnCell(id), me = s.players[id];
-    // Il clash si gioca con le carte della RISERVA (non scelte), non con quelle scelte.
-    var myClashBest = maxValueCard(game.availableReserve(id));
+    var stayValue = (s.ruleset === 'C' && pawn) ? posBonus(pawn.x, pawn.y) : 0;
+    if (!moves.length) return { action: 'pass' };
     var maxOpp = 0; game._others(id).forEach(function (o) { if (s.players[o].score > maxOpp) maxOpp = s.players[o].score; });
     var best = null;
     moves.forEach(function (m) {
@@ -105,20 +118,25 @@
       if (m.occupied) {
         var moveCard = minValueCard(matchCards); moveCardId = moveCard.id;
         var defId = game.getCell(m.x, m.y).pawn; // l'occupante è il difensore del clash
-        var oppBest = maxValueCard(game.availableReserve(defId));
-        var favorable = myClashBest && (!oppBest || cpuBeats(myClashBest, oppBest, true));
-        value = favorable ? arrivalValue(game, id, m.x, m.y).pts + 2 : -100;
+        if (!clashWinnable(game, id, defId)) { value = -100; }
+        else {
+          // Vincere il clash: +3 immediati, prendo la CELLA (posizione/oggetto) e nego il posto al difensore.
+          var av0 = arrivalValue(game, id, m.x, m.y).pts;
+          var denial = posBonus(m.x, m.y); // se è una CELLA BONUS, la tolgo all'avversario
+          value = CLASH_WIN + av0 + denial * 0.5;
+        }
       } else {
         moveCardId = minValueCard(matchCards).id;
         var av = arrivalValue(game, id, m.x, m.y); value = av.pts;
         if (av.endsGame && (me.score + av.pts) <= maxOpp) value -= 50;
         // Bias di avvicinamento: nel Ruleset C verso la zona bonus, altrimenti verso la riga-bersaglio.
-        if (s.ruleset === 'C') value += (nearestBonusDist(pawn.x, pawn.y) - nearestBonusDist(m.x, m.y)) * 0.2;
+        if (s.ruleset === 'C') value += (nearestBonusDist(pawn.x, pawn.y) - nearestBonusDist(m.x, m.y)) * 0.4;
         else value += (distToTarget(id, pawn.y) - distToTarget(id, m.y)) * 0.2;
       }
       if (!best || value > best.value) best = { m: m, value: value, cardId: moveCardId };
     });
-    if (!best || best.value <= 0) return { action: 'pass' };
+    // Muovo solo se batte davvero lo stare fermo (e vale qualcosa).
+    if (!best || best.value <= 0 || best.value <= stayValue) return { action: 'pass' };
     return { action: 'move', x: best.m.x, y: best.m.y, cardId: best.cardId };
   }
 
@@ -138,7 +156,12 @@
     if (movee === pc.relocatorId) { // la CPU sposta se stessa
       var meS = s.players[movee].score, opS = 0; game._others(movee).forEach(function (o) { if (s.players[o].score > opS) opS = s.players[o].score; });
       var bestSelf = null;
-      opts.forEach(function (o) { var ends = o.y === targetRow(movee); var sc = -distToTarget(movee, o.y) + (ends && meS <= opS ? -100 : 0); if (!bestSelf || sc > bestSelf.sc) bestSelf = { o: o, sc: sc }; });
+      opts.forEach(function (o) {
+        var sc;
+        if (s.ruleset === 'C') sc = posBonus(o.x, o.y) - nearestBonusDist(o.x, o.y) * 0.3; // vai su/verso una CELLA BONUS
+        else { var ends = o.y === targetRow(movee); sc = -distToTarget(movee, o.y) + (ends && meS <= opS ? -100 : 0); }
+        if (!bestSelf || sc > bestSelf.sc) bestSelf = { o: o, sc: sc };
+      });
       return { x: bestSelf.o.x, y: bestSelf.o.y };
     }
     // Sposta l'avversario. Nel Ruleset C: allontanalo dalle celle bonus; altrimenti: dalla sua meta.
@@ -257,28 +280,87 @@
     return null;
   }
 
-  // Oggetto da usare in movimento (jetpack / jump) se sblocca un arrivo migliore.
+  // Miglior arrivo raggiungibile con l'Arpione (grapple): CELLE ORTOGONALI a un ARM avversario.
+  function bestGrappleArrival(game, id, cards) {
+    var best = { value: 0, x: null, y: null }, seen = {};
+    game._others(id).forEach(function (oid) {
+      var op = game.pawnCell(oid); if (!op) return;
+      Engine.orthogonalNeighbors(op.x, op.y, _SZ).forEach(function (d) {
+        var k = d[0] + ',' + d[1]; if (seen[k]) return; seen[k] = true;
+        var cell = game.getCell(d[0], d[1]);
+        if (cell.pawn) return; // niente clash nella valutazione
+        if (!cards.some(function (c) { return game._matches(id, c, cell); })) return;
+        var v = arrivalValue(game, id, d[0], d[1]).pts;
+        if (v > best.value) best = { value: v, x: d[0], y: d[1] };
+      });
+    });
+    return best;
+  }
+
+  // Oggetto-modificatore di MOVIMENTO (jetpack / jump / grapple) se sblocca un arrivo migliore.
   function chooseMoveObject(game, id) {
     var s = game.state; if (s.moveModifier) return null;
     var revealed = game.availableRevealed(id), ortho = bestArrival(game, id, revealed, null).value;
     var jet = ownObj(game, id, 'jetpack'); if (jet && bestArrival(game, id, revealed, 'jetpack').value > ortho) return { id: jet.id, type: 'jetpack' };
     var jmp = ownObj(game, id, 'jump'); if (jmp && bestArrival(game, id, revealed, 'jump').value > ortho) return { id: jmp.id, type: 'jump' };
+    var grp = ownObj(game, id, 'grapple'); if (grp && game._grappleHasTarget && game._grappleHasTarget(id) && bestGrappleArrival(game, id, revealed).value > ortho) return { id: grp.id, type: 'grapple' };
     return null;
   }
 
-  // Oggetto da usare in attacco (homing/hook; e board-manip quando altrimenti passeremmo).
+  // Teletrasporto (sostituisce il MOVIMENTO): salta su una CELLA VUOTA di ugual valore. Usa se porta
+  // a una posizione migliore di quella attuale e di ogni movimento normale.
+  function chooseTeleport(game, id) {
+    var s = game.state;
+    var tp = ownObj(game, id, 'teleport'); if (!tp) return null;
+    var opts = game.teleportTargets ? game.teleportTargets() : [];
+    if (!opts.length) return null;
+    var pc = game.pawnCell(id), stay = (s.ruleset === 'C' && pc) ? posBonus(pc.x, pc.y) : 0;
+    var normal = bestArrival(game, id, game.availableRevealed(id), s.moveModifier).value;
+    var bestTp = 0; opts.forEach(function (o) { var v = arrivalValue(game, id, o.x, o.y).pts; if (v > bestTp) bestTp = v; });
+    if (bestTp > stay && bestTp > normal && bestTp > 0) return { id: tp.id, type: 'teleport' };
+    return null;
+  }
+
+  // Oggetto d'ATTACCO diretto (homing/hook) quando c'è un buon colpo.
   function chooseAttackObject(game, id) {
     var s = game.state; if (s.attackModifier) return null;
     if (!game.usableObjects(id).length) return null;
     var revealed = game.availableRevealed(id), bs = bestShotWith(game, id, revealed);
-    var homing = ownObj(game, id, 'homing_missile'); if (homing && bs.value >= 3) return { id: homing.id, type: 'homing_missile' };
-    var hook = ownObj(game, id, 'hook'); if (hook && bs.onPawn) return { id: hook.id, type: 'hook' };
-    if (bs.value === 0) { // passeremmo comunque: usa un oggetto "gratis" (con guardie anti-vicolo cieco)
-      var barrage = ownObj(game, id, 'barrage'); if (barrage && barrageUsable(game)) return { id: barrage.id, type: 'barrage' };
-      var rand = ownObj(game, id, 'randomizer'); if (rand && randomizableCount(game) >= 1) return { id: rand.id, type: 'randomizer' };
-      var elem = ownObj(game, id, 'elemental_bomb'); if (elem && elementalCount(game) >= 1) return { id: elem.id, type: 'elemental_bomb' };
-    }
+    // Granata (homing): buona per DISTRUGGERE una CELLA con OBIETTIVO o per colpire e spostare una pedina.
+    var homing = ownObj(game, id, 'homing_missile'); if (homing && bs.value >= 2) return { id: homing.id, type: 'homing_missile' };
+    // Spinta (hook): buona se il colpo è su una pedina avversaria (la sposta).
+    var hook = ownObj(game, id, 'hook'); if (hook && bs.onPawn && bs.value > 0) return { id: hook.id, type: 'hook' };
     return null;
+  }
+
+  // Oggetto di "ripiego"/board-manipulation quando altrimenti PASSEREMMO (nessun punto disponibile).
+  // Copre tutti gli oggetti restanti in modo che vengano comunque usati. phase = 'move' | 'attack'.
+  function chooseFiller(game, id, phase) {
+    if (!game.usableObjects(id).length) return null;
+    // 1) Ricarica: pesca 2 carte nella STACK ATTIVA (può sbloccare un'azione a punti).
+    var boost = ownObj(game, id, 'energy_boost'); if (boost && (game.state.deck.length > 0 || game.state.discard.length > 0)) return { id: boost.id, type: 'energy_boost' };
+    // 2) Sifone: ruba una carta all'avversario con più carte scelte (lo indebolisce e rimpingua la STACK).
+    var drain = ownObj(game, id, 'energy_drain'); if (drain && game._others(id).some(function (o) { return game.state.players[o].revealedIds.length > 0; })) return { id: drain.id, type: 'energy_drain' };
+    // 3) Ricostruisci: se c'è una CELLA DISTRUTTA/OFFLINE, rimettila ONLINE (nuove chance di punteggio).
+    var reb = ownObj(game, id, 'rebuild'); if (reb && game._rebuildHasTarget && game._rebuildHasTarget(id) && (game.state.deck.length > 0 || game.state.discard.length > 0)) return { id: reb.id, type: 'rebuild' };
+    // 4) Randomizzatore: sostituisce l'azione rimescolando alcune CELLE non-bonus (rinnova il campo).
+    var rand = ownObj(game, id, 'randomizer'); if (rand && randomizableCount(game) >= 1) return { id: rand.id, type: 'randomizer' };
+    // 5) Bomba Elementale: cambia le SUIT attorno a una CELLA (può aprire abbinamenti futuri).
+    var elem = ownObj(game, id, 'elemental_bomb'); if (elem && elementalCount(game) >= 1) return { id: elem.id, type: 'elemental_bomb' };
+    // 6) Barrage: DISTRUGGE una CELLA VUOTA (ultimo ripiego).
+    var barrage = ownObj(game, id, 'barrage'); if (barrage && barrageUsable(game)) return { id: barrage.id, type: 'barrage' };
+    // 7) Encore!: ricarica la SKILL del proprio ARM se esaurita (brawler/tactician/runner).
+    var enc = ownObj(game, id, 'encore'); if (enc && encoreUseful(game, id)) return { id: enc.id, type: 'encore' };
+    // 8) Remix!: +1 uso a REMIX se sei a corto (torna utile nei DEPLOY successivi).
+    var rem = ownObj(game, id, 'remix'); if (rem && game.state.players[id].reshuffleLeft === 0) return { id: rem.id, type: 'remix' };
+    return null;
+  }
+  function encoreUseful(game, id) {
+    var p = game.state.players[id];
+    if (p.character === 'brawler') return p.brawlerLeft === 0;
+    if (p.character === 'runner') return p.runnerLeft === 0;
+    if (p.character === 'tactician') return p.tacticianLeft === 0;
+    return false;
   }
   // Barrage colpisce una singola cella senza pedina: esiste almeno un bersaglio valido?
   function barrageUsable(game) {
@@ -287,19 +369,6 @@
   }
   function randomizableCount(game) { var n = 0; for (var x = 1; x <= _SZ; x++) for (var y = 1; y <= _SZ; y++) { var c = game.getCell(x, y); if (!isCenterC(x, y) && !c.destroyed && c.card) n++; } return n; }
   function elementalCount(game) { var n = 0; for (var x = 1; x <= _SZ; x++) for (var y = 1; y <= _SZ; y++) { var c = game.getCell(x, y); if (!c.destroyed && c.card) n++; } return n; }
-
-  // Tool "energetici" (energy boost / drain): usali come ripiego quando non c'è nessuna azione a punti,
-  // per rimpinguare/rinnovare la mano. `phase` = 'move' | 'attack'.
-  function chooseEnergy(game, id, phase) {
-    var s = game.state;
-    if (!game.usableObjects(id).length) return null;
-    var revealed = game.availableRevealed(id);
-    var best = phase === 'move' ? bestArrival(game, id, revealed, s.moveModifier).value : bestShotWith(game, id, revealed).value;
-    if (best > 0) return null; // non sprecare energia se puoi già segnare
-    var boost = ownObj(game, id, 'energy_boost'); if (boost) return { id: boost.id, type: 'energy_boost' };
-    var drain = ownObj(game, id, 'energy_drain'); if (drain) return { id: drain.id, type: 'energy_drain' };
-    return null;
-  }
 
   // Potere personaggio (brawler / tactician) se conviene, nella fase indicata.
   function choosePower(game, id, phase) {
@@ -336,6 +405,12 @@
     var opts = game.randomizerSelectOptions();
     var dead = opts.filter(function (o) { var c = game.getCell(o.x, o.y); return !c.pawn && c.card && !Deck.isFigure(c.card); });
     return (dead.length ? dead : opts).slice(0, 3);
+  }
+  // Teletrasporto: scegli la CELLA di destinazione col miglior valore d'arrivo.
+  function cpuTeleportTarget(game, id, opts) {
+    var best = opts[0], bn = -1;
+    opts.forEach(function (o) { var v = arrivalValue(game, id, o.x, o.y).pts; if (v > bn) { bn = v; best = o; } });
+    return best;
   }
   // Abbinamento alternativo (Ruleset A): scegli 1 oggetto tra i 3 pescati.
   function cpuAltPickObject(game, id) {
@@ -375,6 +450,7 @@
     if (s.subPhase === 'energy-target') { if (s.pendingEnergy.playerId === id) { var et = game.energyTargetOptions(); if (et.length) { var tgt = et[0]; et.forEach(function (o) { if (s.players[o].score > s.players[tgt].score) tgt = o; }); game.energyDrainTarget(tgt); } } return {}; }
     if (s.subPhase === 'draft-select') { if (s.pendingDraft.playerId === id) { var dd = game.draftDrawn(); if (dd.length) game.draftSelectCard(maxValueCard(dd).id); } return {}; }
     if (s.subPhase === 'draft-place') { if (s.pendingDraft.playerId === id) { var dt = game.draftTargets(); if (dt.length) { var dp = cpuDraftCell(game, id, dt); game.draftPlace(dp.x, dp.y); } } return {}; }
+    if (s.subPhase === 'teleport-select') { if (s.pendingTeleport.playerId === id) { var tt = game.teleportTargets(); if (tt.length) { var tb = cpuTeleportTarget(game, id, tt); game.teleportTo(tb.x, tb.y); } } return {}; }
     if (s.subPhase === 'altmatch-object') { if (s.pendingAltMatch.playerId === id) cpuAltPickObject(game, id); return {}; }
     if (s.subPhase === 'clash-cards') { if (game.clashCurrentChooser() === id) game.clashChoose(id, chooseClashCard(game, id)); return {}; }
     if (s.subPhase === 'clash-reloc') { if (s.pendingClash.relocatorId === id) { var r = chooseRelocation(game); if (r.skip) game.clashSkipRelocate(); else game.clashRelocate(r.x, r.y); } return {}; }
@@ -398,9 +474,12 @@
       if (pw && pw.kind === 'tactician') { game.activatePower(id); return {}; }
       if (pw && pw.kind === 'brawler') { game.brawlerAction(id, pw.x, pw.y); return {}; }
       var mo = chooseMoveObject(game, id); if (mo) { game.useObject(id, mo.id); return {}; }
-      var men = chooseEnergy(game, id, 'move'); if (men) { game.useObject(id, men.id); return {}; }
+      var tp = chooseTeleport(game, id); if (tp) { game.useObject(id, tp.id); return {}; }
       var mv = chooseMove(game, id);
-      if (mv.action === 'pass') game.passMove(id); else game.move(id, mv.x, mv.y, mv.cardId);
+      if (mv.action !== 'pass') { game.move(id, mv.x, mv.y, mv.cardId); return {}; }
+      // Passeremmo: prova un oggetto di ripiego (ricarica/sifone/ricostruisci/randomizer/…).
+      var mf = chooseFiller(game, id, 'move'); if (mf) { game.useObject(id, mf.id); return {}; }
+      game.passMove(id);
       return {};
     }
     // --- attacco ---
@@ -409,11 +488,15 @@
       if (pw2 && pw2.kind === 'tactician') { game.activatePower(id); return {}; }
       if (pw2 && pw2.kind === 'brawler') { var cc = game.pawnCell(id), rb = { type: 'shoot', from: cc ? { x: cc.x, y: cc.y } : null, to: { x: pw2.x, y: pw2.y } }; game.brawlerAction(id, pw2.x, pw2.y); return rb; }
       var ao = chooseAttackObject(game, id); if (ao) { game.useObject(id, ao.id); return {}; }
-      var aen = chooseEnergy(game, id, 'attack'); if (aen) { game.useObject(id, aen.id); return {}; }
       var sh = chooseShot(game, id);
-      if (sh.action === 'pass') { game.passShoot(id); return {}; }
-      var sc = game.pawnCell(id), rs = { type: 'shoot', from: sc ? { x: sc.x, y: sc.y } : null, to: { x: sh.x, y: sh.y } };
-      game.shoot(id, sh.x, sh.y, sh.cardId); return rs;
+      if (sh.action !== 'pass') {
+        var sc = game.pawnCell(id), rs = { type: 'shoot', from: sc ? { x: sc.x, y: sc.y } : null, to: { x: sh.x, y: sh.y } };
+        game.shoot(id, sh.x, sh.y, sh.cardId); return rs;
+      }
+      // Passeremmo: prova un oggetto di ripiego / manipolazione del campo.
+      var af = chooseFiller(game, id, 'attack'); if (af) { game.useObject(id, af.id); return {}; }
+      game.passShoot(id);
+      return {};
     }
     return {};
   }
