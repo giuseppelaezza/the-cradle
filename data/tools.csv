@@ -1,0 +1,27 @@
+TOOL;Fase;Effetto;COSTO;EDITED or NEW
+Jetpack;MOVIMENTO;Per questo MOVIMENTO puoi MATCHARE anche le CELLE DIAGONALI.;SCARTA [1] carta dalla STACK ATTIVA.;FALSE
+Salto;MOVIMENTO;Per questo MOVIMENTO puoi MATCHARE solo a DISTANZA [2] su CELLE ORTOGONALI.;SCARTA [1] carta dalla STACK ATTIVA.;FALSE
+Arpione;MOVIMENTO;Per questo MOVIMENTO puoi MATCHARE anche le CELLE ORTOGONALI all'ARM avversario.;SCARTA [1] carta dalla STACK ATTIVA.;FALSE
+Teletrasporto;MOVIMENTO;Muovi su una qualsiasi CELLA VUOTA scoperta con lo stesso VALORE della CELLA da cui parti.;Non puoi effettuare la fase di MOVIMENTO questo turno;FALSE
+Spinta;ATTACCO;Se COLPISCI un ARM avversario, lo sposti su una CELLA ORTOGONALE a DISTANZA [1].;Scarta [1] TOOL;TRUE
+Granata;ATTACCO;DISTRUGGE la CELLA colpita. Se era occupata, sposti quell'ARM su una CELLA ORTOGONALE a DISTANZA [1].;CONSUMA;FALSE
+Barrage!;ATTACCO;Scegli [1] CELLA VUOTA e DISTRUGGILA.;CONSUMA;FALSE
+Bomba Elementale;ATTACCO;Scegli [1] CELLA: la sua SUIT e quella delle CELLE ORTOGONALI diventano una SUIT a tua scelta.;CONSUMA;FALSE
+Doppio Movimento;DEPLOY;Questo TURNO puoi eseguire [2] MOVIMENTI.;Non puoi effettuare l’azione di ATTACCO questo turno;FALSE
+Doppio Attacco;DEPLOY;Questo TURNO puoi eseguire [2] ATTACCHI.;Non puoi effettuare l’azione di MOVIMENTO questo turno;FALSE
+Cronobomba;DEPLOY;"Sposta subito la GLOBAL SUIT su una SUIT a tua scelta; la rotazione prosegue da lì.";PERDI [1] Punto;FALSE
+Randomizzatore;MOV / ATT;PESCA fino a [3] carte poi per ognuna di queste SOVRASCRIVI una CELLA;CONSUMA;FALSE
+Ricarica;MOV / ATT;PESCA [2] carte e aggiungile alla STACK ATTIVA.;Nessuno;FALSE
+Sifone Energetico;MOV / ATT;RUBA [1] carta all'avversario e aggiungila alla STACK ATTIVA.;Nessuno;FALSE
+Ripristina;MOV / ATT;PESCA [3] carte, scegline [1] e con essa SOVRASCRIVI una CELLA DISTRUTTA o OFFLINE.;Nessuno;FALSE
+Remix!;qualsiasi;Ripristina [1] uso di REMIX già consumato (non oltre il totale).;PERDI [1] Punto;FALSE
+Encore!;qualsiasi;Ripristina [1] uso della SKILL del tuo ARM già consumato (non oltre il totale).;PERDI [1] Punto;FALSE
+Carica Disperata;MOVIMENTO;Muovi su una CELLA OCCUPATA da un ARM avversario che si trova nella tua stessa colonna o riga;Scarta [2] TOOL;FALSE
+Snipe;ATTACCO;Colpisci una CELLA OCCUPATA da un ARM avversario che si trova nella tua stessa colonna o riga;Non puoi effettuare la fase di ATTACCO questo turno, CONSUMA;FALSE
+Santuario;MOV / ATT;PESCA [5] carte, SOVRASCRIVI la CELLA che OCCUPI e tutte le CELLE ORTOGONALI;Scarta [1] TOOL;FALSE
+Feedback Loop;MOV / ATT;SOVRASCRIVI la CELLA occupata dal tuo ARM utilizzando una delle carte nella tua STACK ATTIVA, dopodichè PESCA [1] carta e aggiungila alla tua STACK ATTIVA;SCARTA [1] carta dalla STACK DI RISERVA.;FALSE
+Swap!;MOVIMENTO;Solo se il tuo ARM occupa una cella OFFLINE: PESCA [1] carta e SOVRASCRIVI la cella occupata dal tuo ARM poi cambia la posizione del tuo ARM con quella di un ARM avversario.;Non puoi effettuare l’azione di ATTACCO questo turno;FALSE
+Nuke;ATTACCO;MATCHA [1] CELLA, la CELLA matchata e le tutte le CELLE ORTOGONALI diventano OFFLINE. Se una o più di queste CELLE avevano obiettivi, guadagna i relativi punti (non ottieni oggetti). Tutti i giocatore che hanno un ARM in una di queste celle perdono [2] punti.;Non puoi effettuare l’azione di ATTACCO questo turno, scarta [3] TOOL;FALSE
+Overcharge;Qualsiasi;Ottieni [+2] durante i CLASH fino alla fine del turno;Scarta [1] TOOL;TRUE
+Toolbox;Qualsiasi;PESCA [2] TOOL dal mazzo;CONSUMA;TRUE
+Shuffle;MOV / ATT;Seleziona [2] CELLE ONLINE VUOTE e scambia le carte presenti nelle CELLE;Nessuno;TRUE

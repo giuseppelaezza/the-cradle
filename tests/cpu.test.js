@@ -25,7 +25,14 @@ function whoActs(s, g) {
   if (s.subPhase === 'timebomb-suit') return s.pendingTimebomb.playerId;
   if (s.subPhase === 'elemental-target' || s.subPhase === 'elemental-suit') return s.pendingElemental.playerId;
   if (s.subPhase === 'barrage-first' || s.subPhase === 'barrage-second' || s.subPhase === 'barrage-third') return s.pendingBarrage.playerId;
-  if (s.subPhase === 'randomizer-select' || s.subPhase === 'randomizer-place') return s.pendingRandomizer.playerId;
+  if (s.subPhase === 'randomizer-place') return s.pendingRandomizer.playerId;
+  if (s.subPhase === 'tool-sacrifice') return s.pendingToolSac.playerId;
+  if (s.subPhase === 'charge-select') return s.pendingCharge.playerId;
+  if (s.subPhase === 'snipe-select') return s.pendingSnipe.playerId;
+  if (s.subPhase === 'feedback-select') return s.pendingFeedback.playerId;
+  if (s.subPhase === 'swap-target') return s.pendingSwap.playerId;
+  if (s.subPhase === 'nuke-select') return s.pendingNuke.playerId;
+    if (s.subPhase === 'shuffle-select') return s.pendingShuffle.playerId;
   if (s.subPhase === 'altmatch-choice' || s.subPhase === 'altmatch-object') return s.pendingAltMatch.playerId;
   if (s.subPhase === 'clash-cards') return g.clashCurrentChooser();
   if (s.subPhase === 'clash-reloc') return s.pendingClash.relocatorId;

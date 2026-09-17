@@ -29,10 +29,13 @@
                  power: 'SKILL (3 usi): guarda la STACK DI RISERVA dell\'ARM avversario. Passiva: quando scegli [1] TOOL scegli tra 4 invece che tra 3.' },
     fighter:   { type: 'fighter',   suit: 'bastoni', startObjects: ['hook'], label: 'Soldier Boy',
                  powerUses: null,
-                 power: 'SKILL passiva: in ATTACCO MATCHI le carte di VALORE PARI tra loro (una carta pari MATCHA una CELLA ONLINE di VALORE pari).' }
+                 power: 'SKILL passiva: in ATTACCO MATCHI le carte di VALORE PARI tra loro (una carta pari MATCHA una CELLA ONLINE di VALORE pari).' },
+    wallie:    { type: 'wallie',    suit: 'oro',     startObjects: [], label: 'Wallie & Glass',
+                 powerUses: null,
+                 power: 'SKILL attiva (al posto di un\'azione di MOVIMENTO/ATTACCO): se non hai un segnalino GLASS sul campo, MATCHA una CELLA ORTOGONALE e vi posizioni il segnalino GLASS (l\'ARM resta fermo). Passiva: se non hai GLASS sul campo, +2 al VALORE nei CLASH. Il GLASS resta finché un avversario non MATCHA la sua CELLA (nessun punto). A fine turno ottieni il bonus di SUIT sia della CELLA dell\'ARM sia della CELLA del GLASS.' }
   };
 
-  var ORDER = ['runner', 'brawler', 'tactician', 'fighter'];
+  var ORDER = ['runner', 'brawler', 'tactician', 'fighter', 'wallie'];
 
   function get(type) { return CHARACTERS[type] || null; }
 

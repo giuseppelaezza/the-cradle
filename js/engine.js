@@ -119,6 +119,10 @@
       trophies: [], figuresMatched: 0, matchedCenter: false,
       character: null, belongingSuit: null,
       objects: [],                          // include eventuale oggetto iniziale (fromCharacter)
+      objectDeck: [],                       // mazzo TOOLS personale (pesca)
+      objectDiscard: [],                    // pila scarti TOOLS personale
+      glass: null,                          // segnalino GLASS sulla griglia {x,y} (pilota Wallie & Glass)
+      clashBonusTurn: 0,                    // bonus temporaneo al VALORE nei CLASH (Overcharge), azzerato ogni ROUND
       pendingActions: { moves: 1, attacks: 1 },
       energyExtraDiscard: 0,       // scarti extra a fine turno dovuti a Energy Boost
       reshuffleLeft: 2,            // Modulo Reshuffle: usi rimasti
@@ -240,16 +244,21 @@
         if (ch.type === 'tactician' && ch.powerUses != null) { players[id].tacticianTotal = players[id].tacticianLeft = ch.powerUses | 0; }
         if (ch.type === 'brawler' && ch.powerUses != null) { players[id].brawlerTotal = players[id].brawlerLeft = ch.powerUses | 0; }
         if (ch.type === 'runner' && ch.powerUses != null) { players[id].runnerTotal = players[id].runnerLeft = ch.powerUses | 0; }
-        // Oggetto/i iniziale/i (esclusi dal limite).
-        if (modules.objects) (ch.startObjects || []).forEach(function (t) { players[id].objects.push(Objects.makeObjectCard(t, true)); });
       });
     }
 
-    // Mazzo Oggetti (2 copie di 5 tipi, o dei tipi scelti in configurazione) solo se il modulo è attivo.
-    var objectDeck = modules.objects ? Objects.buildObjectDeck(rng, opts.objectSelection, ruleset) : [];
-    // Ruleset A (abbinamento alternativo): ogni giocatore pesca 1 oggetto extra a inizio partita.
-    if (modules.objects && altMatch) {
-      seats.forEach(function (id) { if (objectDeck.length) players[id].objects.push(objectDeck.shift()); });
+    // Mazzo TOOLS PERSONALE (12 carte, max 3 copie per tipo) per ciascun giocatore, solo se il modulo è attivo.
+    // opts.objectDecks: array indicizzato per seggio (0-based, come opts.characters); ogni voce è una
+    // composizione (count-map o array di tipi). Assente/vuota → DECK casuale (4 tipi × 3 copie).
+    if (modules.objects) {
+      seats.forEach(function (id, si) {
+        var spec = opts.objectDecks && opts.objectDecks[si];
+        players[id].objectDeck = Objects.buildObjectDeckForPlayer(rng, spec, ruleset);
+      });
+      // A inizio partita ogni PILOTA pesca 3 TOOL dal proprio mazzo.
+      seats.forEach(function (id) {
+        for (var k = 0; k < 3; k++) { if (players[id].objectDeck.length) players[id].objects.push(players[id].objectDeck.shift()); }
+      });
     }
 
     // 8. Pesca 6 carte a testa. Nel Draft le mani si pescano DOPO (a griglia completa, §_finishDraft).
@@ -275,7 +284,7 @@
     seats.forEach(function (id) { selectedInit[id] = null; selUsedInit[id] = false; });
 
     var state = {
-      deck: deck, objectDeck: objectDeck, discard: [], objectDiscard: [],
+      deck: deck, discard: [],
       grid: grid, gridSize: gridSize, gridMode: gridMode, centerInitialSuit: centerInitialSuit,
       numPlayers: numPlayers, playerOrder: playerOrder,
       suitMode: suitMode, currentSuit: centerInitialSuit, turnMode: turnMode, maxRounds: maxRounds, clashOnAttack: clashOnAttack,
@@ -305,6 +314,13 @@
       pendingEnergy: null,     // {playerId} durante 'energy-target' (Sifone Energetico: scelta del bersaglio in multiplayer)
       pendingEndBonus: null,   // {playerId, options} durante 'endbonus-steal' (bonus spade di fine ROUND: scelta avversario)
       pendingElemental: null, pendingBarrage: null, pendingRandomizer: null,
+      pendingToolSac: null,    // {playerId,need,sel,type,params} durante 'tool-sacrifice' (costo SCARTA [n] TOOL)
+      pendingCharge: null,     // {playerId} durante 'charge-select' (Carica Disperata)
+      pendingSnipe: null,      // {playerId} durante 'snipe-select' (Snipe)
+      pendingFeedback: null,   // {playerId} durante 'feedback-select' (Feedback Loop)
+      pendingSwap: null,       // {playerId} durante 'swap-target' (Swap!)
+      pendingNuke: null,       // {playerId} durante 'nuke-select' (Nuke)
+      pendingShuffle: null,    // {playerId,first} durante 'shuffle-select' (Shuffle)
       gameOver: false, endTriggered: false, result: null, log: []
     };
 
@@ -355,11 +371,15 @@
   Game.prototype.allPlayers = function () { var s = this.state; return SEAT_CW.filter(function (p) { return s.players[p]; }); };
   // Le carte che escono dal gioco finiscono nella pila degli scarti.
   Game.prototype._discard = function (card) { if (card) this.state.discard.push(card); };
-  // Le carte Oggetto che escono dal gioco (usate, scartate oltre il limite, non scelte) vanno nella pila scarti Oggetti.
-  Game.prototype._discardObjectCard = function (obj) { if (obj) this.state.objectDiscard.push(obj); };
+  // Le carte TOOL che escono dal gioco (usate, scartate oltre il limite, non scelte) vanno nella
+  // pila scarti TOOLS PERSONALE del giocatore che le possedeva.
+  Game.prototype._discardObjectCard = function (playerId, obj) {
+    var p = this.state.players[playerId];
+    if (obj && p) p.objectDiscard.push(obj);
+  };
   Game.prototype.getCell = function (x, y) { return this.state.grid[x][y]; };
   // Limite di oggetti non-iniziali posseduti contemporaneamente: 4 in Ruleset A, 2 in Ruleset B.
-  Game.prototype._objLimit = function () { return this.state.altMatch ? 4 : 2; };
+  Game.prototype._objLimit = function () { return this.state.altMatch ? 5 : 2; };
 
   // Registra un'azione geometrica (movimento pedina o sparo) per l'overlay "Mostra azioni".
   Game.prototype._recordTrail = function (t, p, from, to) {
@@ -367,20 +387,21 @@
     this.state.trail.push({ t: t, p: p, from: from ? { x: from.x, y: from.y } : null, to: to ? { x: to.x, y: to.y } : null });
   };
 
-  // Se il mazzo Oggetti è esaurito, rimescola la pila degli scarti Oggetti per riformarlo.
-  Game.prototype._reshuffleObjectDiscard = function () {
-    var s = this.state;
-    if (s.objectDeck.length === 0 && s.objectDiscard.length) {
-      s.objectDeck = Deck.shuffle(s.objectDiscard.slice(), this._rng || Math.random);
-      s.objectDiscard = [];
-      this._log('Mazzo Oggetti esaurito: ' + s.objectDeck.length + ' scarti Oggetti rimescolati.');
+  // Se il mazzo TOOLS personale è esaurito, rimescola la pila degli scarti TOOLS personale per riformarlo.
+  Game.prototype._reshuffleObjectDiscard = function (playerId) {
+    var p = this.state.players[playerId];
+    if (p && p.objectDeck.length === 0 && p.objectDiscard.length) {
+      p.objectDeck = Deck.shuffle(p.objectDiscard.slice(), this._rng || Math.random);
+      p.objectDiscard = [];
+      this._log(playerId + ': mazzo TOOLS esaurito, ' + p.objectDeck.length + ' scarti TOOLS rimescolati.');
     }
   };
-  // Pesca una carta Oggetto dal mazzo, rimescolando gli scarti Oggetti se il mazzo è vuoto. null se non ce ne sono.
-  Game.prototype._drawObjectCard = function () {
-    var s = this.state;
-    if (s.objectDeck.length === 0) this._reshuffleObjectDiscard();
-    return s.objectDeck.length ? s.objectDeck.shift() : null;
+  // Pesca una carta TOOL dal mazzo personale, rimescolando gli scarti personali se il mazzo è vuoto. null se non ce ne sono.
+  Game.prototype._drawObjectCard = function (playerId) {
+    var p = this.state.players[playerId];
+    if (!p) return null;
+    if (p.objectDeck.length === 0) this._reshuffleObjectDiscard(playerId);
+    return p.objectDeck.length ? p.objectDeck.shift() : null;
   };
 
   // Se il mazzo è esaurito, rimescola gli scarti per formare un nuovo mazzo (§ regola reshuffle).
@@ -572,6 +593,7 @@
     var s = this.state;
     s.actionsLeft -= 1;
     s.moveModifier = null;
+    if (this._forfeitMove) { this._forfeitMove = false; s.actionsLeft = 0; } // TOOL con "Non puoi effettuare la fase di MOVIMENTO"
     this._promptMove();
   };
 
@@ -629,6 +651,7 @@
     if (!card || !this._matches(id, card, dest)) throw new Error('Carta non valida per questa casella.');
     removeCard(s.players[id].hand, cardId);
     this._markActed(id); s.players[id].stats.moves += 1;
+    this._breakGlassAt(x, y, id); // MATCH avversario sulla CELLA del GLASS → lo distrugge
 
     if (dest.pawn && dest.pawn !== id) {
       var defId = dest.pawn;
@@ -770,7 +793,7 @@
     if (!attCard && !defCard) outcome = 'tie';
     else if (!attCard) outcome = 'defender';
     else if (!defCard) outcome = 'attacker';
-    else outcome = resolveClash(attCard, defCard);
+    else outcome = this._resolveClashWithBonus(pc.attackerId, attCard, pc.defenderId, defCard);
     // Log del clash: "<attaccante>: 7O x <difensore>: 8B - Vince il clash B" (semi: O=Ori, B=Bastoni, C=Coppe, S=Spade).
     function lbl(c) { return c ? (c.value + c.suit[0].toUpperCase()) : '—'; }
     var winnerCard = outcome === 'attacker' ? attCard : (outcome === 'defender' ? defCard : null);
@@ -941,6 +964,7 @@
   Game.prototype._afterAttackAction = function (id) {
     var s = this.state;
     s.actionsLeft -= 1; s.attackModifier = null;
+    if (this._forfeitAttack) { this._forfeitAttack = false; s.actionsLeft = 0; } // TOOL con "Non puoi effettuare la fase di ATTACCO"
     this._promptAttack();
   };
   // Chiude un'azione consumata da un TOOL utilizzabile sia in MOVIMENTO sia in ATTACCO (es. randomizer).
@@ -968,6 +992,7 @@
     removeCard(s.players[id].hand, cardId);
     this._markActed(id); s.players[id].stats.attacks += 1;
     this._recordTrail('shot', id, this.pawnCell(id), cell);
+    this._breakGlassAt(x, y, id); // MATCH avversario sulla CELLA del GLASS → lo distrugge
     var mod = s.attackModifier;
 
     // Regola "Clash su Attacco": colpire una cella con la pedina avversaria apre un clash — anche con
@@ -1062,6 +1087,7 @@
         return;
       }
       cell.card = null; cell.faceDown = false; cell.destroyed = true;
+      self._clearGlassAt(cell.x, cell.y);
       self._log(id + ' HOMING MISSILE: distrugge la cella [' + cell.x + ',' + cell.y + '].');
       if (hadPawn) {
         // Homing: è il TIRATORE a decidere dove spostare la pedina avversaria colpita.
@@ -1195,13 +1221,16 @@
     var s = this.state, self = this;
     if (s.gameOver || !s.modules.objects || s.subPhase) return [];
     var objs = s.players[playerId].objects;
+    var canDraw = s.deck.length > 0 || s.discard.length > 0;
     if (s.phase === 'select') {
       if (s.selected[playerId] != null || s.selectObjectUsed[playerId]) return [];
       return objs.filter(function (o) {
         if (!objInPhase(o, 'select')) return false;
+        if (!self._toolCostAffordable(playerId, o)) return false;
         if (o.type === 'timebomb' && s.suitMode !== 'rotating') return false;
         if (o.type === 'encore' && !self._encoreUsable(playerId)) return false;
         if (o.type === 'remix' && !self._remixUsable(playerId)) return false;
+        if (o.type === 'toolbox' && s.players[playerId].objectDeck.length === 0 && s.players[playerId].objectDiscard.length === 0) return false;
         return true;
       });
     }
@@ -1210,21 +1239,47 @@
       if (s.activePlayer !== playerId || s.actionsLeft <= 0) return [];
       return objs.filter(function (o) {
         if (!objInPhase(o, s.phase)) return false;
+        if (!self._toolCostAffordable(playerId, o)) return false; // costo pagabile (STACK/RISERVA/CONSUMA/TOOL)
         // Un modificatore già armato (jetpack/jump/hook/homing) blocca altri oggetti-modificatore, non gli "immediati".
         if (mod && o.type !== 'energy_boost' && o.type !== 'energy_drain' && o.type !== 'remix' && o.type !== 'encore') return false;
-        if ((o.type === 'jetpack' || o.type === 'jump') && !self._canPayToolCost(playerId)) return false; // serve una carta scelta extra da scartare
-        if (o.type === 'grapple' && (!self._canPayToolCost(playerId) || !self._grappleHasTarget(playerId))) return false; // costo carta + bersaglio adiacente all'avversario
+        if (o.type === 'grapple' && !self._grappleHasTarget(playerId)) return false; // bersaglio adiacente all'avversario
         if (o.type === 'teleport' && self._teleportTargetsFor(playerId).length === 0) return false; // serve almeno una carta di ugual valore
-        if (o.type === 'randomizer' && s.deck.length === 0 && s.discard.length === 0) return false; // serve almeno una carta
-        if (o.type === 'energy_boost' && s.deck.length === 0 && s.discard.length === 0) return false; // niente da pescare
-        if (o.type === 'energy_drain' && !self._others(playerId).some(function (oid) { return s.players[oid].revealedIds.length > 0; })) return false; // niente da rubare: nessun avversario ha carte scelte
-        if (o.type === 'rebuild' && ((s.deck.length === 0 && s.discard.length === 0) || !self._rebuildHasTarget())) return false; // serve una carta e una CELLA DISTRUTTA/OFFLINE
+        if (o.type === 'randomizer' && !canDraw) return false; // serve almeno una carta
+        if (o.type === 'energy_boost' && !canDraw) return false; // niente da pescare
+        if (o.type === 'energy_drain' && !self._others(playerId).some(function (oid) { return s.players[oid].revealedIds.length > 0; })) return false;
+        if (o.type === 'rebuild' && (!canDraw || !self._rebuildHasTarget())) return false; // serve una carta e una CELLA DISTRUTTA/OFFLINE
         if (o.type === 'encore' && !self._encoreUsable(playerId)) return false;
         if (o.type === 'remix' && !self._remixUsable(playerId)) return false;
+        // ---- Nuovi TOOLS ----
+        if (o.type === 'carica_disperata' && self._lineTargets(playerId).length === 0) return false; // serve un ARM avversario in riga/colonna
+        if (o.type === 'snipe' && self._lineTargets(playerId).length === 0) return false;
+        if (o.type === 'santuario' && !canDraw) return false; // serve pescare
+        if (o.type === 'feedback_loop' && self.availableRevealed(playerId).length === 0) return false; // serve una carta STACK ATTIVA da posizionare
+        if (o.type === 'swap') { var pc2 = self.pawnCell(playerId); if (!pc2 || !pc2.faceDown || pc2.destroyed || !self._swapTargets(playerId).length) return false; } // ARM su CELLA OFFLINE + un ARM avversario
+        if (o.type === 'nuke' && self.legalShots(playerId).length === 0) return false; // serve MATCHARE una CELLA
+        if (o.type === 'toolbox' && s.players[playerId].objectDeck.length === 0 && s.players[playerId].objectDiscard.length === 0) return false; // niente TOOL da pescare
+        if (o.type === 'shuffle' && self._shuffleCells().length < 2) return false; // servono 2 CELLE ONLINE VUOTE
         return true;
       });
     }
     return [];
+  };
+  // CELLE con un ARM avversario nella stessa riga o colonna dell'ARM di playerId (per Carica Disperata / Snipe).
+  Game.prototype._lineTargets = function (playerId) {
+    var s = this.state, pc = this.pawnCell(playerId), out = [];
+    if (!pc) return out;
+    for (var x = 1; x <= s.gridSize; x++) for (var y = 1; y <= s.gridSize; y++) {
+      if (x !== pc.x && y !== pc.y) continue;      // stessa riga O colonna
+      if (x === pc.x && y === pc.y) continue;
+      var c = s.grid[x][y];
+      if (!c.destroyed && c.pawn && c.pawn !== playerId) out.push({ x: x, y: y, key: cellKey(x, y), oppId: c.pawn });
+    }
+    return out;
+  };
+  // Avversari con cui Swap! può scambiarsi (un ARM qualsiasi sul campo).
+  Game.prototype._swapTargets = function (playerId) {
+    var self = this;
+    return this._others(playerId).filter(function (oid) { return !!self.pawnCell(oid); });
   };
   // Encore! ripristina un uso della SKILL: usabile solo se c'è un uso già consumato da recuperare.
   Game.prototype._encoreUsable = function (playerId) {
@@ -1250,6 +1305,40 @@
     return false;
   };
 
+  // ---- Modello dei COSTI dei TOOL ----
+  Game.prototype._toolCost = function (type) { var d = Objects.def(type); return (d && d.costSpec) || {}; };
+  // Numero di ALTRI TOOL posseduti (esclusa la carta con exceptId): per il costo "SCARTA [n] TOOL".
+  Game.prototype._otherToolCount = function (playerId, exceptId) {
+    return this.state.players[playerId].objects.filter(function (o) { return o.id !== exceptId; }).length;
+  };
+  // Il costo di un TOOL è pagabile ora?
+  Game.prototype._toolCostAffordable = function (playerId, obj) {
+    var c = this._toolCost(obj.type), pc = this.pawnCell(playerId);
+    if (c.stack && this.availableRevealed(playerId).length < c.stack) return false;
+    if (c.reserve && this.availableReserve(playerId).length < c.reserve) return false;
+    if (c.consume && (!pc || pc.destroyed || !pc.card || pc.faceDown)) return false; // serve una CELLA ONLINE
+    if (c.tools && this._otherToolCount(playerId, obj.id) < c.tools) return false;
+    return true; // points/forfeit sempre pagabili
+  };
+  // PERDI [n] punti (può portare il punteggio sotto lo zero). Il costo grava su ptsBonus così che
+  // il breakdown statistiche resti coerente (ptsPawn + ptsFigure + ptsBonus === score).
+  Game.prototype._losePoints = function (id, n) {
+    var p = this.state.players[id]; p.score -= n; p.stats.ptsBonus -= n;
+    this._log(id + ' paga ' + n + ' punto/i (ora ' + p.score + ').');
+  };
+  // SCARTA [n] carte dalla STACK DI RISERVA (non rivelate): scarta le n di valore più basso.
+  Game.prototype._payReserveCost = function (id, n) {
+    var p = this.state.players[id];
+    var pool = this.availableReserve(id).slice().sort(function (a, b) { return a.value - b.value; });
+    for (var i = 0; i < n && i < pool.length; i++) { removeCard(p.hand, pool[i].id); this._discard(pool[i]); }
+    this._log(id + ' scarta ' + Math.min(n, pool.length) + ' carta/e dalla STACK DI RISERVA (costo).');
+  };
+  // CONSUMA: la CELLA ONLINE su cui si trova l'ARM diventa OFFLINE (a faccia in giù).
+  Game.prototype._payConsume = function (id) {
+    var pc = this.pawnCell(id);
+    if (pc && pc.card && !pc.faceDown && !pc.destroyed) { pc.faceDown = true; this._log(id + ' CONSUMA: [' + pc.x + ',' + pc.y + '] diventa OFFLINE.'); }
+  };
+
   Game.prototype.useObject = function (playerId, objectId, params) {
     var s = this.state; params = params || {};
     if (!s.modules.objects) throw new Error('Modulo Oggetti non attivo.');
@@ -1257,12 +1346,33 @@
     if (!obj) throw new Error('Oggetto non utilizzabile ora.');
 
     removeCard(s.players[playerId].objects, objectId); // usato una volta
-    this._discardObjectCard(obj);                       // la carta Oggetto usata va nella pila scarti Oggetti
+    this._discardObjectCard(playerId, obj);             // la carta TOOL usata va negli scarti TOOLS personali
     var _st = s.players[playerId].stats; _st.objUses += 1; _st.objByType[obj.type] = (_st.objByType[obj.type] || 0) + 1;
     this._markActed(playerId);
     this._log(playerId + ' usa ' + obj.type + '.');
 
-    switch (obj.type) {
+    // ---- Pagamento dei COSTI ----
+    var cost = this._toolCost(obj.type);
+    if (cost.points) this._losePoints(playerId, cost.points);
+    if (cost.consume) this._payConsume(playerId);
+    if (cost.reserve) this._payReserveCost(playerId, cost.reserve);
+    // "Non puoi effettuare l'azione di ATTACCO questo turno" (usato in fase select/move): azzera gli attacchi.
+    if (cost.forfeit === 'attack' && (s.phase === 'select' || s.phase === 'move')) s.players[playerId].pendingActions.attacks = 0;
+    // Forfeit della FASE CORRENTE: azzera le azioni rimaste al termine dell'azione del TOOL.
+    if (cost.forfeit === s.phase) { if (s.phase === 'move') this._forfeitMove = true; else if (s.phase === 'attack') this._forfeitAttack = true; }
+    // "SCARTA [n] TOOL": scelta interattiva, poi si esegue l'effetto.
+    if (cost.tools) {
+      s.subPhase = 'tool-sacrifice';
+      s.pendingToolSac = { playerId: playerId, need: cost.tools, sel: [], type: obj.type, params: params };
+      return;
+    }
+    this._runToolEffect(playerId, obj.type, params);
+  };
+
+  // Esegue l'EFFETTO del TOOL (dopo aver pagato i costi). Chiamato anche dopo 'tool-sacrifice'.
+  Game.prototype._runToolEffect = function (playerId, type, params) {
+    var s = this.state; params = params || {};
+    switch (type) {
       case 'jetpack': this._openToolDiscard(playerId, 'jetpack'); break; // costo: il giocatore sceglie la carta da scartare
       case 'jump': this._openToolDiscard(playerId, 'jump'); break;
       case 'grapple': this._openToolDiscard(playerId, 'grapple'); break; // costo carta, poi arma il modificatore 'grapple'
@@ -1323,10 +1433,41 @@
         }
         break;
       }
-      // Oggetti d'attacco interattivi: avviano un sotto-flusso e "consumano" l'azione d'attacco.
+      // Oggetti d'attacco interattivi: avviano un sotto-flusso (il costo CONSUMA è già stato pagato).
       case 'elemental_bomb': s.subPhase = 'elemental-target'; s.pendingElemental = { playerId: playerId }; break;
       case 'barrage': s.subPhase = 'barrage-first'; s.pendingBarrage = { playerId: playerId, first: null, second: null }; break;
-      case 'randomizer': s.subPhase = 'randomizer-select'; s.pendingRandomizer = { playerId: playerId, chosen: [], drawn: null, placed: {} }; break;
+      case 'randomizer': {
+        var prd = [];
+        for (var rz = 0; rz < 3; rz++) { if (s.deck.length === 0) this._reshuffleDiscardIntoDeck(); var rzc = this._drawCard(); if (rzc) prd.push(rzc); }
+        if (!prd.length) { this._log(playerId + ' usa Randomizzatore: niente da pescare.'); this._promptCurrentPhase(); break; }
+        s.subPhase = 'randomizer-place'; s.pendingRandomizer = { playerId: playerId, drawn: prd, placed: {} };
+        this._log(playerId + ' usa Randomizzatore: PESCA ' + prd.length + ', SOVRASCRIVI ' + prd.length + ' CELLE.');
+        break;
+      }
+      // ---- Nuovi TOOLS ----
+      case 'carica_disperata': s.subPhase = 'charge-select'; s.pendingCharge = { playerId: playerId }; break;
+      case 'snipe': s.subPhase = 'snipe-select'; s.pendingSnipe = { playerId: playerId }; break;
+      case 'santuario': this._runSantuario(playerId); break;
+      case 'feedback_loop': s.subPhase = 'feedback-select'; s.pendingFeedback = { playerId: playerId }; break;
+      case 'swap': this._startSwap(playerId); break;
+      case 'nuke': s.subPhase = 'nuke-select'; s.pendingNuke = { playerId: playerId }; break;
+      case 'overcharge': {
+        // +2 al VALORE nei CLASH fino a fine turno.
+        s.players[playerId].clashBonusTurn = (s.players[playerId].clashBonusTurn || 0) + 2;
+        this._log(playerId + ' usa Overcharge: +2 nei CLASH fino a fine turno.');
+        break;
+      }
+      case 'toolbox': {
+        // PESCA [2] TOOL dal proprio mazzo (rimescolando gli scarti se serve).
+        var ptb = s.players[playerId], got = 0;
+        for (var tb = 0; tb < 2; tb++) { if (ptb.objectDeck.length === 0) this._reshuffleObjectDiscard(playerId); if (ptb.objectDeck.length) { ptb.objects.push(ptb.objectDeck.shift()); got++; } }
+        this._log(playerId + ' usa Toolbox: PESCA ' + got + ' TOOL dal mazzo.');
+        // Se oltre il limite, scarti forzati (uno per volta).
+        var overTB = nonCharObjects(ptb).length - this._objLimit();
+        if (overTB > 0) { this._chain = []; for (var od = 0; od < overTB; od++) this._chain.push(this._step_openDiscard(playerId)); this._advanceChain(); }
+        break;
+      }
+      case 'shuffle': s.subPhase = 'shuffle-select'; s.pendingShuffle = { playerId: playerId, first: null }; break;
     }
   };
 
@@ -1371,10 +1512,11 @@
   Game.prototype._drawObject = function (playerId) {
     var s = this.state;
     if (!s.modules.objects) return 'off';
-    if (s.objectDeck.length === 0) this._reshuffleObjectDiscard();
-    if (s.objectDeck.length === 0) { this._log('Mazzo Oggetti vuoto: nessuna pesca.'); return 'empty'; }
-    var obj = s.objectDeck.shift();
-    s.players[playerId].objects.push(obj);
+    var p = s.players[playerId];
+    if (p.objectDeck.length === 0) this._reshuffleObjectDiscard(playerId);
+    if (p.objectDeck.length === 0) { this._log(playerId + ': mazzo TOOLS vuoto, nessuna pesca.'); return 'empty'; }
+    var obj = p.objectDeck.shift();
+    p.objects.push(obj);
     this._log(playerId + ' elimina una figura e pesca un oggetto: ' + obj.type + '.');
     return nonCharObjects(s.players[playerId]).length > this._objLimit() ? 'over' : 'ok';
   };
@@ -1392,7 +1534,7 @@
     var obj = findCard(s.players[playerId].objects, objectId);
     if (!obj || obj.fromCharacter) throw new Error('Devi scartare un oggetto non-iniziale.');
     removeCard(s.players[playerId].objects, objectId);
-    this._discardObjectCard(obj);
+    this._discardObjectCard(playerId, obj);
     this._log(playerId + ' scarta l\'oggetto ' + obj.type + ' (limite oggetti).');
     s.pendingObjectDiscard = null; s.subPhase = null;
     this._advanceChain();
@@ -1406,7 +1548,7 @@
   // Pesca fino a N carte Oggetto e apre la scelta di 1 su N (dopo figura colpita / centro conquistato).
   Game.prototype._openAltObject = function (playerId) {
     var s = this.state, drawn = [], n = this._altObjectCount(playerId);
-    for (var i = 0; i < n; i++) { var o = this._drawObjectCard(); if (o) drawn.push(o); }
+    for (var i = 0; i < n; i++) { var o = this._drawObjectCard(playerId); if (o) drawn.push(o); }
     if (!drawn.length) { this._log(playerId + ': nessuna carta Oggetto disponibile da scegliere.'); return false; }
     s.pendingAltMatch = { playerId: playerId, drawn: drawn };
     s.subPhase = 'altmatch-object';
@@ -1461,8 +1603,8 @@
     var chosen = null, rest = [];
     pa.drawn.forEach(function (o) { if (o.id === objectId && !chosen) chosen = o; else rest.push(o); });
     if (!chosen) throw new Error('Oggetto non valido.');
-    rest.forEach(function (o) { self._discardObjectCard(o); }); // le carte non scelte finiscono negli scarti Oggetti
     var pid = pa.playerId;
+    rest.forEach(function (o) { self._discardObjectCard(pid, o); }); // le carte non scelte finiscono negli scarti TOOLS personali
     s.players[pid].objects.push(chosen);
     this._log(pid + ' tiene l\'oggetto ' + chosen.type + ' e scarta le altre ' + rest.length + '.');
     var over = nonCharObjects(s.players[pid]).length > this._objLimit();
@@ -1698,68 +1840,57 @@
     var a = pb.first, c = s.grid[a.x][a.y];
     this._log(pid + ' usa Barrage: distrugge [' + a.x + ',' + a.y + '].');
     c.card = null; c.faceDown = false; c.destroyed = true;
+    this._clearGlassAt(a.x, a.y);
     s.pendingBarrage = null; s.subPhase = null;
     this._promptCurrentPhase(); // Barrage NON consuma l'azione (come Bomba Elementale): puoi ancora attaccare
   };
 
-  // ---- Randomizer ----
-  Game.prototype.randomizerSelectOptions = function () {
-    var s = this.state, out = [];
-    if (s.subPhase !== 'randomizer-select') return out;
-    for (var x = 1; x <= s.gridSize; x++) for (var y = 1; y <= s.gridSize; y++) { var c = s.grid[x][y]; if (!isCenter(x, y, s.gridSize) && !c.destroyed && c.card) out.push({ x: x, y: y, key: cellKey(x, y) }); }
+  // ---- Randomizer: PESCA fino a 3, poi per ogni carta SOVRASCRIVI una CELLA (qualsiasi) ----
+  // CELLE valide per SOVRASCRIVERE: tutte tranne quelle già scelte in questo uso.
+  Game.prototype.randomizerPlaceOptions = function () {
+    var s = this.state, pr = s.pendingRandomizer, out = [];
+    if (s.subPhase !== 'randomizer-place' || !pr) return out;
+    for (var x = 1; x <= s.gridSize; x++) for (var y = 1; y <= s.gridSize; y++) { if (!pr.placed[cellKey(x, y)]) out.push({ x: x, y: y, key: cellKey(x, y) }); }
     return out;
-  };
-  Game.prototype.randomizerToggle = function (x, y) {
-    var s = this.state, pr = s.pendingRandomizer;
-    if (s.subPhase !== 'randomizer-select') throw new Error('Nessun randomizer in corso.');
-    var c = s.grid[x][y]; if (isCenter(x, y, s.gridSize) || c.destroyed || !c.card) throw new Error('Cella non valida.');
-    var key = cellKey(x, y), i = -1;
-    for (var k = 0; k < pr.chosen.length; k++) if (pr.chosen[k].key === key) i = k;
-    if (i >= 0) pr.chosen.splice(i, 1);
-    else { if (pr.chosen.length >= 3) throw new Error('Massimo 3 celle.'); pr.chosen.push({ x: x, y: y, key: key }); }
-  };
-  Game.prototype.randomizerConfirm = function () {
-    var s = this.state, pr = s.pendingRandomizer;
-    if (s.subPhase !== 'randomizer-select') throw new Error('Nessun randomizer in corso.');
-    if (!pr.chosen.length) throw new Error('Scegli almeno una cella.');
-    var n = pr.chosen.length;
-    if (s.deck.length === 0) this._reshuffleDiscardIntoDeck(); // mazzo esaurito → usa gli scarti per un mescolamento reale
-    pr.chosen.forEach(function (ch) { var c = s.grid[ch.x][ch.y]; s.deck.push(c.card); c.card = null; }); // carte nel mazzo, celle svuotate
-    Deck.shuffle(s.deck, this._rng || Math.random);
-    pr.drawn = [];
-    for (var i = 0; i < n && s.deck.length; i++) pr.drawn.push(s.deck.shift());
-    pr.placed = {};
-    this._log(pr.playerId + ' usa Randomizer: ' + n + ' carte rimescolate nel mazzo, pescate ' + pr.drawn.length + '.');
-    s.subPhase = 'randomizer-place';
   };
   Game.prototype.randomizerPlace = function (cardId, x, y) {
     var s = this.state, pr = s.pendingRandomizer;
-    if (s.subPhase !== 'randomizer-place') throw new Error('Nessun randomizer in corso.');
+    if (s.subPhase !== 'randomizer-place' || !pr) throw new Error('Nessun randomizer in corso.');
     var key = cellKey(x, y);
-    if (!pr.chosen.some(function (ch) { return ch.key === key; })) throw new Error('Cella non valida.');
-    if (pr.placed[key]) throw new Error('Cella già occupata.');
+    if (pr.placed[key]) throw new Error('Cella già scelta.');
     if (!pr.drawn.some(function (c) { return c.id === cardId; })) throw new Error('Carta non valida.');
     for (var kk in pr.placed) if (pr.placed[kk] === cardId) throw new Error('Carta già piazzata.');
     pr.placed[key] = cardId;
   };
   Game.prototype.randomizerUnplace = function (x, y) {
     var s = this.state, pr = s.pendingRandomizer;
-    if (s.subPhase !== 'randomizer-place') throw new Error('Nessun randomizer in corso.');
+    if (s.subPhase !== 'randomizer-place' || !pr) throw new Error('Nessun randomizer in corso.');
     delete pr.placed[cellKey(x, y)];
   };
   Game.prototype.randomizerDone = function () {
-    var s = this.state, pr = s.pendingRandomizer;
-    if (s.subPhase !== 'randomizer-place') throw new Error('Nessun randomizer in corso.');
-    if (Object.keys(pr.placed).length !== pr.chosen.length) throw new Error('Posiziona tutte le carte.');
-    pr.chosen.forEach(function (ch) {
-      var cardId = pr.placed[ch.key], card = null;
+    var s = this.state, pr = s.pendingRandomizer, self = this;
+    if (s.subPhase !== 'randomizer-place' || !pr) throw new Error('Nessun randomizer in corso.');
+    if (Object.keys(pr.placed).length !== pr.drawn.length) throw new Error('SOVRASCRIVI una CELLA per ogni carta pescata.');
+    Object.keys(pr.placed).forEach(function (key) {
+      var cardId = pr.placed[key], card = null;
       for (var i = 0; i < pr.drawn.length; i++) if (pr.drawn[i].id === cardId) card = pr.drawn[i];
-      var c = s.grid[ch.x][ch.y]; c.card = card; c.faceDown = false; c.destroyed = false;
+      var xy = key.split(','), c = s.grid[+xy[0]][+xy[1]];
+      self._overwriteCell(c, card); // SOVRASCRIVI: scarta la carta presente e mettine una nuova
     });
     var pid = pr.playerId;
     this._log(pid + ' completa il Randomizzatore.');
     s.pendingRandomizer = null; s.subPhase = null;
-    this._afterActionObject(pid); // usabile in MOVIMENTO o ATTACCO
+    this._promptCurrentPhase(); // il costo CONSUMA è già stato pagato: non consuma l'azione
+  };
+
+  // SOVRASCRIVI una CELLA: scarta la carta presente (se c'è) e mettine un'altra (di solito pescata).
+  // La CELLA torna ONLINE. `newCard` può essere null (svuota).
+  Game.prototype._overwriteCell = function (cell, newCard) {
+    if (cell.card) this._discard(cell.card);
+    cell.card = newCard || null;
+    cell.faceDown = false;
+    cell.destroyed = false;
+    this._clearGlassAt(cell.x, cell.y); // la CELLA cambia: un eventuale GLASS decade
   };
 
   // ---- Ricostruisci (rebuild): PESCA 3, scegli 1, SOVRASCRIVI una CELLA DISTRUTTA o OFFLINE ----
@@ -1804,6 +1935,255 @@
     if (this.state.phase === 'move') this._promptMove(); else this._promptAttack();
   };
 
+  // ================================================================== COSTO "SCARTA [n] TOOL" (tool-sacrifice)
+  Game.prototype.toolSacrificeOptions = function () {
+    var s = this.state, ps = s.pendingToolSac;
+    return (s.subPhase === 'tool-sacrifice' && ps) ? s.players[ps.playerId].objects.slice() : [];
+  };
+  Game.prototype.toolSacrificeChoose = function (objectId) {
+    var s = this.state, ps = s.pendingToolSac;
+    if (s.subPhase !== 'tool-sacrifice' || !ps) throw new Error('Nessun sacrificio TOOL in corso.');
+    var p = s.players[ps.playerId], obj = p.objects.filter(function (o) { return o.id === objectId; })[0];
+    if (!obj) throw new Error('TOOL non valido.');
+    removeCard(p.objects, objectId); this._discardObjectCard(ps.playerId, obj);
+    ps.sel.push(objectId);
+    this._log(ps.playerId + ' scarta il TOOL ' + obj.type + ' (costo).');
+    if (ps.sel.length >= ps.need) {
+      var pid = ps.playerId, type = ps.type, params = ps.params;
+      s.pendingToolSac = null; s.subPhase = null;
+      this._runToolEffect(pid, type, params);
+    }
+  };
+
+  // ================================================================== Carica Disperata (charge-select)
+  Game.prototype.chargeTargets = function () {
+    var s = this.state, pc = s.pendingCharge;
+    return (s.subPhase === 'charge-select' && pc) ? this._lineTargets(pc.playerId) : [];
+  };
+  Game.prototype.chargeChoose = function (x, y) {
+    var s = this.state, pc = s.pendingCharge;
+    if (s.subPhase !== 'charge-select' || !pc) throw new Error('Nessuna Carica in corso.');
+    if (!this.chargeTargets().some(function (o) { return o.x === x && o.y === y; })) throw new Error('Bersaglio non valido.');
+    var id = pc.playerId, defId = s.grid[x][y].pawn;
+    s.pendingCharge = null;
+    s.players[id].stats.moves += 1; this._markActed(id);
+    this._recordTrail('move', id, this.pawnCell(id), s.grid[x][y]);
+    s.subPhase = 'clash-cards';
+    s.pendingClash = { attackerId: id, defenderId: defId, x: x, y: y, moveCard: null, attackerCardId: null, defenderCardId: null, whoChooses: id };
+    this._log(id + ' usa Carica Disperata su [' + x + ',' + y + '] → clash.');
+    this._clashAdvanceAuto();
+  };
+
+  // ================================================================== Snipe (snipe-select)
+  Game.prototype.snipeTargets = function () {
+    var s = this.state, pc = s.pendingSnipe;
+    return (s.subPhase === 'snipe-select' && pc) ? this._lineTargets(pc.playerId) : [];
+  };
+  Game.prototype.snipeChoose = function (x, y) {
+    var s = this.state, pc = s.pendingSnipe;
+    if (s.subPhase !== 'snipe-select' || !pc) throw new Error('Nessuno Snipe in corso.');
+    if (!this.snipeTargets().some(function (o) { return o.x === x && o.y === y; })) throw new Error('Bersaglio non valido.');
+    var id = pc.playerId, defId = s.grid[x][y].pawn;
+    s.pendingSnipe = null;
+    s.players[id].stats.attacks += 1; this._markActed(id);
+    this._recordTrail('shot', id, this.pawnCell(id), s.grid[x][y]);
+    s.subPhase = 'clash-cards';
+    s.pendingClash = { attackerId: id, defenderId: defId, x: x, y: y, moveCard: null, isAttack: true, attackMod: null, attackerCardId: null, defenderCardId: null, whoChooses: id };
+    this._log(id + ' usa Snipe su [' + x + ',' + y + '] → clash.');
+    this._clashAdvanceAuto();
+  };
+
+  // ================================================================== Santuario (automatico)
+  Game.prototype._runSantuario = function (id) {
+    var s = this.state, pc = this.pawnCell(id), self = this, drawn = [];
+    for (var i = 0; i < 5; i++) { if (s.deck.length === 0) this._reshuffleDiscardIntoDeck(); var c = this._drawCard(); if (c) drawn.push(c); }
+    var cells = [];
+    if (pc) { cells.push(s.grid[pc.x][pc.y]); orthogonalNeighbors(pc.x, pc.y, s.gridSize).forEach(function (d) { cells.push(s.grid[d[0]][d[1]]); }); }
+    var done = 0;
+    cells.forEach(function (cell) { if (drawn.length) { self._overwriteCell(cell, drawn.shift()); done++; } });
+    drawn.forEach(function (c) { self._discard(c); }); // carte pescate in eccesso
+    this._log(id + ' usa Santuario: SOVRASCRIVE ' + done + ' CELLE.');
+    this._promptCurrentPhase(); // non consuma l'azione
+  };
+
+  // ================================================================== Feedback Loop (feedback-select)
+  Game.prototype.feedbackOptions = function () {
+    var s = this.state, pf = s.pendingFeedback;
+    return (s.subPhase === 'feedback-select' && pf) ? this.availableRevealed(pf.playerId) : [];
+  };
+  Game.prototype.feedbackChoose = function (cardId) {
+    var s = this.state, pf = s.pendingFeedback;
+    if (s.subPhase !== 'feedback-select' || !pf) throw new Error('Nessun Feedback in corso.');
+    var id = pf.playerId, p = s.players[id];
+    var card = findCard(this.availableRevealed(id), cardId);
+    if (!card) throw new Error('Carta non valida.');
+    var pc = this.pawnCell(id);
+    removeCard(p.hand, cardId); var ri = p.revealedIds.indexOf(cardId); if (ri !== -1) p.revealedIds.splice(ri, 1);
+    if (pc) this._overwriteCell(pc, card); // SOVRASCRIVI la propria CELLA con la carta scelta
+    if (s.deck.length === 0) this._reshuffleDiscardIntoDeck();
+    var nc = this._drawCard(); if (nc) { p.hand.push(nc); p.revealedIds.push(nc.id); }
+    this._log(id + ' usa Feedback Loop: SOVRASCRIVE la propria CELLA e PESCA 1 → STACK ATTIVA.');
+    s.pendingFeedback = null; s.subPhase = null;
+    this._promptCurrentPhase(); // non consuma l'azione
+  };
+
+  // ================================================================== Swap! (swap-target)
+  Game.prototype._startSwap = function (id) {
+    var s = this.state, pc = this.pawnCell(id);
+    if (s.deck.length === 0) this._reshuffleDiscardIntoDeck();
+    var nc = this._drawCard();
+    if (pc) this._overwriteCell(pc, nc || null); // PESCA 1 e SOVRASCRIVI la propria CELLA
+    this._log(id + ' usa Swap!: PESCA 1 e SOVRASCRIVE la propria CELLA.');
+    var opps = this._swapTargets(id);
+    if (opps.length === 1) { this._swapWith(id, opps[0]); return; }
+    s.subPhase = 'swap-target'; s.pendingSwap = { playerId: id };
+  };
+  Game.prototype.swapTargets = function () {
+    var s = this.state, ps = s.pendingSwap;
+    return (s.subPhase === 'swap-target' && ps) ? this._swapTargets(ps.playerId) : [];
+  };
+  Game.prototype.swapChoose = function (oppId) {
+    var s = this.state, ps = s.pendingSwap;
+    if (s.subPhase !== 'swap-target' || !ps) throw new Error('Nessuno Swap in corso.');
+    if (this._swapTargets(ps.playerId).indexOf(oppId) === -1) throw new Error('Bersaglio non valido.');
+    var id = ps.playerId; s.pendingSwap = null; s.subPhase = null;
+    this._swapWith(id, oppId);
+  };
+  Game.prototype._swapWith = function (id, oppId) {
+    var a = this.pawnCell(id), b = this.pawnCell(oppId);
+    if (a && b) { a.pawn = oppId; b.pawn = id; this._recordTrail('move', id, a, b); }
+    this._log(id + ' scambia la posizione dell\'ARM con ' + oppId + '.');
+    this._afterMoveAction(id); // Swap è il movimento del turno: consuma l'azione
+  };
+
+  // ================================================================== Nuke (nuke-select)
+  Game.prototype.nukeOptions = function () {
+    var s = this.state, pn = s.pendingNuke;
+    return (s.subPhase === 'nuke-select' && pn) ? this.legalShots(pn.playerId) : [];
+  };
+  Game.prototype.nukeChoose = function (x, y, cardId) {
+    var s = this.state, pn = s.pendingNuke, self = this;
+    if (s.subPhase !== 'nuke-select' || !pn) throw new Error('Nessun Nuke in corso.');
+    var id = pn.playerId, p = s.players[id];
+    var cell = s.grid[x][y], card = findCard(this.availableRevealed(id), cardId);
+    if (!card || !this._matches(id, card, cell)) throw new Error('Carta non valida per la CELLA.');
+    removeCard(p.hand, cardId); this._discard(card);
+    s.pendingNuke = null; s.subPhase = null;
+    s.players[id].stats.attacks += 1; this._markActed(id);
+    this._recordTrail('shot', id, this.pawnCell(id), cell);
+    var cells = [{ x: x, y: y }];
+    orthogonalNeighbors(x, y, s.gridSize).forEach(function (d) { cells.push({ x: d[0], y: d[1] }); });
+    var hitPawns = {};
+    cells.forEach(function (xy) {
+      var c = s.grid[xy.x][xy.y];
+      self._breakGlassAt(xy.x, xy.y, id); // un MATCH avversario distrugge un eventuale GLASS
+      if (c.destroyed) return;
+      if (c.card && !c.faceDown && Deck.isFigure(c.card)) { // OBIETTIVO: punti (nessun TOOL)
+        var pts = Deck.figurePoints(c.card);
+        self._addScore(id, pts, 'ptsFigure'); p.figuresMatched += 1;
+        self._log(id + ' Nuke colpisce un OBIETTIVO in [' + xy.x + ',' + xy.y + ']: +' + pts + '.');
+      }
+      if (c.pawn) hitPawns[c.pawn] = true; // ARM in cella → -2 punti (qualsiasi giocatore)
+      if (c.card) c.faceDown = true; // diventa OFFLINE
+    });
+    Object.keys(hitPawns).forEach(function (pid2) { self._losePoints(pid2, 2); self._log(pid2 + ' perde 2 punti (Nuke).'); });
+    this._log(id + ' usa Nuke su [' + x + ',' + y + '].');
+    this._afterAttackAction(id); // consuma l'attacco; con "Non puoi effettuare la fase di ATTACCO" azzera il resto
+  };
+
+  // ================================================================== Shuffle (shuffle-select)
+  // CELLE ONLINE VUOTE (scoperte, senza ARM): se ne scelgono 2 e se ne scambiano le carte.
+  Game.prototype._shuffleCells = function () {
+    var s = this.state, out = [];
+    for (var x = 1; x <= s.gridSize; x++) for (var y = 1; y <= s.gridSize; y++) {
+      var c = s.grid[x][y];
+      if (!c.destroyed && c.card && !c.faceDown && !c.pawn) out.push({ x: x, y: y, key: cellKey(x, y) });
+    }
+    return out;
+  };
+  Game.prototype.shuffleOptions = function () {
+    var s = this.state, ps = s.pendingShuffle;
+    if (s.subPhase !== 'shuffle-select' || !ps) return [];
+    return this._shuffleCells().filter(function (o) { return !ps.first || o.key !== ps.first.key; });
+  };
+  Game.prototype.shuffleChoose = function (x, y) {
+    var s = this.state, ps = s.pendingShuffle;
+    if (s.subPhase !== 'shuffle-select' || !ps) throw new Error('Nessuno Shuffle in corso.');
+    if (!this.shuffleOptions().some(function (o) { return o.x === x && o.y === y; })) throw new Error('CELLA non valida (serve ONLINE VUOTA).');
+    if (!ps.first) { ps.first = { x: x, y: y, key: cellKey(x, y) }; return; }
+    var a = s.grid[ps.first.x][ps.first.y], b = s.grid[x][y];
+    var tmp = a.card; a.card = b.card; b.card = tmp; // scambia le carte
+    this._log(ps.playerId + ' usa Shuffle: scambia [' + ps.first.x + ',' + ps.first.y + '] con [' + x + ',' + y + '].');
+    s.pendingShuffle = null; s.subPhase = null;
+    this._promptCurrentPhase(); // costo nullo: non consuma l'azione
+  };
+
+  // ================================================================== GLASS (pilota Wallie & Glass)
+  // La SKILL attiva sostituisce un'azione di MOVIMENTO/ATTACCO: se non hai GLASS sul campo, MATCHA una
+  // CELLA ORTOGONALE e vi posizioni il segnalino GLASS (l'ARM resta fermo).
+  Game.prototype._isWallie = function (id) { return this.state.modules.powers && this.state.players[id].character === 'wallie'; };
+  Game.prototype.canGlass = function (id) {
+    var s = this.state;
+    if (!this._isWallie(id) || s.gameOver || s.subPhase) return false;
+    if (s.activePlayer !== id || s.actionsLeft <= 0) return false;
+    if (s.phase !== 'move' && s.phase !== 'attack') return false;
+    if (s.players[id].glass) return false; // un solo GLASS per volta
+    return this.glassTargets(id).length > 0;
+  };
+  Game.prototype.glassTargets = function (id) {
+    var s = this.state, pc = this.pawnCell(id), self = this, out = [];
+    if (!pc || s.players[id].glass) return out;
+    var revealed = this.availableRevealed(id);
+    orthogonalNeighbors(pc.x, pc.y, s.gridSize).forEach(function (d) {
+      var c = s.grid[d[0]][d[1]];
+      if (c.destroyed || !c.card || c.pawn) return; // CELLA ONLINE senza ARM
+      if (revealed.some(function (cc) { return self._matches(id, cc, c); })) out.push({ x: d[0], y: d[1], key: cellKey(d[0], d[1]) });
+    });
+    return out;
+  };
+  Game.prototype.glassPlace = function (id, x, y, cardId) {
+    var s = this.state;
+    if (!this.canGlass(id)) throw new Error('GLASS non attivabile ora.');
+    if (!this.glassTargets(id).some(function (o) { return o.x === x && o.y === y; })) throw new Error('CELLA non valida per GLASS.');
+    var p = s.players[id], card = findCard(this.availableRevealed(id), cardId);
+    if (!card || !this._matches(id, card, s.grid[x][y])) throw new Error('Carta non valida per il MATCH.');
+    removeCard(p.hand, cardId); var ri = p.revealedIds.indexOf(cardId); if (ri !== -1) p.revealedIds.splice(ri, 1);
+    this._discard(card);
+    p.glass = { x: x, y: y };
+    this._markActed(id);
+    this._log(id + ' (Wallie & Glass) posiziona il segnalino GLASS su [' + x + ',' + y + '].');
+    if (s.phase === 'move') this._afterMoveAction(id); else this._afterAttackAction(id); // sostituisce l'azione
+  };
+  // Bonus al VALORE nei CLASH: Wallie & Glass (+2 se non ha GLASS sul campo) + Overcharge (+2 fino a fine turno).
+  Game.prototype._clashBonus = function (id) {
+    var p = this.state.players[id];
+    return ((this._isWallie(id) && !p.glass) ? 2 : 0) + (p.clashBonusTurn || 0);
+  };
+  // Esito del CLASH con il bonus passivo di CLASH sommato al VALORE delle carte.
+  Game.prototype._resolveClashWithBonus = function (attId, attCard, defId, defCard) {
+    var av = attCard.value + this._clashBonus(attId);
+    var dv = defCard.value + this._clashBonus(defId);
+    if (av !== dv) return av > dv ? 'attacker' : 'defender';
+    var w = suitClash(attCard.suit, defCard.suit);
+    return w === 'a' ? 'attacker' : (w === 'b' ? 'defender' : 'tie');
+  };
+  // Proprietario del GLASS su una CELLA (o null).
+  Game.prototype._glassOwnerAt = function (x, y) {
+    var s = this.state, ids = this.allPlayers();
+    for (var i = 0; i < ids.length; i++) { var g = s.players[ids[i]].glass; if (g && g.x === x && g.y === y) return ids[i]; }
+    return null;
+  };
+  // Un avversario MATCHA la CELLA del GLASS → il GLASS viene distrutto (nessun punto).
+  Game.prototype._breakGlassAt = function (x, y, byId) {
+    var owner = this._glassOwnerAt(x, y);
+    if (owner && owner !== byId) { this.state.players[owner].glass = null; this._log(byId + ' distrugge il segnalino GLASS di ' + owner + ' su [' + x + ',' + y + '].'); }
+  };
+  // Rimuove un eventuale GLASS su una CELLA (distruzione/sovrascrittura della CELLA), senza punti.
+  Game.prototype._clearGlassAt = function (x, y) {
+    var owner = this._glassOwnerAt(x, y);
+    if (owner) { this.state.players[owner].glass = null; this._log('Il segnalino GLASS di ' + owner + ' su [' + x + ',' + y + '] viene rimosso.'); }
+  };
+
   // ================================================================== Catena post-azione
   Game.prototype._step_afterMove = function (id) { var self = this; return function () { self._afterMoveAction(id); }; };
   Game.prototype._step_afterAttack = function (id) { var self = this; return function () { self._afterAttackAction(id); }; };
@@ -1839,11 +2219,12 @@
       var p = s.players[id];
       p.revealedIds = []; p.revealedCards = [];
       p.pendingActions = { moves: 1, attacks: 1 };
+      p.clashBonusTurn = 0; // il bonus CLASH di Overcharge dura fino a fine turno
     });
     if (s.endTriggered || s.round >= s.maxRounds) {
       // Ultimo ROUND: nessuna pesca, ma i bonus di SUIT che valgono punti (oro, spade) contano lo stesso.
       this._chain = [];
-      if (s.ruleset === 'C') everyone.forEach(function (id) { self._chain.push(self._step_endCellBonus(id, true)); });
+      if (s.ruleset === 'C') everyone.forEach(function (id) { self._chain.push(self._step_endCellBonus(id, true)); self._chain.push(self._step_endGlassBonus(id, true)); });
       this._chain.push(this._step_finishGame());
       this._advanceChain();
       return;
@@ -1855,7 +2236,7 @@
     this._chain = everyone.map(function (id) { return self._step_endDiscard(id); });
     this._chain.push(this._step_finishRoundDraw());
     // Bonus di SUIT di fine ROUND: solo nel regolamento corrente (Ruleset C).
-    if (s.ruleset === 'C') everyone.forEach(function (id) { self._chain.push(self._step_endCellBonus(id)); });
+    if (s.ruleset === 'C') everyone.forEach(function (id) { self._chain.push(self._step_endCellBonus(id)); self._chain.push(self._step_endGlassBonus(id)); });
     this._chain.push(this._step_startNextRound());
     this._advanceChain();
   };
@@ -1891,42 +2272,49 @@
   // (oro e spade); coppe/bastoni (pesca TOOL/carta) sarebbero inutili a partita finita.
   Game.prototype._step_endCellBonus = function (id, pointsOnly) {
     var self = this;
-    return function () {
-      var s = self.state, pc = self.pawnCell(id);
-      if (!pc || pc.destroyed || !pc.card || pc.faceDown) return; // solo su CELLA ONLINE
-      var p = s.players[id], at = '[' + pc.x + ',' + pc.y + ']';
-      var suit = pc.card.suit;
-      if (pointsOnly && (suit === 'coppe' || suit === 'bastoni')) return;
-      switch (suit) {
-        case 'oro':
-          self._addScore(id, 1, 'ptsBonus');
-          self._log(id + ' bonus fine ROUND su ' + at + ' (oro): +1 punto.');
-          break;
-        case 'bastoni': {
-          var c = self._drawCard();
-          if (c) { p.hand.push(c); self._log(id + ' bonus fine ROUND su ' + at + ' (bastoni): PESCA 1 carta (' + p.hand.length + ' in mano).'); }
-          else self._log(id + ' bonus fine ROUND su ' + at + ' (bastoni): DECK vuoto, nessuna pesca.');
-          break;
-        }
-        case 'coppe': {
-          if (!s.modules.objects) break;
-          if (s.objectDeck.length === 0) self._reshuffleObjectDiscard();
-          if (s.objectDeck.length === 0) { self._log(id + ' bonus fine ROUND su ' + at + ' (coppe): TOOLS HEAP vuota, nessun TOOL.'); break; }
-          var obj = s.objectDeck.shift();
-          p.objects.push(obj);
-          self._log(id + ' bonus fine ROUND su ' + at + ' (coppe): pesca il TOOL ' + obj.type + '.');
-          if (nonCharObjects(p).length > self._objLimit()) self._step_openDiscard(id)(); // oltre il limite: scarto obbligato
-          break;
-        }
-        case 'spade': {
-          var targets = self._others(id).filter(function (o) { return s.players[o].score > 0; });
-          if (targets.length === 0) { self._log(id + ' bonus fine ROUND su ' + at + ' (spade): nessun avversario con punti.'); break; }
-          if (targets.length === 1) { self._stealPoint(id, targets[0]); break; }
-          s.subPhase = 'endbonus-steal'; s.pendingEndBonus = { playerId: id, options: targets }; // multiplayer: scegli il bersaglio
-          break;
-        }
+    return function () { self._applySuitBonus(id, self.pawnCell(id), pointsOnly, 'ARM'); };
+  };
+  // Wallie & Glass: a fine ROUND ottiene il bonus di SUIT anche per la CELLA del segnalino GLASS.
+  Game.prototype._step_endGlassBonus = function (id, pointsOnly) {
+    var self = this;
+    return function () { var g = self.state.players[id].glass; if (g) self._applySuitBonus(id, self.state.grid[g.x][g.y], pointsOnly, 'GLASS'); };
+  };
+  // Applica il bonus di fine ROUND in base alla SUIT di una CELLA ONLINE (per l'ARM o per il GLASS).
+  Game.prototype._applySuitBonus = function (id, cell, pointsOnly, src) {
+    var s = this.state, self = this;
+    if (!cell || cell.destroyed || !cell.card || cell.faceDown) return; // solo su CELLA ONLINE
+    var p = s.players[id], at = '[' + cell.x + ',' + cell.y + ']' + (src === 'GLASS' ? ' (GLASS)' : '');
+    var suit = cell.card.suit;
+    if (pointsOnly && (suit === 'coppe' || suit === 'bastoni')) return;
+    switch (suit) {
+      case 'oro':
+        self._addScore(id, 1, 'ptsBonus');
+        self._log(id + ' bonus fine ROUND su ' + at + ' (oro): +1 punto.');
+        break;
+      case 'bastoni': {
+        var c = self._drawCard();
+        if (c) { p.hand.push(c); self._log(id + ' bonus fine ROUND su ' + at + ' (bastoni): PESCA 1 carta (' + p.hand.length + ' in mano).'); }
+        else self._log(id + ' bonus fine ROUND su ' + at + ' (bastoni): DECK vuoto, nessuna pesca.');
+        break;
       }
-    };
+      case 'coppe': {
+        if (!s.modules.objects) break;
+        if (p.objectDeck.length === 0) self._reshuffleObjectDiscard(id);
+        if (p.objectDeck.length === 0) { self._log(id + ' bonus fine ROUND su ' + at + ' (coppe): mazzo/scarti TOOLS vuoti, nessun TOOL.'); break; }
+        var obj = p.objectDeck.shift();
+        p.objects.push(obj);
+        self._log(id + ' bonus fine ROUND su ' + at + ' (coppe): pesca il TOOL ' + obj.type + '.');
+        if (nonCharObjects(p).length > self._objLimit()) self._step_openDiscard(id)(); // oltre il limite: scarto obbligato
+        break;
+      }
+      case 'spade': {
+        var targets = self._others(id).filter(function (o) { return s.players[o].score > 0; });
+        if (targets.length === 0) { self._log(id + ' bonus fine ROUND su ' + at + ' (spade): nessun avversario con punti.'); break; }
+        if (targets.length === 1) { self._stealPoint(id, targets[0]); break; }
+        s.subPhase = 'endbonus-steal'; s.pendingEndBonus = { playerId: id, options: targets }; // multiplayer: scegli il bersaglio
+        break;
+      }
+    }
   };
   // Toglie 1 punto (mai sotto 0) a `targetId`, mantenendo la coerenza col breakdown statistiche.
   Game.prototype._stealPoint = function (id, targetId) {

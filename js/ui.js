@@ -45,9 +45,16 @@
   }
   // Faccia di una carta unificata: doppio numero + doppio seme agli angoli (o singolo).
   // inverted = fondo colorato (figure/centro) → inchiostro/semi bianchi.
-  function cardFace(card, inverted, forceDouble) {
-    var f = h('div', 'cface' + ((forceDouble || VIEW.cardDouble) ? '' : ' single'));
-    function numEl() { var n = h('span', 'cnum' + (needsDot(card.value) ? ' dot' : '')); n.appendChild(h('span', 'cn', String(card.value))); return n; }
+  function cardFace(card, inverted, forceDouble, bonus) {
+    // Le carte mostrano SEMPRE un solo VALORE e una sola SUIT (niente doppio numero/seme, niente puntini su 6/9).
+    var f = h('div', 'cface single');
+    function numEl() {
+      var n = h('span', 'cnum');
+      n.appendChild(h('span', 'cn', String(card.value)));
+      // Indicatore bonus al VALORE nei CLASH (+N in grigio, sotto al numero, allineato a sinistra).
+      if (bonus) n.appendChild(h('span', 'cbonus', '+' + bonus));
+      return n;
+    }
     var tl = h('div', 'corner tl'); tl.appendChild(numEl());
     var tr = h('div', 'corner tr'); tr.appendChild(suitIcon(card.suit, inverted));
     var br = h('div', 'corner br'); br.appendChild(numEl());
@@ -86,8 +93,10 @@
   function objectCardEl(type, opts) {
     opts = opts || {};
     var def = OBJ ? OBJ.def(type) : null;
-    var card = h('div', 'obj-vcard' + (opts.selectable ? ' selectable' : '') + (opts.selected ? ' selected' : ''));
-    card.appendChild(h('div', 'ovc-phase-badge', def ? def.phaseLabel : ''));
+    var card = h('div', 'obj-vcard' + (opts.half ? ' ovc-half' : '') + (opts.selectable ? ' selectable' : '') + (opts.selected ? ' selected' : ''));
+    // Nelle card dimezzate l'etichetta di fase è abbreviata (D/M/A) per non andare in overflow.
+    var phaseTxt = def ? (opts.half ? (def.phaseAbbr || def.phaseLabel) : def.phaseLabel) : '';
+    card.appendChild(h('div', 'ovc-phase-badge', phaseTxt));
     card.appendChild(h('div', 'ovc-name', def ? def.label : type));
     card.appendChild(h('div', 'ovc-div'));
     var cost = h('div', 'ovc-cost');
@@ -356,6 +365,8 @@
         if (s.modules.powers) { chChip.appendChild(h('span', 'tooltip', characterPowerDesc(p.character))); bindTip(chChip); }
         ident.appendChild(chChip);
       }
+      // Pillole mazzo/scarti TOOLS personali, accanto all'abilità del pilota.
+      var tp = toolPills(s, id, 'pc-tp'); if (tp) ident.appendChild(tp);
       if (isCpu(id)) ident.appendChild(h('span', 'pc-chip pc-cpu-chip', 'CPU'));
       top.appendChild(ident);
 
@@ -383,6 +394,7 @@
       // Con 3-4 giocatori le schede sono strette: mostra token compatti (es. 7B, 5O) colorati per SUIT.
       var compact = game.allPlayers().length > 2;
       var handCell = h('div', 'pc-cell pc-hand' + (compact ? ' pc-hand-compact' : ''));
+      // Le carte mostrate qui sono la STACK ATTIVA (scelte): niente indicatore bonus CLASH.
       if (p.revealedCards && p.revealedCards.length) p.revealedCards.forEach(function (c) {
         if (!c) return;
         var used = !p.hand.some(function (x) { return x.id === c.id; });
@@ -421,10 +433,10 @@
       return wrap;
     }
 
-    function miniCard(c, used) {
+    function miniCard(c, used, bonus) {
       var inv = isFigureVal(c.value);
       var m = h('span', 'mini' + (inv ? ' inv suit-bg-' + c.suit : ' suit-' + c.suit) + (used ? ' used' : ''));
-      m.appendChild(cardFace(c, inv));
+      m.appendChild(cardFace(c, inv, false, bonus));
       return m;
     }
     // Token compatto (es. "7B") colorato per SUIT, come nel log del clash. Usato con 3-4 giocatori.
@@ -446,6 +458,27 @@
       var card = h('div', 'card reveal-card' + (inv ? ' inv suit-bg-' + c.suit : ''));
       card.appendChild(cardFace(c, inv, true));
       return card;
+    }
+
+    // Due pillole "mazzo TOOLS" + "scarti TOOLS" personali del giocatore, consultabili al click.
+    // `cls` aggiunge una classe di contesto (es. 'pc-tp' nella scheda punteggio, 'ah-tp' nella scheda in basso).
+    function toolPills(s, id, cls) {
+      if (!s.modules.objects) return null;
+      var p = s.players[id];
+      var wrap = h('span', 'tool-pills' + (cls ? ' ' + cls : ''));
+      // Mazzo TOOLS: solo indicatore (non consultabile, la pesca è coperta).
+      var deck = h('span', 'tool-pill tp-deck');
+      deck.appendChild(h('span', 'tp-ic', '🂠'));
+      deck.appendChild(h('b', null, String(p.objectDeck.length)));
+      deck.title = 'Carte nel mazzo TOOLS di Pilota ' + id + '.';
+      // Scarti TOOLS: consultabili.
+      var disc = h('span', 'tool-pill tp-disc');
+      disc.appendChild(h('span', 'tp-ic', '♺'));
+      disc.appendChild(h('b', null, String(p.objectDiscard.length)));
+      disc.title = 'Scarti TOOLS di Pilota ' + id + ' (clicca per consultare).';
+      disc.onclick = function (e) { e.stopPropagation(); openPlayerToolsDialog(s, id); };
+      wrap.appendChild(deck); wrap.appendChild(disc);
+      return wrap;
     }
 
     // Chip degli oggetti posseduti (con tooltip), inseriti in `container`.
@@ -470,7 +503,12 @@
       if (s.subPhase === 'barrage-first') return game.barrageFirstOptions();
       if (s.subPhase === 'barrage-second') return game.barrageSecondOptions();
       if (s.subPhase === 'barrage-third') return game.barrageThirdOptions();
-      if (s.subPhase === 'randomizer-select') return game.randomizerSelectOptions();
+      if (s.subPhase === 'randomizer-place') return game.randomizerPlaceOptions();
+      if (s.subPhase === 'charge-select') return game.chargeTargets();
+      if (s.subPhase === 'snipe-select') return game.snipeTargets();
+      if (s.subPhase === 'nuke-select') return game.nukeOptions();
+      if (s.subPhase === 'shuffle-select') return game.shuffleOptions();
+      if (!s.subPhase && ui.glassMode && (s.phase === 'move' || s.phase === 'attack')) return game.glassTargets(s.activePlayer);
       if (!s.subPhase && ui.brawlerMode && (s.phase === 'move' || s.phase === 'attack')) return game.brawlerTargets(s.activePlayer);
       return [];
     }
@@ -488,14 +526,17 @@
       dom.board.style.gridTemplateRows = 'repeat(' + N + ', var(--cell))';
       var selectable = currentSelectableCells(s);
       var relocKeys = {}, pick = {}, chosenKeys = {}, dropKeys = {};
+      // Mappa dei segnalini GLASS per CELLA (key "x,y" → id proprietario).
+      var glassAt = {};
+      game.allPlayers().forEach(function (id) { var g = s.players[id].glass; if (g) glassAt[g.x + ',' + g.y] = id; });
       if (s.subPhase === 'clash-reloc' || s.subPhase === 'forced-reloc') game.relocationOptions().forEach(function (o) { relocKeys[o.key] = true; });
       pickCells(s).forEach(function (o) { pick[o.key] = true; });
-      if (s.subPhase === 'randomizer-select') s.pendingRandomizer.chosen.forEach(function (o) { chosenKeys[o.key] = true; });
       if ((s.subPhase === 'barrage-second' || s.subPhase === 'barrage-third') && s.pendingBarrage) {
         [s.pendingBarrage.first, s.pendingBarrage.second].forEach(function (c) { if (c) chosenKeys[c.x + ',' + c.y] = true; });
       }
+      if (s.subPhase === 'shuffle-select' && s.pendingShuffle && s.pendingShuffle.first) chosenKeys[s.pendingShuffle.first.key] = true;
       var rz = s.subPhase === 'randomizer-place' ? s.pendingRandomizer : null;
-      if (rz) rz.chosen.forEach(function (o) { if (!rz.placed[o.key]) dropKeys[o.key] = true; });
+      if (rz) { Object.keys(rz.placed).forEach(function (k) { chosenKeys[k] = true; }); if (ui.selectedDrawn) game.randomizerPlaceOptions().forEach(function (o) { dropKeys[o.key] = true; }); }
       // Tooltip sulle CELLE: condizioni di MATCH (turno umano di mov/attacco) e/o bonus di fine ROUND.
       var condTipOn = !s.gameOver && !ui.gate && !s.subPhase && (s.phase === 'move' || s.phase === 'attack') && !isCpu(s.activePlayer);
       var cellTipOn = (condTipOn && VIEW.showConditions) || (VIEW.showCellBonus && !s.gameOver && !ui.gate);
@@ -543,6 +584,14 @@
         if (cell.pawn) {
           c.appendChild(h('div', 'cell-ring ' + cell.pawn)); // outline colorato della cella con pedina
           c.appendChild(h('div', 'pawn ' + cell.pawn, cell.pawn));
+        }
+        // Segnalino GLASS (pilota Wallie & Glass): pillola del colore del giocatore con testo "GLASS".
+        var glassOwner = glassAt[key];
+        if (glassOwner) {
+          var gt = h('div', 'glass-token', 'GLASS');
+          if (PLAYER_COLOR[glassOwner]) { gt.style.background = PLAYER_COLOR[glassOwner]; gt.style.color = PLAYER_TEXT[glassOwner] || '#fff'; gt.style.borderColor = PLAYER_COLOR[glassOwner]; }
+          gt.title = 'Segnalino GLASS di Pilota ' + glassOwner;
+          c.appendChild(gt);
         }
         if (dropKeys[key]) {
           c.addEventListener('dragover', function (e) { e.preventDefault(); });
@@ -640,15 +689,9 @@
       dom.log.scrollTop = 0;
     }
 
-    // ---- Deck + pila scarti accanto alla griglia ----
+    // ---- Pila scarti (HEAP) del DECK, a destra della griglia ----
     function renderPiles(s) {
       dom.piles.innerHTML = '';
-      // Mazzo: dorso della carta + conteggio.
-      var deckWrap = h('div', 'pile-wrap');
-      var deck = h('div', 'pile deck' + (s.deck.length ? '' : ' empty'));
-      var db = h('div', 'pile-badge'); db.appendChild(h('b', null, String(s.deck.length))); deck.appendChild(db);
-      deckWrap.appendChild(deck); deckWrap.appendChild(h('div', 'pile-cap', 'DECK'));
-      dom.piles.appendChild(deckWrap);
       // Scarti: carta in cima + conteggio, cliccabile.
       var discWrap = h('div', 'pile-wrap');
       var top = s.discard.length ? s.discard[s.discard.length - 1] : null;
@@ -660,33 +703,28 @@
       dom.piles.appendChild(discWrap);
     }
 
-    // ---- Mazzo + scarti Oggetti (colonna a sinistra della griglia) ----
+    // ---- Mazzo (DECK) a sinistra della griglia ----
+    // I mazzi/scarti dei TOOLS sono ora personali e mostrati nelle schede dei giocatori.
     function renderObjectPiles(s) {
       dom.objectPiles.innerHTML = '';
-      if (!s.modules.objects) return;
-      // Mazzo Oggetti: dorso + conteggio.
+      // Mazzo: dorso della carta + conteggio.
       var deckWrap = h('div', 'pile-wrap');
-      var deck = h('div', 'pile deck obj-pile' + (s.objectDeck.length ? '' : ' empty'));
-      var db = h('div', 'pile-badge'); db.appendChild(h('b', null, String(s.objectDeck.length))); deck.appendChild(db);
-      deckWrap.appendChild(deck); deckWrap.appendChild(h('div', 'pile-cap', 'TOOLS'));
+      var deck = h('div', 'pile deck' + (s.deck.length ? '' : ' empty'));
+      var db = h('div', 'pile-badge'); db.appendChild(h('b', null, String(s.deck.length))); deck.appendChild(db);
+      deckWrap.appendChild(deck); deckWrap.appendChild(h('div', 'pile-cap', 'DECK'));
       dom.objectPiles.appendChild(deckWrap);
-      // Scarti Oggetti: quadrato + conteggio, ispezionabile.
-      var discWrap = h('div', 'pile-wrap');
-      var disc = h('div', 'pile obj-pile obj-discard' + (s.objectDiscard.length ? '' : ' empty'));
-      var xb = h('div', 'pile-badge'); xb.appendChild(h('b', null, String(s.objectDiscard.length))); disc.appendChild(xb);
-      disc.onclick = function () { openObjectDiscardDialog(s); };
-      var cap = h('div', 'pile-cap'); cap.appendChild(document.createTextNode('TOOLS')); cap.appendChild(document.createElement('br')); cap.appendChild(document.createTextNode('HEAP'));
-      discWrap.appendChild(disc); discWrap.appendChild(cap);
-      dom.objectPiles.appendChild(discWrap);
     }
 
-    function openObjectDiscardDialog(s) {
+    // Dialog: scarti TOOLS PERSONALE di un giocatore (consultabile). Il mazzo (pesca coperta) non è consultabile.
+    function openPlayerToolsDialog(s, id) {
+      var p = s.players[id];
+      var list = p.objectDiscard;
       var back = h('div', 'dialog-back');
-      var box = h('div', 'dialog');
-      box.appendChild(h('h2', null, 'TOOLS HEAP (' + s.objectDiscard.length + ')'));
-      var grid = h('div', 'obj-card-grid');
-      if (!s.objectDiscard.length) grid.appendChild(h('div', 'hint', 'Nessun TOOL scartato.'));
-      s.objectDiscard.forEach(function (o) { grid.appendChild(objectCardEl(o.type)); });
+      var box = h('div', 'dialog tools-consult');
+      box.appendChild(h('h2', null, 'Scarti TOOLS — Pilota ' + id + ' (' + list.length + ')'));
+      var grid = h('div', 'obj-card-grid tools-card-grid');
+      if (!list.length) grid.appendChild(h('div', 'hint', 'Nessun TOOL scartato.'));
+      list.forEach(function (o) { grid.appendChild(objectCardEl(o.type, { half: true })); });
       box.appendChild(grid);
       var close = h('button', 'primary', 'Chiudi');
       close.onclick = function () { back.remove(); };
@@ -731,17 +769,6 @@
         var txt = h('span', 'oc-txt'); txt.appendChild(h('span', 'oc-title', title)); if (desc) txt.appendChild(h('span', 'oc-desc', desc));
         l.appendChild(cb); l.appendChild(txt); return l;
       }
-
-      var gCards = h('div', 'opt-group'); gCards.appendChild(h('h3', null, 'Carte'));
-      // Anteprima live delle due modalità (una carta normale + una figura).
-      var prev = h('div', 'opt-preview');
-      function refreshPrev() { prev.innerHTML = ''; prev.appendChild(bigPreviewCard({ id: 'p1', value: 6, suit: 'oro' })); prev.appendChild(bigPreviewCard({ id: 'p2', value: 10, suit: 'spade' })); }
-      gCards.appendChild(optCheck('Doppio VALORE e SUIT',
-        'VALORE e SUIT ripetuti agli angoli, leggibili da entrambi i lati. Deseleziona per mostrare un solo VALORE e SUIT (copie sottosopra nascoste).',
-        VIEW.cardDouble, function (v) { VIEW.cardDouble = v; refreshPrev(); }));
-      refreshPrev();
-      gCards.appendChild(prev);
-      content.appendChild(gCards);
 
       var gBoard = h('div', 'opt-group'); gBoard.appendChild(h('h3', null, 'Campo di gioco'));
       gBoard.appendChild(optCheck('Mostra MATCH',
@@ -904,8 +931,15 @@
       if (s.subPhase === 'elemental-target') return renderPickInfo('💥 Bomba Elementale', 'Clicca la CELLA bersaglio: cambia la sua SUIT e quella delle CELLE ORTOGONALI.');
       if (s.subPhase === 'elemental-suit') return renderSuitChoice('💥 Bomba Elementale — scegli la SUIT', function (su) { game.elementalSuit(su); render(); });
       if (s.subPhase === 'barrage-first') return renderPickInfo('🧨 Barrage!', 'Clicca la CELLA VUOTA da DISTRUGGERE.');
-      if (s.subPhase === 'randomizer-select') return renderRandomizerSelect(s);
       if (s.subPhase === 'randomizer-place') return renderRandomizerPlace(s);
+      // Nuovi TOOLS
+      if (s.subPhase === 'tool-sacrifice') return renderToolSacrifice(s);
+      if (s.subPhase === 'charge-select') return renderPickWho(s, s.pendingCharge.playerId, '💥 Carica Disperata', 'Clicca un ARM avversario nella tua stessa riga o colonna.');
+      if (s.subPhase === 'snipe-select') return renderPickWho(s, s.pendingSnipe.playerId, '🎯 Snipe', 'Clicca un ARM avversario nella tua stessa riga o colonna.');
+      if (s.subPhase === 'feedback-select') return renderFeedbackSelect(s);
+      if (s.subPhase === 'swap-target') return renderSwapTarget(s);
+      if (s.subPhase === 'nuke-select') return renderPickWho(s, s.pendingNuke.playerId, '☢️ Nuke', 'Clicca una CELLA da MATCHARE (userai la carta più bassa che la abbina).');
+      if (s.subPhase === 'shuffle-select') return renderPickWho(s, s.pendingShuffle.playerId, '🔀 Shuffle', s.pendingShuffle.first ? 'Clicca la seconda CELLA ONLINE VUOTA: scambierai le due carte.' : 'Clicca la prima CELLA ONLINE VUOTA da scambiare.');
       if (s.subPhase === 'altmatch-object') return renderAltObject(s);
       if (s.phase === 'select') return renderSelect(s);
       if (s.phase === 'move' || s.phase === 'attack') return renderAction(s);
@@ -960,7 +994,7 @@
     function powersPanel(s, playerId, mode) {
       if (mode === 'select' || !s.modules.powers) return null;
       var p = s.players[playerId];
-      if (p.character !== 'tactician' && p.character !== 'brawler') return null;
+      if (p.character !== 'tactician' && p.character !== 'brawler' && p.character !== 'wallie') return null;
       var wrap = h('div', 'obj-panel power-panel');
       wrap.appendChild(h('div', 'obj-panel-title', 'Attiva SKILL'));
       var row = h('div', 'obj-panel-row');
@@ -982,8 +1016,18 @@
         if (canB) box2.onclick = function () { ui.brawlerMode = !ui.brawlerMode; ui.armedCardId = null; render(); };
         row.appendChild(box2); bindTip(box2);
       }
+      if (p.character === 'wallie') {
+        var canG = game.canGlass && game.canGlass(playerId);
+        var hasGlass = !!p.glass;
+        var box3 = h('div', 'obj-card power-card' + (ui.glassMode ? ' active' : '') + (canG ? ' usable' : ' disabled'));
+        box3.appendChild(h('span', 'obj-name', hasGlass ? 'GLASS ✓' : 'Posiziona GLASS'));
+        box3.appendChild(h('span', 'tooltip', characterPowerDesc('wallie')));
+        if (canG) box3.onclick = function () { ui.glassMode = !ui.glassMode; ui.armedCardId = null; render(); };
+        row.appendChild(box3); bindTip(box3);
+      }
       wrap.appendChild(row);
       if (ui.brawlerMode) wrap.appendChild(h('div', 'hint', 'Clicca una CELLA evidenziata: userai 3 carte per MATCHARE qualsiasi CELLA.'));
+      if (ui.glassMode) wrap.appendChild(h('div', 'hint', 'Clicca una CELLA ORTOGONALE evidenziata: al posto dell\'azione posizioni il segnalino GLASS (l\'ARM resta fermo).'));
       return wrap;
     }
 
@@ -1143,7 +1187,7 @@
       var back = h('div', 'dialog-back toolchoice-modal-back');
       var box = h('div', 'dialog toolchoice-modal');
       var head = h('div', 'rules-head'); head.appendChild(h('h2', null, 'Scegli un TOOL')); box.appendChild(head);
-      box.appendChild(h('div', 'peek-sub', 'Pilota ' + pa.playerId + ': tieni [1] TOOL; gli altri vanno nella TOOLS HEAP.'));
+      box.appendChild(h('div', 'peek-sub', 'Pilota ' + pa.playerId + ': tieni [1] TOOL; gli altri vanno nei tuoi scarti TOOLS.'));
       var row = h('div', 'toolchoice-row');
       pa.drawn.forEach(function (o) {
         var card = objectCardEl(o.type, { selectable: true });
@@ -1162,28 +1206,17 @@
       document.body.appendChild(buildToolChoiceModal(s));
     }
 
-    // ---- Randomizer ----
-    function renderRandomizerSelect(s) {
-      var pr = s.pendingRandomizer;
-      var body = h('div', 'hint', 'Clicca fino a 3 celle da rimescolare. Selezionate: ' + pr.chosen.length + '/3.');
-      var actions = h('div', 'act-actions');
-      var conf = confirmBtn('Conferma (' + pr.chosen.length + ')', s.activePlayer);
-      conf.disabled = pr.chosen.length === 0;
-      conf.onclick = function () { game.randomizerConfirm(); render(); };
-      actions.appendChild(conf);
-      setAction('🎲 Randomizer — scelta celle', body, actions);
-    }
+    // ---- Randomizer: PESCA fino a 3, poi SOVRASCRIVI una CELLA (qualsiasi) per ogni carta ----
     function renderRandomizerPlace(s) {
       var pr = s.pendingRandomizer;
+      if (isCpu(pr.playerId)) { thinking('🤖 Il computer sovrascrive le celle…'); return; }
       var body = h('div', 'rz-place');
-      body.appendChild(h('div', 'hint', 'Trascina (o clicca) una carta pescata e posizionala in una cella svuotata. Clicca una carta già posizionata sulla griglia per rimetterla qui.'));
+      body.appendChild(h('div', 'hint', 'Seleziona una carta pescata, poi clicca la CELLA da SOVRASCRIVERE. Clicca una carta già posizionata sulla griglia per rimetterla qui.'));
       var tray = h('div', 'rz-tray');
       var placedIds = {}; for (var k in pr.placed) placedIds[pr.placed[k]] = true;
       pr.drawn.forEach(function (c) {
         if (placedIds[c.id]) return;
         var card = miniCard(c, false); card.classList.add('rz-card'); if (ui.selectedDrawn === c.id) card.classList.add('sel');
-        card.setAttribute('draggable', 'true');
-        card.addEventListener('dragstart', function (ev) { ev.dataTransfer.setData('text/plain', c.id); });
         card.onclick = function () { ui.selectedDrawn = (ui.selectedDrawn === c.id) ? null : c.id; render(); };
         tray.appendChild(card);
       });
@@ -1191,10 +1224,55 @@
       body.appendChild(tray);
       var actions = h('div', 'act-actions');
       var conf = confirmBtn('Conferma', s.activePlayer);
-      conf.disabled = Object.keys(pr.placed).length !== pr.chosen.length;
+      conf.disabled = Object.keys(pr.placed).length !== pr.drawn.length;
       conf.onclick = function () { ui.selectedDrawn = null; game.randomizerDone(); render(); };
       actions.appendChild(conf);
-      setAction('🎲 Randomizer — ricolloca le carte pescate', body, actions);
+      setAction('🎲 Randomizzatore — SOVRASCRIVI le CELLE', body, actions);
+    }
+
+    // ---- Nuovi TOOLS: pannelli dedicati ----
+    // Info-panel per i TOOL con bersaglio sulla griglia (Carica/Snipe/Nuke).
+    function renderPickWho(s, who, title, hintText) {
+      if (isCpu(who)) { thinking('🤖 Il computer sceglie il bersaglio…'); return; }
+      renderPickInfo(title, hintText);
+    }
+    // Costo "SCARTA [n] TOOL": scegli i TOOL da scartare.
+    function renderToolSacrifice(s) {
+      var ps = s.pendingToolSac;
+      if (isCpu(ps.playerId)) { thinking('🤖 Il computer scarta i TOOL…'); return; }
+      var left = ps.need - ps.sel.length;
+      var body = h('div', 'obj-card-grid');
+      game.toolSacrificeOptions().forEach(function (o) {
+        var card = objectCardEl(o.type, { selectable: true, half: true });
+        card.onclick = function () { game.toolSacrificeChoose(o.id); render(); };
+        body.appendChild(card);
+      });
+      setAction('🗑️ Scarta ' + left + ' TOOL (costo)', body, null);
+    }
+    // Feedback Loop: scegli la carta della STACK ATTIVA con cui SOVRASCRIVERE la propria CELLA.
+    function renderFeedbackSelect(s) {
+      var who = s.pendingFeedback.playerId;
+      if (isCpu(who)) { thinking('🤖 Il computer sceglie la carta…'); return; }
+      var body = h('div', 'hand');
+      game.feedbackOptions().forEach(function (c) {
+        var card = h('div', 'card selectable ' + (isFigureVal(c.value) ? 'inv suit-bg-' + c.suit : 'suit-' + c.suit));
+        card.appendChild(cardFace(c, isFigureVal(c.value)));
+        card.onclick = function () { game.feedbackChoose(c.id); render(); };
+        body.appendChild(card);
+      });
+      setAction('🔁 Feedback Loop — carta per la tua CELLA', body, null);
+    }
+    // Swap!: scegli l'ARM avversario con cui scambiare posizione.
+    function renderSwapTarget(s) {
+      var who = s.pendingSwap.playerId;
+      if (isCpu(who)) { thinking('🤖 Il computer sceglie il bersaglio…'); return; }
+      var body = h('div', 'choices');
+      game.swapTargets().forEach(function (oid) {
+        var b = confirmBtn('Scambia con Pilota ' + oid, who);
+        b.onclick = function () { game.swapChoose(oid); render(); };
+        body.appendChild(b);
+      });
+      setAction('🔀 Swap! — scegli l\'ARM avversario', body, null);
     }
 
     // ---- Selezione 3 carte (segreta) ----
@@ -1243,6 +1321,7 @@
     // ---- Rendering mano ----
     function renderHand(s, playerId, mode) {
       var p = s.players[playerId];
+      var clashB = game._clashBonus ? game._clashBonus(playerId) : 0; // bonus CLASH (+N) mostrato sulle carte
       var container = h('div', 'hand-and-objects');
       var body = h('div', 'hand');
       var cards = p.hand;
@@ -1261,7 +1340,9 @@
           if (ui.armedCardId === c.id) cls += ' armed';
         }
         var card = h('div', cls);
-        card.appendChild(cardFace(c, isFig));
+        // Il bonus CLASH (+N) si mostra SOLO sulle carte della STACK DI RISERVA (non rivelate), non in DEPLOY né sulla STACK ATTIVA.
+        var showBonus = (mode === 'action' && !revealed) ? clashB : 0;
+        card.appendChild(cardFace(c, isFig, false, showBonus));
         var interactive = (mode === 'select') || avail;
         if (interactive) {
           // Hover: evidenzia sul campo le celle abbinabili + tooltip con le condizioni di abbinamento.
@@ -1275,7 +1356,7 @@
         body.appendChild(card);
       });
       var layout = h('div', 'act-layout');
-      // Riga: [ mano | TOOLS ] (si avvolgono internamente quando è stretto) | conferma/azioni (fisso).
+      // Riga: [ mano | SKILL | TOOLS | conferma/azioni ] — tutto su una sola riga (le colonne si stringono).
       var row = h('div', 'act-row');
       var main = h('div', 'act-main');
       var handCol = h('div', 'act-hand');
@@ -1312,6 +1393,8 @@
         if (s.modules.powers) { ch.appendChild(h('span', 'tooltip', characterPowerDesc(p.character))); bindTip(ch); }
         wrap.appendChild(ch);
       }
+      // Pillole mazzo/scarti TOOLS personali, accanto all'abilità del pilota.
+      var tp = toolPills(s, playerId, 'ah-tp'); if (tp) wrap.appendChild(tp);
       return wrap;
     }
 
@@ -1362,10 +1445,11 @@
 
     function renderClashHand(s, chooser) {
       var choices = game.clashChoices(chooser);
+      var clashB = game._clashBonus ? game._clashBonus(chooser) : 0;
       var body = h('div', 'hand');
       choices.forEach(function (c) {
         var card = h('div', 'card selectable ' + (isFigureVal(c.value) ? 'inv suit-bg-' + c.suit : 'suit-' + c.suit) + (ui.armedCardId === c.id ? ' armed' : ''));
-        card.appendChild(cardFace(c, isFigureVal(c.value)));
+        card.appendChild(cardFace(c, isFigureVal(c.value), false, clashB));
         card.onclick = function () { game.clashChoose(chooser, c.id); ui.clashChooser = null; render(); };
         body.appendChild(card);
       });
@@ -1373,6 +1457,15 @@
     }
 
     // ---- Griglia click ----
+    // id della carta rivelata di VALORE più basso che MATCHA la CELLA (x,y), o null.
+    function lowestMatchingRevealed(playerId, x, y) {
+      var cell = game.getCell(x, y);
+      var cards = game.availableRevealed(playerId).filter(function (c) { return game._matches(playerId, c, cell); });
+      if (!cards.length) return null;
+      cards.sort(function (a, b) { return a.value - b.value; });
+      return cards[0].id;
+    }
+
     function onCellClick(x, y) {
       var s = game.state;
       if (s.gameOver || ui.gate) return;
@@ -1385,11 +1478,29 @@
       if (s.subPhase === 'elemental-target') { if (game.elementalTargetOptions().some(function (o) { return o.x === x && o.y === y; })) { game.elementalTarget(x, y); render(); } return; }
       if (s.subPhase === 'barrage-first') { if (game.barrageFirstOptions().some(function (o) { return o.x === x && o.y === y; })) { game.barrageFirst(x, y); render(); } return; }
       if (s.subPhase === 'barrage-third') { if (game.barrageThirdOptions().some(function (o) { return o.x === x && o.y === y; })) { game.barrageThird(x, y); render(); } return; }
-      if (s.subPhase === 'randomizer-select') { if (game.randomizerSelectOptions().some(function (o) { return o.x === x && o.y === y; })) { game.randomizerToggle(x, y); render(); } return; }
       if (s.subPhase === 'randomizer-place') {
         var prk = x + ',' + y, pr = s.pendingRandomizer;
         if (pr.placed[prk]) { game.randomizerUnplace(x, y); render(); return; }        // rimetti nel tray
-        if (ui.selectedDrawn && pr.chosen.some(function (o) { return o.key === prk; })) { try { game.randomizerPlace(ui.selectedDrawn, x, y); ui.selectedDrawn = null; render(); } catch (e) { } }
+        if (ui.selectedDrawn) { try { game.randomizerPlace(ui.selectedDrawn, x, y); ui.selectedDrawn = null; render(); } catch (e) { } }
+        return;
+      }
+      // Nuovi TOOLS con bersaglio sulla griglia.
+      if (s.subPhase === 'charge-select') { if (!isCpu(s.pendingCharge.playerId) && game.chargeTargets().some(function (o) { return o.x === x && o.y === y; })) { game.chargeChoose(x, y); render(); } return; }
+      if (s.subPhase === 'snipe-select') { if (!isCpu(s.pendingSnipe.playerId) && game.snipeTargets().some(function (o) { return o.x === x && o.y === y; })) { game.snipeChoose(x, y); render(); } return; }
+      if (s.subPhase === 'nuke-select') {
+        if (!isCpu(s.pendingNuke.playerId) && game.nukeOptions().some(function (o) { return o.x === x && o.y === y; })) {
+          var cardN = lowestMatchingRevealed(s.pendingNuke.playerId, x, y);
+          if (cardN) { game.nukeChoose(x, y, cardN); render(); }
+        }
+        return;
+      }
+      if (s.subPhase === 'shuffle-select') { if (!isCpu(s.pendingShuffle.playerId) && game.shuffleOptions().some(function (o) { return o.x === x && o.y === y; })) { game.shuffleChoose(x, y); render(); } return; }
+      // GLASS (Wallie & Glass): posiziona il segnalino sulla CELLA ORTOGONALE matchata.
+      if (!s.subPhase && ui.glassMode && (s.phase === 'move' || s.phase === 'attack') && !isCpu(s.activePlayer)) {
+        if (game.glassTargets(s.activePlayer).some(function (o) { return o.x === x && o.y === y; })) {
+          var cardG = lowestMatchingRevealed(s.activePlayer, x, y);
+          if (cardG) { game.glassPlace(s.activePlayer, x, y, cardG); ui.glassMode = false; render(); }
+        }
         return;
       }
       if (s.subPhase) return;
@@ -1821,7 +1932,7 @@
     function resetUiTransient() {
       ui.armedCardId = null; ui.chosen = []; ui.selectingPlayer = null; ui.clashChooser = null;
       ui.reshuffleMode = null; ui.reshuffleSel = [];
-      ui.gate = null; ui.pendingShot = null; ui.brawlerMode = false; ui.selectedDrawn = null;
+      ui.gate = null; ui.pendingShot = null; ui.brawlerMode = false; ui.glassMode = false; ui.selectedDrawn = null;
       ui.clashModal = null; // chiudi l'eventuale finestra di confronto del clash
       ui.peekModal = null;  // chiudi l'eventuale modale "riserva avversaria" del tactician
     }
@@ -1868,7 +1979,14 @@
       if (s.subPhase === 'teleport-select') return s.pendingTeleport ? s.pendingTeleport.playerId : null;
       if (s.subPhase === 'elemental-target' || s.subPhase === 'elemental-suit') return s.pendingElemental ? s.pendingElemental.playerId : null;
       if (s.subPhase === 'barrage-first' || s.subPhase === 'barrage-second' || s.subPhase === 'barrage-third') return s.pendingBarrage ? s.pendingBarrage.playerId : null;
-      if (s.subPhase === 'randomizer-select' || s.subPhase === 'randomizer-place') return s.pendingRandomizer ? s.pendingRandomizer.playerId : null;
+      if (s.subPhase === 'randomizer-place') return s.pendingRandomizer ? s.pendingRandomizer.playerId : null;
+      if (s.subPhase === 'tool-sacrifice') return s.pendingToolSac ? s.pendingToolSac.playerId : null;
+      if (s.subPhase === 'charge-select') return s.pendingCharge ? s.pendingCharge.playerId : null;
+      if (s.subPhase === 'snipe-select') return s.pendingSnipe ? s.pendingSnipe.playerId : null;
+      if (s.subPhase === 'feedback-select') return s.pendingFeedback ? s.pendingFeedback.playerId : null;
+      if (s.subPhase === 'swap-target') return s.pendingSwap ? s.pendingSwap.playerId : null;
+      if (s.subPhase === 'nuke-select') return s.pendingNuke ? s.pendingNuke.playerId : null;
+      if (s.subPhase === 'shuffle-select') return s.pendingShuffle ? s.pendingShuffle.playerId : null;
       if (s.subPhase === 'altmatch-object') return s.pendingAltMatch ? s.pendingAltMatch.playerId : null;
       if (s.subPhase === 'clash-cards') return game.clashCurrentChooser();
       if (s.subPhase === 'clash-reloc') return s.pendingClash.relocatorId;

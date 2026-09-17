@@ -60,6 +60,9 @@ button.ghost { background: transparent; }
 .cface .cnum { display: inline-flex; flex-direction: column; align-items: center; font-weight: 700; }
 .cface .cnum .cn { font-size: 1em; letter-spacing: -0.02em; }
 .cface .cnum.dot .cn::after { content: ''; display: block; width: 0.16em; height: 0.16em; border-radius: 50%; background: currentColor; margin: 0.08em auto 0; }
+/* Indicatore bonus al VALORE nei CLASH: +N grigio, sotto al numero, allineato a sinistra, stessa dimensione del valore. */
+.cface .cnum .cbonus { display: block; align-self: flex-start; font-size: 1em; line-height: 1; color: #8a8a8a; font-weight: 700; letter-spacing: -0.02em; }
+.inverted .cface .cbonus, .card.inv .cface .cbonus, .mini.inv .cface .cbonus, .cell.inverted .cface .cbonus { color: rgba(255,255,255,.75); }
 .cface .corner.tr .suit-ic, .cface .corner.bl .suit-ic { width: calc(var(--cs, 78px) * 0.26); height: calc(var(--cs, 78px) * 0.26); }
 /* modalità "solo numero + seme" (nasconde le copie sottosopra) */
 .cface.single .corner.br, .cface.single .corner.bl { display: none; }
@@ -218,6 +221,11 @@ body.setup .app { visibility: hidden; }
   border: 2px solid #1a1a1a; z-index: 2; }
 .pawn.N { background: var(--pN); color: #1a1a1a; } .pawn.S { background: var(--pS); color: #fff; }
 .pawn.E { background: var(--pE); color: #1a1a1a; } .pawn.W { background: var(--pW); color: #1a1a1a; }
+/* Segnalino GLASS (pilota Wallie & Glass): pillola in basso con il testo "GLASS". */
+.glass-token { position: absolute; left: 50%; bottom: calc(var(--cs)*0.06); transform: translateX(-50%);
+  padding: 0 calc(var(--cs)*0.08); height: calc(var(--cs)*0.24); border-radius: 999px; border: 2px solid #1a1a1a;
+  display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: calc(var(--cs)*0.13);
+  letter-spacing: .04em; z-index: 3; white-space: nowrap; box-shadow: 0 1px 3px rgba(0,0,0,.4); }
 .cell-ring { position: absolute; inset: 2px; border-radius: 7px; pointer-events: none; z-index: 1; }
 .cell-ring.N { box-shadow: inset 0 0 0 3px var(--pN); }
 .cell-ring.S { box-shadow: inset 0 0 0 3px var(--pS); }
@@ -327,7 +335,7 @@ body.setup .app { visibility: hidden; }
 .act-row { display: flex; gap: 12px; align-items: stretch; flex-wrap: wrap; }
 .act-hand, .act-row .obj-panel, .act-row .act-actions { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
 /* Gruppo [mano | TOOLS]: sulla stessa riga quando c'è spazio, altrimenti il pannello TOOLS va sotto. */
-.act-main { flex: 1 1 auto; display: flex; gap: 12px; align-items: stretch; flex-wrap: wrap; }
+.act-main { flex: 1 1 0; min-width: 0; display: flex; gap: 12px; align-items: stretch; flex-wrap: wrap; }
 .act-main > .act-hand { flex: 1 1 220px; }
 .act-main > .tools-panel { flex: 1 1 100%; }        /* di default il pannello TOOLS va sotto la mano */
 .act-main > .power-panel { flex: 0 0 auto; }
@@ -341,9 +349,13 @@ body.setup .app { visibility: hidden; }
   background: #4a4436; border: 1px solid #6a6047; color: #ece3c4; border-radius: 8px; padding: 6px 8px; min-width: 84px; }
 .obj-card .obj-name { font-weight: 700; } .obj-card .obj-phase { font-size: 10px; color: var(--muted); }
 /* Slot TOOL uniformi (5 su una riga); il nome più lungo ("Sifone Energetico") sta sempre su una riga. */
-.obj-slots { flex-wrap: nowrap; gap: 6px; overflow-x: auto; }
-.obj-slot { box-sizing: border-box; width: 116px; height: 64px; flex: 0 0 116px; padding: 4px 6px; border-radius: 8px; }
-.obj-slot .obj-name { font-size: 10.5px; line-height: 1.1; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+/* Quando la finestra è stretta gli slot TOOL vanno a capo (come le carte della STACK), invece di scorrere. */
+.obj-slots { flex-wrap: wrap; gap: 6px; }
+/* Card TOOL più strette: i titoli a due parole vanno a capo alla parola (mai a metà parola), fino a 2 righe. */
+.obj-slot { box-sizing: border-box; width: 104px; height: 64px; flex: 0 0 104px; padding: 4px 5px; border-radius: 8px; }
+.obj-slot .obj-name { font-size: 9.5px; line-height: 1.1; max-width: 100%; overflow: hidden; text-align: center;
+  white-space: normal; word-break: normal; overflow-wrap: normal; hyphens: none;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .obj-slot.empty { background: transparent; border: 1px dashed var(--line); border-radius: 8px; box-shadow: none; cursor: default; }
 .obj-card.init { box-shadow: inset 0 0 0 1px var(--highlight); }
 .obj-card.usable { cursor: pointer; background: #2f4a37; border-color: var(--good); color: #d7f5e2; }
@@ -550,7 +562,76 @@ body.setup .overlay { flex-direction: column; gap: 14px; }
 .obj-vcard.selected { border-color: var(--good); box-shadow: 0 0 0 2px var(--good) inset; }
 .alt-obj { display: flex; flex-direction: column; gap: 10px; }
 .alt-obj-card { min-width: 120px; }
-.tools-foot { padding: 12px 20px; border-top: 1px solid var(--line); display: flex; justify-content: flex-end; }
+.tools-foot { padding: 12px 20px; border-top: 1px solid var(--line); display: flex; justify-content: flex-end; gap: 10px; }
+
+/* ---- Card TOOL ridotta e più larga (griglia di composizione mazzo) ---- */
+.obj-vcard.ovc-half { position: relative; width: 184px; height: 214px; border-radius: 9px; padding: 10px; gap: 5px; overflow: visible; }
+.obj-vcard.ovc-half .ovc-phase-badge { padding: 2px 9px; font-size: 9px; }
+.obj-vcard.ovc-half .ovc-name { font-size: 13px; line-height: 1.12; }
+.obj-vcard.ovc-half .ovc-lbl { font-size: 8px; }
+.obj-vcard.ovc-half .ovc-val { font-size: 9px; line-height: 1.28; }
+.obj-vcard.ovc-half .ovc-cost, .obj-vcard.ovc-half .ovc-effect { gap: 1px; }
+.obj-vcard.ovc-half.in-deck { border-color: var(--good); box-shadow: 0 0 0 2px var(--good) inset; }
+.obj-vcard.ovc-half.ovc-blocked { opacity: .5; cursor: default; }
+.obj-vcard.ovc-half .ovc-count { position: absolute; top: -8px; right: -8px; min-width: 22px; height: 22px; padding: 0 6px;
+  background: var(--good); color: #10331f; border-radius: 999px; font-weight: 800; font-size: 12px;
+  display: flex; align-items: center; justify-content: center; box-shadow: 0 0 0 2px var(--panel); }
+
+/* ---- Schermata "Componi mazzi TOOLS" ---- */
+.tools-dialog { max-width: 980px; max-height: 90vh; width: 100%; padding: 0; display: flex; flex-direction: column; overflow: hidden; }
+.tools-head { display: flex; align-items: center; gap: 14px; }
+.tools-head h2 { flex: 0 0 auto; }
+.tools-tabs { flex: 1 1 auto; display: flex; gap: 8px; flex-wrap: wrap; }
+.tools-tab { display: inline-flex; align-items: center; gap: 8px; padding: 5px 12px; border-radius: 999px; background: var(--panel-2); }
+.tools-tab.active { border-color: var(--highlight); background: #616161; }
+.tools-tab.complete { border-color: var(--good); }
+.tools-tab .tt-count { font-size: 11px; color: var(--muted); }
+.tools-tab.complete .tt-count { color: var(--good); }
+.tools-body { flex: 1 1 auto; display: flex; min-height: 0; }
+/* colonna mazzo (fixed a sinistra) */
+.tools-deck-col { flex: 0 0 320px; display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--line); padding: 14px; gap: 10px; }
+.tools-deck-head { display: flex; align-items: baseline; justify-content: space-between; }
+.tools-deck-title { font-weight: 700; }
+.tools-deck-count { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.tools-deck-count.complete { color: var(--good); font-weight: 700; }
+.tools-deck-list { flex: 1 1 auto; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+.tools-deck-item { display: flex; align-items: center; gap: 6px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 999px; padding: 3px 6px 3px 12px; }
+.tdi-name { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; line-height: 1.1; cursor: help; }
+.tdi-label { font-weight: 700; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tdi-phase { font-size: 9px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.tdi-ctrl { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 2px; }
+.tdi-btn { width: 22px; height: 22px; padding: 0; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; font-size: 15px; line-height: 1; }
+.tdi-qty { min-width: 16px; text-align: center; font-weight: 700; font-variant-numeric: tabular-nums; }
+.tdi-del { flex: 0 0 auto; width: 20px; height: 20px; padding: 0; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center;
+  font-size: 11px; color: var(--muted); background: transparent; }
+.tdi-del:hover { border-color: var(--danger); color: var(--danger); }
+.tools-fill { flex: 0 0 auto; width: 100%; }
+/* colonna griglia (scrollabile a destra) */
+.tools-grid-col { flex: 1 1 auto; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.tools-tag-row { flex: 0 0 auto; display: flex; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+.tools-tag { padding: 4px 14px; border-radius: 999px; background: var(--panel-2); font-size: 12px; }
+.tools-tag.active { border-color: var(--highlight); background: #616161; font-weight: 700; }
+.tools-card-grid { flex: 1 1 auto; overflow-y: auto; margin: 0; padding: 16px; grid-template-columns: repeat(auto-fill, 184px); gap: 16px; justify-content: center; align-content: start; }
+.tools-confirm { max-width: 440px; }
+.tools-consult { max-width: 720px; }
+.tools-consult .tools-card-grid { padding: 4px; }
+
+/* count nel dialog "consulta mazzo TOOLS" personale */
+.obj-deck-item { position: relative; display: inline-flex; }
+.obj-deck-count { position: absolute; top: -8px; right: -8px; min-width: 24px; height: 24px; padding: 0 6px;
+  background: var(--good); color: #10331f; border-radius: 999px; font-weight: 800; font-size: 13px;
+  display: flex; align-items: center; justify-content: center; }
+
+/* ---- Pillole mazzo/scarti TOOLS personali (scheda punteggio + scheda mano) ---- */
+.tool-pills { display: inline-flex; align-items: center; gap: 4px; }
+.tool-pill { display: inline-flex; align-items: center; gap: 4px; height: var(--pill-h); box-sizing: border-box; padding: 0 9px;
+  border-radius: 999px; background: var(--panel-2); border: 1px solid var(--line); font-size: 12px; line-height: 1; }
+.tool-pill.tp-disc { cursor: pointer; color: var(--muted); }
+.tool-pill.tp-disc:hover { border-color: var(--highlight); }
+/* icona e numero centrati sulla stessa linea mediana */
+.tool-pill .tp-ic { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: var(--pill-h);
+  font-size: 12px; line-height: 1; opacity: .85; }
+.tool-pill b { display: inline-flex; align-items: center; height: var(--pill-h); line-height: 1; font-variant-numeric: tabular-nums; }
 
 /* ---- Carte mano non scelte: ingrigite e non interattive ---- */
 .card.disabled-card { opacity: .4; cursor: default; }

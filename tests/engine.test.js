@@ -68,7 +68,7 @@ console.log('# Setup base');
   eq(s.players.N.hand.length, 6, 'N 6 carte');
   eq(s.deck.length, 42, 'mazzo 42');
   eq(s.players.N.belongingSuit, null, 'senza personaggi niente seme di appartenenza');
-  eq(s.objectDeck.length, 0, 'senza oggetti niente mazzo oggetti');
+  eq(s.players.N.objectDeck.length, 0, 'senza oggetti niente mazzo TOOLS personale');
   eq(g.pawnCell('N').x + ',' + g.pawnCell('N').y, '1,1', 'pedina N [1,1]');
 })();
 
@@ -228,38 +228,47 @@ console.log('# Personaggi: belongingSuit + oggetto iniziale');
   var s = g.state;
   eq(s.players.N.belongingSuit, 'spade', 'runner → spade');
   eq(s.players.S.belongingSuit, 'bastoni', 'fighter → bastoni');
-  eq(s.players.N.objects.length, 1, 'runner ha 1 oggetto iniziale (jetpack)');
-  eq(s.players.N.objects[0].type, 'jetpack', 'runner → jetpack');
-  ok(s.players.N.objects[0].fromCharacter, 'oggetto iniziale marcato fromCharacter');
-  // Solo Personaggi (senza Oggetti): niente oggetto iniziale.
+  // Nessun TOOL "di personaggio": a inizio partita si pescano 3 TOOL dal proprio mazzo.
+  eq(s.players.N.objects.length, 3, 'pesca 3 TOOL a inizio partita');
+  ok(s.players.N.objects.every(function (o) { return !o.fromCharacter; }), 'i TOOL iniziali non sono marcati fromCharacter');
+  // Solo Personaggi (senza Oggetti): nessun TOOL.
   var g2 = Engine.createGame({ rng: makeRng(6), firstPlayer: 'N', modules: { characters: true, objects: false }, characters: { N: 'runner', S: 'fighter' } });
-  eq(g2.state.players.N.objects.length, 0, 'solo Personaggi: niente oggetto iniziale');
+  eq(g2.state.players.N.objects.length, 0, 'solo Personaggi: nessun TOOL');
   eq(g2.state.players.N.belongingSuit, 'spade', 'solo Personaggi: seme di appartenenza presente');
 })();
 
 // -------------------------------------------------------------------- Oggetti: mazzo + pesca a figura
-console.log('# Oggetti: mazzo 2 copie di 5 tipi; pesca a ogni figura eliminata (move e attack)');
+console.log('# TOOLS: mazzo personale 12 carte (4 tipi × 3 copie), pesca 3 a inizio partita; pesca a ogni figura eliminata');
 (function () {
   var g = Engine.createGame({ rng: makeRng(8), firstPlayer: 'N', modules: { characters: false, objects: true } });
   var s = g.state;
-  eq(s.objectDeck.length, 10, 'mazzo oggetti = 10 (2 copie di 5 tipi)');
-  var types = s.objectDeck.map(function (o) { return o.type; });
-  eq(new Set(types).size, 5, '5 tipi distinti');
-  // Ogni tipo compare esattamente 2 volte.
-  var counts = {}; types.forEach(function (t) { counts[t] = (counts[t] || 0) + 1; });
-  ok(Object.keys(counts).every(function (t) { return counts[t] === 2; }), 'ogni tipo ha 2 copie');
-  // Selezione oggetti: mazzo = 2 copie di ciascun tipo scelto.
-  var gs = Engine.createGame({ rng: makeRng(8), firstPlayer: 'N', modules: { characters: false, objects: true }, objectSelection: ['jetpack', 'hook'] });
-  eq(gs.state.objectDeck.length, 4, 'selezione oggetti: 2 tipi → 4 carte');
-  ok(gs.state.objectDeck.every(function (o) { return o.type === 'jetpack' || o.type === 'hook'; }), 'solo i tipi scelti');
+  // A inizio partita ogni PILOTA pesca 3 TOOL: mazzo 12 → 9, oggetti in mano = 3.
+  eq(s.players.N.objects.length, 3, 'pesca 3 TOOL a inizio partita');
+  eq(s.players.N.objectDeck.length, 9, 'mazzo TOOLS personale = 9 dopo le 3 pescate iniziali');
+  // Composizione totale (mazzo + pescati) = 12: 4 tipi × 3 copie.
+  var all = s.players.N.objectDeck.concat(s.players.N.objects).map(function (o) { return o.type; });
+  eq(all.length, 12, 'composizione totale = 12 carte');
+  eq(new Set(all).size, 4, '4 tipi distinti');
+  var counts = {}; all.forEach(function (t) { counts[t] = (counts[t] || 0) + 1; });
+  ok(Object.keys(counts).every(function (t) { return counts[t] === 3; }), 'ogni tipo ha 3 copie');
+  // I mazzi dei due giocatori sono indipendenti.
+  ok(s.players.N.objectDeck !== s.players.S.objectDeck, 'mazzi TOOLS distinti per giocatore');
+  eq(s.players.S.objectDeck.length, 9, 'mazzo TOOLS personale di S = 9 dopo le 3 pescate');
+  // Selezione oggetti per giocatore (count-map): mazzo = quella composizione (meno le 3 pescate).
+  var gs = Engine.createGame({ rng: makeRng(8), firstPlayer: 'N', modules: { characters: false, objects: true }, objectDecks: [{ jetpack: 2, hook: 2 }, { jetpack: 3, jump: 3, hook: 3, homing_missile: 3 }] });
+  eq(gs.state.players.N.objectDeck.length, 1, 'selezione TOOLS: 2+2 → 4 carte, −3 pescate = 1');
+  var nAll = gs.state.players.N.objectDeck.concat(gs.state.players.N.objects);
+  ok(nAll.every(function (o) { return o.type === 'jetpack' || o.type === 'hook'; }), 'solo i tipi scelti');
+  eq(gs.state.players.S.objectDeck.length, 9, 'mazzo TOOLS di S = 12 −3 = 9 dalla sua composizione');
   // Pesca su figura in movimento.
   g.getCell(2, 1).card = { id: 'x9', value: 9, suit: 'spade' }; g.getCell(2, 1).faceDown = false;
   s.players.N.hand = [{ id: 'h9', value: 9, suit: 'oro' }, { id: 'a', value: 2, suit: 'oro' }, { id: 'b', value: 3, suit: 'oro' }];
   s.players.N.revealedIds = ['h9', 'a', 'b'];
   s.phase = 'move'; s.subPhase = null; s.activePlayer = 'N'; s.actionsLeft = 1; s.moveModifier = null;
+  var deckBefore = s.players.N.objectDeck.length, objBefore = s.players.N.objects.length;
   g.move('N', 2, 1, 'h9');
-  eq(s.players.N.objects.length, 1, 'pesca 1 oggetto abbattendo figura in movimento');
-  eq(s.objectDeck.length, 9, 'mazzo oggetti ridotto');
+  eq(s.players.N.objects.length, objBefore + 1, 'pesca 1 oggetto abbattendo figura in movimento');
+  eq(s.players.N.objectDeck.length, deckBefore - 1, 'mazzo TOOLS personale di N ridotto');
 })();
 
 // -------------------------------------------------------------------- Oggetti: limite 2 + scarto forzato
@@ -498,15 +507,18 @@ console.log('# Oggetti avanzati: elemental bomb, barrage, randomizer');
   ok(g2.getCell(2, 2).destroyed, 'barrage: la cella scelta è distrutta');
   ok(!g2.getCell(2, 3).destroyed, 'barrage: nessuna seconda cella distrutta');
   eq(s2.phase === 'attack' && s2.activePlayer === 'N' && s2.actionsLeft === 1, true, 'barrage NON consuma l\'attacco');
-  // randomizer
+  // randomizer (nuovo): PESCA fino a 3 e per ognuna SOVRASCRIVI una CELLA. Costo CONSUMA.
   var g3 = Engine.createGame({ rng: makeRng(2), firstPlayer: 'N', modules: { objects: true } });
   var s3 = g3.state; s3.players.N.objects = [{ id: 'rz', type: 'randomizer', phase: 'attack', fromCharacter: false }]; atk(g3, 'N');
-  var deck0 = s3.deck.length;
-  g3.useObject('N', 'rz'); g3.randomizerToggle(1, 2); g3.randomizerToggle(2, 2); g3.randomizerConfirm();
-  eq(s3.subPhase, 'randomizer-place', 'randomizer: fase piazzamento'); eq(s3.pendingRandomizer.drawn.length, 2, 'randomizer: pescate 2');
+  g3.useObject('N', 'rz');
+  eq(s3.subPhase, 'randomizer-place', 'randomizer: fase piazzamento');
+  ok(g3.getCell(1, 1).faceDown, 'randomizer: CONSUMA rende OFFLINE la cella dell\'ARM');
   var dr = s3.pendingRandomizer.drawn;
-  g3.randomizerPlace(dr[0].id, 1, 2); g3.randomizerPlace(dr[1].id, 2, 2); g3.randomizerDone();
-  ok(g3.getCell(1, 2).card && g3.getCell(2, 2).card, 'randomizer: celle riempite'); eq(s3.deck.length, deck0, 'randomizer: mazzo di lunghezza invariata');
+  eq(dr.length, 3, 'randomizer: pescate 3 carte');
+  var ropts = g3.randomizerPlaceOptions();
+  dr.forEach(function (card, i) { g3.randomizerPlace(card.id, ropts[i].x, ropts[i].y); });
+  g3.randomizerDone();
+  ok(s3.subPhase == null && s3.phase === 'attack' && s3.actionsLeft === 1, 'randomizer: completato, non consuma l\'attacco');
 })();
 
 // -------------------------------------------------------------------- Reshuffle mazzo / tools energetici / modulo reshuffle
@@ -580,15 +592,15 @@ console.log('# Rimescolo mazzo, Energy Boost/Drain, modulo Reshuffle');
 })();
 
 // -------------------------------------------------------------------- Ruleset A (abbinamento alternativo)
-console.log('# Ruleset A: oggetto extra iniziale; movimento su figura senza effetti; attacco su figura → punti+trofeo+oggetto; centro → oggetto');
+console.log('# Ruleset A: 3 TOOL iniziali; movimento su figura senza effetti; attacco su figura → punti+trofeo+oggetto; centro → oggetto');
 (function () {
-  // Oggetto extra iniziale (Ruleset A): ogni giocatore 1; limite oggetti = 4.
+  // A inizio partita ogni PILOTA pesca 3 TOOL dal proprio mazzo; limite oggetti = 5 (Ruleset A).
   var gi = Engine.createGame({ rng: makeRng(3), firstPlayer: 'N', modules: { characters: false, objects: true }, altMatch: true });
-  eq(gi.state.players.N.objects.length, 1, 'Ruleset A: N pesca 1 oggetto extra a inizio partita');
-  eq(gi.state.players.S.objects.length, 1, 'Ruleset A: S pesca 1 oggetto extra a inizio partita');
-  eq(gi._objLimit(), 4, 'Ruleset A: limite oggetti = 4');
+  eq(gi.state.players.N.objects.length, 3, 'Ruleset A: N pesca 3 TOOL a inizio partita');
+  eq(gi.state.players.S.objects.length, 3, 'Ruleset A: S pesca 3 TOOL a inizio partita');
+  eq(gi._objLimit(), 5, 'Ruleset A: limite oggetti = 5');
   var giB = Engine.createGame({ rng: makeRng(3), firstPlayer: 'N', modules: { characters: false, objects: true }, altMatch: false });
-  eq(giB.state.players.N.objects.length, 0, 'Ruleset B: nessun oggetto extra iniziale');
+  eq(giB.state.players.N.objects.length, 3, 'Ruleset B: 3 TOOL iniziali');
   eq(giB._objLimit(), 2, 'Ruleset B: limite oggetti = 2');
 
   // Movimento su figura: nessun punto, figura NON girata, nessun oggetto.
@@ -611,7 +623,7 @@ console.log('# Ruleset A: oggetto extra iniziale; movimento su figura senza effe
   s2.players.N.hand = [{ id: 'h9', value: 9, suit: 'oro' }, { id: 'a', value: 2, suit: 'oro' }, { id: 'b', value: 3, suit: 'oro' }];
   s2.players.N.revealedIds = ['h9', 'a', 'b'];
   s2.phase = 'attack'; s2.subPhase = null; s2.activePlayer = 'N'; s2.actionsLeft = 1; s2.attackModifier = null;
-  var objB2 = s2.players.N.objects.length, deckB2 = s2.objectDeck.length;
+  var objB2 = s2.players.N.objects.length, deckB2 = s2.players.N.objectDeck.length;
   g2.shoot('N', 4, 1, 'h9');
   eq(s2.players.N.score, 2, 'Ruleset A: figura 9 in attacco → +2 punti');
   eq(s2.players.N.figuresMatched, 1, 'Ruleset A: figura conteggiata');
@@ -622,8 +634,8 @@ console.log('# Ruleset A: oggetto extra iniziale; movimento su figura senza effe
   var keep = s2.pendingAltMatch.drawn[0].id;
   g2.altMatchPickObject(keep);
   eq(s2.players.N.objects.length, objB2 + 1, 'Ruleset A: tiene 1 oggetto');
-  eq(s2.objectDiscard.length, 2, 'Ruleset A: 2 carte Oggetto non scelte negli scarti Oggetti');
-  eq(s2.objectDeck.length, deckB2 - 3, 'Ruleset A: mazzo Oggetti −3');
+  eq(s2.players.N.objectDiscard.length, 2, 'Ruleset A: 2 carte TOOL non scelte negli scarti TOOLS personali');
+  eq(s2.players.N.objectDeck.length, deckB2 - 3, 'Ruleset A: mazzo TOOLS personale −3');
   eq(s2.subPhase, null, 'Ruleset A: scelta risolta');
 
   // Attacco su NON figura → flip, nessuna scelta, nessun punto.
@@ -657,15 +669,16 @@ console.log('# Scarti Oggetti: uso/scarto alimentano la pila; mazzo Oggetti esau
 (function () {
   var g = Engine.createGame({ rng: makeRng(2), firstPlayer: 'N', modules: { characters: false, objects: true } });
   var s = g.state;
-  // Svuota il mazzo Oggetti, lascia una carta negli scarti Oggetti, e forza una pesca su figura.
-  s.objectDiscard = s.objectDeck.slice(); s.objectDeck = [];
+  // Svuota il mazzo TOOLS personale di N e la mano oggetti, lascia le carte negli scarti personali, e forza una pesca su figura.
+  s.players.N.objectDiscard = s.players.N.objectDeck.slice().concat(s.players.N.objects.slice()); // 9 + 3 = 12 negli scarti
+  s.players.N.objectDeck = []; s.players.N.objects = [];
   g.getCell(2, 1).card = { id: 'z8', value: 8, suit: 'spade' }; g.getCell(2, 1).faceDown = false;
   s.players.N.hand = [{ id: 'h8', value: 8, suit: 'oro' }, { id: 'a', value: 2, suit: 'oro' }, { id: 'b', value: 3, suit: 'oro' }];
   s.players.N.revealedIds = ['h8', 'a', 'b'];
   s.phase = 'move'; s.subPhase = null; s.activePlayer = 'N'; s.actionsLeft = 1; s.moveModifier = null;
   g.move('N', 2, 1, 'h8');
-  eq(s.players.N.objects.length, 1, 'pesca dall\'insieme rimescolato degli scarti Oggetti');
-  ok(s.objectDeck.length >= 8, 'scarti Oggetti rimescolati nel mazzo (meno la carta pescata)');
+  eq(s.players.N.objects.length, 1, 'pesca dall\'insieme rimescolato degli scarti TOOLS personali');
+  ok(s.players.N.objectDeck.length >= 10, 'scarti TOOLS rimescolati nel mazzo personale (meno la carta pescata)');
 })();
 
 // -------------------------------------------------------------------- Runner passiva (Ruleset A)
@@ -1149,7 +1162,14 @@ console.log('# Statistiche di partita (breakdown punti, contatori azioni/oggetti
     if (s.subPhase === 'timebomb-suit') return s.pendingTimebomb.playerId;
     if (s.subPhase === 'elemental-target' || s.subPhase === 'elemental-suit') return s.pendingElemental.playerId;
     if (s.subPhase === 'barrage-first' || s.subPhase === 'barrage-second' || s.subPhase === 'barrage-third') return s.pendingBarrage.playerId;
-    if (s.subPhase === 'randomizer-select' || s.subPhase === 'randomizer-place') return s.pendingRandomizer.playerId;
+    if (s.subPhase === 'randomizer-place') return s.pendingRandomizer.playerId;
+    if (s.subPhase === 'tool-sacrifice') return s.pendingToolSac.playerId;
+    if (s.subPhase === 'charge-select') return s.pendingCharge.playerId;
+    if (s.subPhase === 'snipe-select') return s.pendingSnipe.playerId;
+    if (s.subPhase === 'feedback-select') return s.pendingFeedback.playerId;
+    if (s.subPhase === 'swap-target') return s.pendingSwap.playerId;
+    if (s.subPhase === 'nuke-select') return s.pendingNuke.playerId;
+    if (s.subPhase === 'shuffle-select') return s.pendingShuffle.playerId;
     if (s.subPhase === 'altmatch-choice' || s.subPhase === 'altmatch-object') return s.pendingAltMatch.playerId;
     if (s.subPhase === 'clash-cards') return g.clashCurrentChooser();
     if (s.subPhase === 'clash-reloc') return s.pendingClash.relocatorId;
@@ -1286,7 +1306,14 @@ console.log('# Clash MOVIMENTO vinto senza cella per il difensore: nessun softlo
     if (s.subPhase === 'timebomb-suit') return s.pendingTimebomb.playerId;
     if (s.subPhase === 'elemental-target' || s.subPhase === 'elemental-suit') return s.pendingElemental.playerId;
     if (s.subPhase === 'barrage-first' || s.subPhase === 'barrage-second' || s.subPhase === 'barrage-third') return s.pendingBarrage.playerId;
-    if (s.subPhase === 'randomizer-select' || s.subPhase === 'randomizer-place') return s.pendingRandomizer.playerId;
+    if (s.subPhase === 'randomizer-place') return s.pendingRandomizer.playerId;
+    if (s.subPhase === 'tool-sacrifice') return s.pendingToolSac.playerId;
+    if (s.subPhase === 'charge-select') return s.pendingCharge.playerId;
+    if (s.subPhase === 'snipe-select') return s.pendingSnipe.playerId;
+    if (s.subPhase === 'feedback-select') return s.pendingFeedback.playerId;
+    if (s.subPhase === 'swap-target') return s.pendingSwap.playerId;
+    if (s.subPhase === 'nuke-select') return s.pendingNuke.playerId;
+    if (s.subPhase === 'shuffle-select') return s.pendingShuffle.playerId;
     if (s.subPhase === 'altmatch-object') return s.pendingAltMatch.playerId;
     if (s.subPhase === 'clash-cards') return g.clashCurrentChooser();
     if (s.subPhase === 'clash-reloc') return s.pendingClash.relocatorId;
@@ -1350,6 +1377,140 @@ console.log('# Bonus di fine ROUND per SUIT della CELLA ONLINE sotto l\'ARM (oro
   eq(glc.state.players.N.objects.length - nObjL, 0, 'ultimo ROUND coppe: nessun TOOL (niente pesca)');
   var glb = scenario('bastoni'); glb.state.round = glb.state.maxRounds; var handL = glb.state.players.N.hand.length; glb._endRound();
   eq(glb.state.players.N.hand.length, handL, 'ultimo ROUND bastoni: nessuna carta extra');
+})();
+
+// -------------------------------------------------------------------- Nuovi costi TOOL + nuovi TOOLS
+console.log('# Nuovi costi (PERDI punto / CONSUMA / SCARTA TOOL / STACK RISERVA) e nuovi TOOLS');
+(function () {
+  function atk(g, id) { var s = g.state; s.firstPlayer = (id === 'N' ? 'S' : 'N'); s.phase = 'attack'; s.subPhase = null; s.activePlayer = id; s.actionsLeft = 1; s.attackModifier = null; s.players[id].hand = []; s.players[id].revealedIds = []; s.players[id].revealedCards = []; }
+  function mov(g, id) { var s = g.state; s.phase = 'move'; s.subPhase = null; s.activePlayer = id; s.actionsLeft = 1; s.moveModifier = null; }
+
+  // Spinta (hook): COSTO SCARTA [1] TOOL (poi arma il modificatore).
+  var g = Engine.createGame({ rng: makeRng(2), firstPlayer: 'N', modules: { objects: true } });
+  var s = g.state; s.players.N.objects = [{ id: 'hk', type: 'hook', phase: 'attack', fromCharacter: false }, { id: 'sac', type: 'jetpack', phase: 'move', fromCharacter: false }]; atk(g, 'N');
+  g.useObject('N', 'hk');
+  eq(s.subPhase, 'tool-sacrifice', 'Spinta: apre lo scarto TOOL (costo)');
+  g.toolSacrificeChoose(g.toolSacrificeOptions()[0].id);
+  eq(s.players.N.objects.length, 0, 'Spinta: 1 TOOL scartato'); eq(s.attackModifier, 'hook', 'Spinta arma il modificatore');
+  // Senza altri TOOL, Spinta non è usabile.
+  var gb = Engine.createGame({ rng: makeRng(2), firstPlayer: 'N', modules: { objects: true } });
+  gb.state.players.N.objects = [{ id: 'hk', type: 'hook', phase: 'attack', fromCharacter: false }]; atk(gb, 'N');
+  ok(!gb.usableObjects('N').some(function (o) { return o.type === 'hook'; }), 'Spinta non usabile senza un altro TOOL da scartare');
+
+  // Granata (CONSUMA): usabile solo su CELLA ONLINE; la CELLA dell\'ARM diventa OFFLINE.
+  var g2 = Engine.createGame({ rng: makeRng(2), firstPlayer: 'N', modules: { objects: true } });
+  var s2 = g2.state; s2.players.N.objects = [{ id: 'gr', type: 'homing_missile', phase: 'attack', fromCharacter: false }]; atk(g2, 'N');
+  ok(g2.usableObjects('N').some(function (o) { return o.type === 'homing_missile'; }), 'Granata usabile su CELLA ONLINE');
+  g2.useObject('N', 'gr');
+  ok(g2.getCell(1, 1).faceDown, 'Granata: CONSUMA rende OFFLINE la CELLA dell\'ARM');
+  // Su CELLA OFFLINE non è più usabile.
+  var g2b = Engine.createGame({ rng: makeRng(2), firstPlayer: 'N', modules: { objects: true } });
+  var s2b = g2b.state; g2b.getCell(1, 1).faceDown = true; s2b.players.N.objects = [{ id: 'gr', type: 'homing_missile', phase: 'attack', fromCharacter: false }]; atk(g2b, 'N');
+  ok(!g2b.usableObjects('N').some(function (o) { return o.type === 'homing_missile'; }), 'Granata non usabile su CELLA OFFLINE');
+
+  // Carica Disperata: costo SCARTA [2] TOOL; serve un ARM avversario in riga/colonna. N su [1,1], S su [1,5] (stessa colonna x=1).
+  var g3 = Engine.createGame({ rng: makeRng(2), firstPlayer: 'N', modules: { objects: true } });
+  var s3 = g3.state;
+  g3.pawnCell('S').pawn = null; g3.getCell(1, 3).pawn = 'S'; // S nella stessa colonna di N ([1,1])
+  s3.players.N.objects = [{ id: 'cd', type: 'carica_disperata', phase: 'move', fromCharacter: false }, { id: 't1', type: 'jetpack', phase: 'move', fromCharacter: false }, { id: 't2', type: 'jump', phase: 'move', fromCharacter: false }];
+  mov(g3, 'N');
+  ok(g3._lineTargets('N').length >= 1, 'Carica: c\'è un ARM avversario in riga/colonna');
+  ok(g3.usableObjects('N').some(function (o) { return o.type === 'carica_disperata'; }), 'Carica usabile con 2 altri TOOL');
+  g3.useObject('N', 'cd');
+  eq(s3.subPhase, 'tool-sacrifice', 'Carica: apre lo scarto TOOL (costo)');
+  var opt = g3.toolSacrificeOptions(); g3.toolSacrificeChoose(opt[0].id); g3.toolSacrificeChoose(g3.toolSacrificeOptions()[0].id);
+  eq(s3.players.N.objects.length, 0, 'Carica: 2 TOOL scartati');
+  eq(s3.subPhase, 'charge-select', 'Carica: dopo il costo, scelta del bersaglio');
+  // Se non ha 2 altri TOOL, non è usabile.
+  var g3b = Engine.createGame({ rng: makeRng(2), firstPlayer: 'N', modules: { objects: true } });
+  g3b.state.players.N.objects = [{ id: 'cd', type: 'carica_disperata', phase: 'move', fromCharacter: false }]; mov(g3b, 'N');
+  ok(!g3b.usableObjects('N').some(function (o) { return o.type === 'carica_disperata'; }), 'Carica non usabile senza 2 altri TOOL');
+
+  // Santuario: SOVRASCRIVE la CELLA dell\'ARM e le ortogonali (automatico). Costo 1 TOOL.
+  var g4 = Engine.createGame({ rng: makeRng(2), firstPlayer: 'N', modules: { objects: true } });
+  var s4 = g4.state; s4.players.N.objects = [{ id: 'sn', type: 'santuario', phase: 'move', fromCharacter: false }, { id: 'x', type: 'jetpack', phase: 'move', fromCharacter: false }]; mov(g4, 'N');
+  var before = g4.getCell(1, 1).card.id;
+  g4.useObject('N', 'sn'); // apre tool-sacrifice
+  g4.toolSacrificeChoose(g4.toolSacrificeOptions()[0].id);
+  ok(g4.getCell(1, 1).card && g4.getCell(1, 1).card.id !== before, 'Santuario: la CELLA dell\'ARM è sovrascritta');
+  ok(s4.subPhase == null, 'Santuario: effetto immediato');
+
+  // Feedback Loop: costo SCARTA [1] carta STACK DI RISERVA; sovrascrive la propria CELLA con una carta STACK ATTIVA.
+  var g5 = Engine.createGame({ rng: makeRng(2), firstPlayer: 'N', modules: { objects: true } });
+  var s5 = g5.state; mov(g5, 'N');
+  s5.players.N.hand = [{ id: 'rv', value: 5, suit: 'oro' }, { id: 'rs', value: 3, suit: 'spade' }];
+  s5.players.N.revealedIds = ['rv']; // rv rivelata (STACK ATTIVA), rs riserva
+  s5.players.N.objects = [{ id: 'fb', type: 'feedback_loop', phase: 'move', fromCharacter: false }];
+  g5.useObject('N', 'fb');
+  eq(s5.subPhase, 'feedback-select', 'Feedback: scelta carta STACK ATTIVA');
+  ok(s5.discard.some(function (c) { return c.id === 'rs'; }), 'Feedback: carta di RISERVA scartata (costo)');
+  g5.feedbackChoose('rv');
+  eq(g5.getCell(1, 1).card.id, 'rv', 'Feedback: la propria CELLA è sovrascritta con la carta scelta');
+})();
+
+// -------------------------------------------------------------------- Pilota Wallie & Glass
+console.log('# Wallie & Glass: segnalino GLASS, bonus CLASH +2, distruzione, bonus di fine turno');
+(function () {
+  var g = Engine.createGame({ rng: makeRng(3), firstPlayer: 'N', suitMode: 'rotating', ruleset: 'C', gridSize: 5,
+    modules: { characters: true, objects: true, powers: true }, characters: { N: 'wallie', S: 'runner' } });
+  var s = g.state;
+  // Passiva: +2 nei CLASH quando non ha GLASS.
+  eq(g._clashBonus('N'), 2, 'Wallie: +2 CLASH senza GLASS');
+  // Piazza il GLASS su una CELLA ORTOGONALE matchata (fase movimento).
+  s.phase = 'move'; s.subPhase = null; s.activePlayer = 'N'; s.actionsLeft = 1; s.moveModifier = null;
+  var pc = g.pawnCell('N'); // [1,1]
+  var target = g.getCell(2, 1); target.faceDown = false; target.pawn = null;
+  s.players.N.hand = [{ id: 'm', value: target.card.value, suit: 'oro' }];
+  s.players.N.revealedIds = ['m'];
+  ok(g.canGlass('N'), 'Wallie: può posizionare GLASS');
+  g.glassPlace('N', 2, 1, 'm');
+  ok(s.players.N.glass && s.players.N.glass.x === 2 && s.players.N.glass.y === 1, 'GLASS posizionato su [2,1]');
+  eq(g._clashBonus('N'), 0, 'Wallie: niente +2 CLASH mentre il GLASS è in campo');
+  ok(g.pawnCell('N').x === 1 && g.pawnCell('N').y === 1, 'GLASS: l\'ARM resta fermo');
+  // Distruzione: un avversario MATCHA la CELLA del GLASS (attacco).
+  s.phase = 'attack'; s.subPhase = null; s.activePlayer = 'S'; s.actionsLeft = 1; s.attackModifier = null; s.clashOnAttack = false;
+  var gc = g.getCell(2, 1); gc.faceDown = false; gc.pawn = null;
+  s.players.S.hand = [{ id: 's1', value: gc.card.value, suit: 'oro' }];
+  s.players.S.revealedIds = ['s1'];
+  g.shoot('S', 2, 1, 's1');
+  ok(!s.players.N.glass, 'GLASS distrutto quando l\'avversario MATCHA la sua CELLA');
+})();
+
+// -------------------------------------------------------------------- Overcharge / Toolbox / Shuffle
+console.log('# Overcharge (+2 CLASH), Toolbox (pesca 2 TOOL), Shuffle (scambia 2 celle)');
+(function () {
+  function mov(g, id) { var s = g.state; s.phase = 'move'; s.subPhase = null; s.activePlayer = id; s.actionsLeft = 1; s.moveModifier = null; }
+  // Overcharge: +2 al VALORE nei CLASH fino a fine turno; costo SCARTA [1] TOOL.
+  var g = Engine.createGame({ rng: makeRng(2), firstPlayer: 'N', modules: { objects: true } });
+  var s = g.state; mov(g, 'N');
+  s.players.N.objects = [{ id: 'oc', type: 'overcharge', phase: 'move', fromCharacter: false }, { id: 'x', type: 'jetpack', phase: 'move', fromCharacter: false }];
+  eq(g._clashBonus('N'), 0, 'Overcharge: nessun bonus prima dell\'uso');
+  g.useObject('N', 'oc'); g.toolSacrificeChoose(g.toolSacrificeOptions()[0].id);
+  eq(g._clashBonus('N'), 2, 'Overcharge: +2 nei CLASH dopo l\'uso');
+
+  // Toolbox: PESCA [2] TOOL dal proprio mazzo; costo CONSUMA.
+  var g2 = Engine.createGame({ rng: makeRng(2), firstPlayer: 'N', modules: { objects: true } });
+  var s2 = g2.state; mov(g2, 'N');
+  s2.players.N.objects = [{ id: 'tbx', type: 'toolbox', phase: 'move', fromCharacter: false }];
+  var deckBefore = s2.players.N.objectDeck.length;
+  g2.useObject('N', 'tbx');
+  eq(s2.players.N.objects.length, 2, 'Toolbox: pescati 2 TOOL (la carta usata è già stata scartata)');
+  eq(s2.players.N.objectDeck.length, deckBefore - 2, 'Toolbox: mazzo TOOLS -2');
+  ok(g2.getCell(1, 1).faceDown, 'Toolbox: CONSUMA rende OFFLINE la CELLA dell\'ARM');
+
+  // Shuffle: scambia le carte di 2 CELLE ONLINE VUOTE; nessun costo, non consuma l'azione.
+  var g3 = Engine.createGame({ rng: makeRng(2), firstPlayer: 'N', modules: { objects: true } });
+  var s3 = g3.state; mov(g3, 'N');
+  s3.players.N.objects = [{ id: 'shf', type: 'shuffle', phase: 'move', fromCharacter: false }];
+  // due celle ONLINE VUOTE (senza ARM): [3,1] e [4,1] nel 5×5 iniziale
+  var ca = g3.getCell(3, 1).card.id, cb = g3.getCell(4, 1).card.id;
+  ok(ca && cb && ca !== cb, 'Shuffle: due celle con carte diverse');
+  g3.useObject('N', 'shf');
+  eq(s3.subPhase, 'shuffle-select', 'Shuffle: apre la scelta delle CELLE');
+  g3.shuffleChoose(3, 1); g3.shuffleChoose(4, 1);
+  eq(g3.getCell(3, 1).card.id, cb, 'Shuffle: le carte sono scambiate (A)');
+  eq(g3.getCell(4, 1).card.id, ca, 'Shuffle: le carte sono scambiate (B)');
+  ok(s3.subPhase == null && s3.actionsLeft === 1, 'Shuffle: non consuma l\'azione');
 })();
 
 // --------------------------------------------------------------------

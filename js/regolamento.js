@@ -33,9 +33,9 @@
 "3. *(Solo variante griglia 5×5)* Pesca dal DECK un **asso (1)** di quella SUIT: sarà la **CELLA centrale**.\n" +
 "4. Rimescola e disponi la **griglia** di CELLE scoperte (nel 5×5 l'asso va al **centro, [3,3]**).\n" +
 "5. Piazza gli ARM agli angoli: **Nord** su **[1,1]**, **Sud** su **[5,5]** (nel 4×4, su **[4,4]**).\n" +
-"6. Ogni PILOTA sceglie un **ARM** (§7): ottiene **ARM SUIT**, **TOOL di partenza** e **SKILL**.\n" +
-"7. Prepara il **DECK dei TOOLS**: **5 tipi** (a caso o concordati), **2 copie ciascuno**; accanto lascia spazio per la **TOOLS HEAP** (gli scarti).\n" +
-"8. Ogni PILOTA riceve **[1] TOOL** e pesca **6 carte** in mano.\n" +
+"6. Ogni PILOTA sceglie un **ARM** (§7): ottiene **ARM SUIT** e **SKILL**.\n" +
+"7. Ogni PILOTA prepara il proprio **mazzo dei TOOLS** (§3.1): **12 carte**; accanto lascia spazio per i propri **scarti TOOLS**.\n" +
+"8. Ogni PILOTA pesca **[3] TOOL** dal proprio mazzo e **6 carte** in mano.\n" +
 "9. Sorteggia il **1° Pilota**. Si comincia dal ROUND 1.\n" +
 "\n```\n" +
 "                 LATO NORD  (Nord parte da [1,1])\n" +
@@ -48,16 +48,25 @@
 "```");
 
     s.push(
-"### 3.1 Variante: Draft della griglia\n\n" +
+"### 3.1 Composizione del mazzo dei TOOLS\n\n" +
+"Ogni PILOTA ha un **mazzo dei TOOLS** tutto suo, con la sua **pila degli scarti** separata: non c'è un DECK dei TOOLS condiviso.\n\n" +
+"1. Il mazzo è composto da **12 carte**; ogni TOOL può comparire **al massimo 3 volte**.\n" +
+"2. Ogni PILOTA compone **liberamente** il proprio mazzo. In alternativa, il mazzo è **casuale**: **3 copie** di **4 TOOLS** presi a caso.\n" +
+"3. **A inizio partita** ognuno pesca **[3] TOOL** dal proprio mazzo (§8).\n" +
+"4. Quando il tuo mazzo dei TOOLS finisce, **rimescola i tuoi scarti TOOLS**: diventano il nuovo mazzo.\n\n" +
+"*Nota:* nel configuratore puoi lasciare i mazzi **casuali** oppure comporli TOOL per TOOL (con il tasto **Fill** completi gli slot vuoti con carte casuali).");
+
+    s.push(
+"### 3.2 Variante: Draft della griglia\n\n" +
 "In alternativa alla griglia generata a caso, i due PILOTI possono **costruirla insieme** prima di giocare. Con il **Draft** attivo, la preparazione cambia così:\n\n" +
-"1. Si determina il **1° Pilota** e ciascuno riceve il **TOOL** iniziale (come sopra), poi la **griglia parte vuota**.\n" +
+"1. Si determina il **1° Pilota** (i mazzi dei TOOLS si preparano come sopra, §3.1), poi la **griglia parte vuota**.\n" +
 "2. A turno — la barra delle fasi mostra **Piazzamento G1 / G2** e l'indicatore di ROUND segna **Draft** — ogni PILOTA **pesca 4 carte** dal DECK, ne **posiziona 2** su CELLE vuote a piacere e **scarta** le altre 2.\n" +
 "3. Nel **5×5** l'ultimo turno completa la griglia con **una sola** carta: chi lo esegue ne piazza 1 e scarta le altre 3.\n" +
 "4. Quando la griglia è **piena**, si **rimescolano gli scarti** del draft nel DECK, ciascuno pesca la mano da **6 carte** e comincia il ROUND 1.\n\n" +
 "*Nota:* nel Draft la CELLA centrale del 5×5 ospita la carta che vi viene piazzata (non l'asso del seme iniziale). Le CELLE BONUS restano quelle di posizione (§4.2).");
 
     s.push(
-"### 3.2 Variante: 3-4 giocatori\n\n" +
+"### 3.3 Variante: 3-4 giocatori\n\n" +
 "Si può giocare in **2, 3 o 4**, ma **solo su griglia 5×5**. Ogni PILOTA parte da un **angolo**:\n\n" +
 "- **4 giocatori:** tutti e quattro gli angoli.\n" +
 "- **3 giocatori:** tre angoli **scelti a caso** fra i quattro.\n" +
@@ -129,44 +138,56 @@
 
     s.push(
 "## 7. Gli ARM\n\n" +
-"Ogni PILOTA guida un **ARM**, che gli dà tre cose: una **ARM SUIT** (il jolly personale, §2), un **TOOL di partenza** e una **SKILL**.\n\n" +
-"| ARM | ARM SUIT | TOOL di partenza | SKILL |\n" +
-"|---|---|---|---|\n" +
-"| **E-RUN-01** | spade | Jetpack | *(2 usi)* Quando MATCHI un OBIETTIVO in MOVIMENTO, puoi SCARTARE [1] carta dalla STACK ATTIVA per COLPIRLO subito (prendi i punti e la scelta di [1] TOOL). Se la CELLA è occupata si fa CLASH: la SKILL vale solo se lo vinci. |\n" +
-"| **The Sniper** | coppe | Barrage! | *(3 usi)* In MOVIMENTO o ATTACCO, se hai 3 carte nella STACK ATTIVA le SCARTI tutte per MATCHARE una CELLA qualsiasi (SOSTITUISCE l'azione). In ATTACCO su un ARM avversario si apre comunque un CLASH. |\n" +
-"| **Deep Mind** | oro | Cronobomba | *(3 usi)* Sbircia la STACK DI RISERVA dell'avversario. Inoltre, passiva: quando scegli [1] TOOL, scegli **tra 4** invece che tra 3. |\n" +
-"| **Soldier Boy** | bastoni | Spinta | *Passiva:* in ATTACCO le carte di VALORE **PARI** fanno MATCH tra loro (una carta pari colpisce una CELLA di VALORE pari). |\n\n" +
-"Il TOOL di partenza si usa **una sola volta** e **non occupa** posto nel limite dei TOOLS (§8).");
+"Ogni PILOTA guida un **ARM**, che gli dà due cose: una **ARM SUIT** (il jolly personale, §2) e una **SKILL**.\n\n" +
+"| ARM | ARM SUIT | SKILL |\n" +
+"|---|---|---|\n" +
+"| **E-RUN-01** | spade | *(2 usi)* Quando MATCHI un OBIETTIVO in MOVIMENTO, puoi SCARTARE [1] carta dalla STACK ATTIVA per COLPIRLO subito (prendi i punti e la scelta di [1] TOOL). Se la CELLA è occupata si fa CLASH: la SKILL vale solo se lo vinci. |\n" +
+"| **The Sniper** | coppe | *(3 usi)* In MOVIMENTO o ATTACCO, se hai 3 carte nella STACK ATTIVA le SCARTI tutte per MATCHARE una CELLA qualsiasi (SOSTITUISCE l'azione). In ATTACCO su un ARM avversario si apre comunque un CLASH. |\n" +
+"| **Deep Mind** | oro | *(3 usi)* Sbircia la STACK DI RISERVA dell'avversario. Inoltre, passiva: quando scegli [1] TOOL, scegli **tra 4** invece che tra 3. |\n" +
+"| **Soldier Boy** | bastoni | *Passiva:* in ATTACCO le carte di VALORE **PARI** fanno MATCH tra loro (una carta pari colpisce una CELLA di VALORE pari). |");
 
     s.push(
 "## 8. I TOOLS\n\n" +
 "### 8.1 Come si ottengono\n\n" +
-"- **Colpendo un OBIETTIVO in ATTACCO**, **entrando in una CELLA BONUS** o **conquistando il centro**: scegli **[1] TOOL tra 3** (gli altri 2 vanno nella TOOLS HEAP).\n" +
-"- **A inizio partita** ne ricevi **[1]**, oltre a quello dell'ARM.\n\n" +
-"Se il DECK dei TOOLS finisce, rimescola la **TOOLS HEAP** e riparti.\n\n" +
-"### 8.2 Limite e uso\n\n" +
-"- Puoi tenerne al massimo **4** (quello di partenza dell'ARM non conta). Se superi il limite, ne SCARTI uno.\n" +
-"- Ogni TOOL si usa **una sola volta**, **nella fase indicata**, e **prima** di svolgere l'azione a cui si riferisce.\n\n" +
+"- **A inizio partita** ne peschi **[3]** dal tuo mazzo (§3.1).\n" +
+"- **Colpendo un OBIETTIVO in ATTACCO**, **entrando in una CELLA BONUS** o **conquistando il centro**: scegli **[1] TOOL tra 3** (gli altri 2 vanno nei tuoi scarti TOOLS).\n\n" +
+"Quando il tuo mazzo dei TOOLS finisce, rimescola i tuoi **scarti TOOLS** e riparti.\n\n" +
+"### 8.2 Limite, costi e uso\n\n" +
+"- Puoi tenerne al massimo **5**. Se superi il limite, ne SCARTI uno.\n" +
+"- Ogni TOOL si usa **una sola volta**, **nella fase indicata**, e **prima** di svolgere l'azione a cui si riferisce.\n" +
+"- **Se non puoi pagare il COSTO di un TOOL, non puoi usarlo.**\n" +
+"- **CONSUMA:** attivabile solo se l'ARM è su una **CELLA ONLINE**; quella CELLA diventa **OFFLINE**.\n" +
+"- **SCARTA [n] TOOL:** scegli tu quali **altri** TOOL scartare; se non ne hai a sufficienza non puoi giocare la carta.\n" +
+"- **SOVRASCRIVI una CELLA:** scarti la carta presente (se c'è) e la sostituisci con un'altra carta (di solito pescata). Salvo diversa indicazione, si può SOVRASCRIVERE **qualsiasi** CELLA.\n\n" +
 "### 8.3 Elenco dei TOOLS\n\n" +
-"| TOOL | Fase | Effetto |\n" +
-"|---|---|---|\n" +
-"| **Jetpack** | MOVIMENTO | COSTO: SCARTA [1] carta dalla STACK ATTIVA. Per questo MOVIMENTO puoi MATCHARE anche le CELLE DIAGONALI. |\n" +
-"| **Salto** | MOVIMENTO | COSTO: SCARTA [1] carta dalla STACK ATTIVA. Per questo MOVIMENTO puoi MATCHARE solo a DISTANZA [2] su CELLE ORTOGONALI. |\n" +
-"| **Arpione** | MOVIMENTO | COSTO: SCARTA [1] carta dalla STACK ATTIVA. Per questo MOVIMENTO puoi MATCHARE anche le CELLE ORTOGONALI all'ARM avversario. |\n" +
-"| **Teletrasporto** | MOVIMENTO | SOSTITUISCE il MOVIMENTO. Salta su una qualsiasi CELLA VUOTA scoperta con lo **stesso VALORE** della CELLA da cui parti. |\n" +
-"| **Spinta** | ATTACCO | Se COLPISCI un ARM avversario, lo sposti su una CELLA ORTOGONALE a DISTANZA [1]. |\n" +
-"| **Granata** | ATTACCO | DISTRUGGE la CELLA colpita. Se era occupata, sposti quell'ARM su una CELLA ORTOGONALE a DISTANZA [1]. |\n" +
-"| **Barrage!** | ATTACCO | Scegli [1] CELLA VUOTA e DISTRUGGILA. Non consuma l'ATTACCO. |\n" +
-"| **Bomba Elementale** | ATTACCO | Scegli [1] CELLA: la sua SUIT e quella delle CELLE ORTOGONALI diventano una SUIT a tua scelta. |\n" +
-"| **Doppio Movimento** | DEPLOY | SOSTITUISCE l'ATTACCO: questo TURNO esegui **[2] MOVIMENTI**. |\n" +
-"| **Doppio Attacco** | DEPLOY | SOSTITUISCE il MOVIMENTO: questo TURNO esegui **[2] ATTACCHI**. |\n" +
-"| **Cronobomba** | DEPLOY | Sposta subito la GLOBAL SUIT su una SUIT a tua scelta; la rotazione prosegue da lì. |\n" +
-"| **Randomizzatore** | MOV / ATT | SOSTITUISCE l'azione. Scegli fino a [3] CELLE scoperte e SOVRASCRIVILE (le carte tornano nel DECK, si mescola e si pesca per rimpiazzarle). |\n" +
-"| **Ricarica** | MOV / ATT | PESCA [2] carte e aggiungile alla STACK ATTIVA. |\n" +
-"| **Sifone Energetico** | MOV / ATT | RUBA [1] carta all'avversario e aggiungila alla STACK ATTIVA. |\n" +
-"| **Ricostruisci** | MOV / ATT | PESCA [3] carte, scegline [1] e con essa SOVRASCRIVI una CELLA DISTRUTTA o OFFLINE. |\n" +
-"| **Remix!** | qualsiasi | Ripristina [1] uso di REMIX già consumato (non oltre il totale). |\n" +
-"| **Encore!** | qualsiasi | Ripristina [1] uso della SKILL del tuo ARM già consumato (non oltre il totale). |");
+"| TOOL | Fase | COSTO | Effetto |\n" +
+"|---|---|---|---|\n" +
+"| **Jetpack** | MOVIMENTO | SCARTA [1] carta dalla STACK ATTIVA | Per questo MOVIMENTO puoi MATCHARE anche le CELLE DIAGONALI. |\n" +
+"| **Salto** | MOVIMENTO | SCARTA [1] carta dalla STACK ATTIVA | Per questo MOVIMENTO puoi MATCHARE solo a DISTANZA [2] su CELLE ORTOGONALI. |\n" +
+"| **Arpione** | MOVIMENTO | SCARTA [1] carta dalla STACK ATTIVA | Per questo MOVIMENTO puoi MATCHARE anche le CELLE ORTOGONALI all'ARM avversario. |\n" +
+"| **Teletrasporto** | MOVIMENTO | Non puoi effettuare la fase di MOVIMENTO questo turno | Muovi su una qualsiasi CELLA VUOTA scoperta con lo **stesso VALORE** della CELLA da cui parti. |\n" +
+"| **Spinta** | ATTACCO | SCARTA [1] TOOL | Se COLPISCI un ARM avversario, lo sposti su una CELLA ORTOGONALE a DISTANZA [1]. |\n" +
+"| **Granata** | ATTACCO | CONSUMA | DISTRUGGE la CELLA colpita. Se era occupata, sposti quell'ARM su una CELLA ORTOGONALE a DISTANZA [1]. |\n" +
+"| **Barrage!** | ATTACCO | CONSUMA | Scegli [1] CELLA VUOTA e DISTRUGGILA. |\n" +
+"| **Bomba Elementale** | ATTACCO | CONSUMA | Scegli [1] CELLA: la sua SUIT e quella delle CELLE ORTOGONALI diventano una SUIT a tua scelta. |\n" +
+"| **Doppio Movimento** | DEPLOY | Non puoi effettuare l'azione di ATTACCO questo turno | Questo TURNO puoi eseguire **[2] MOVIMENTI**. |\n" +
+"| **Doppio Attacco** | DEPLOY | Non puoi effettuare l'azione di MOVIMENTO questo turno | Questo TURNO puoi eseguire **[2] ATTACCHI**. |\n" +
+"| **Cronobomba** | DEPLOY | PERDI [1] punto | Sposta subito la GLOBAL SUIT su una SUIT a tua scelta; la rotazione prosegue da lì. |\n" +
+"| **Randomizzatore** | MOV / ATT | CONSUMA | PESCA fino a [3] carte, poi per ognuna SOVRASCRIVI una CELLA. |\n" +
+"| **Ricarica** | MOV / ATT | — | PESCA [2] carte e aggiungile alla STACK ATTIVA. |\n" +
+"| **Sifone Energetico** | MOV / ATT | — | RUBA [1] carta all'avversario e aggiungila alla STACK ATTIVA. |\n" +
+"| **Ripristina** | MOV / ATT | — | PESCA [3] carte, scegline [1] e con essa SOVRASCRIVI una CELLA DISTRUTTA o OFFLINE. |\n" +
+"| **Remix!** | qualsiasi | PERDI [1] punto | Ripristina [1] uso di REMIX già consumato (non oltre il totale). |\n" +
+"| **Encore!** | qualsiasi | PERDI [1] punto | Ripristina [1] uso della SKILL del tuo ARM già consumato (non oltre il totale). |\n" +
+"| **Carica Disperata** | MOVIMENTO | SCARTA [2] TOOL | Muovi su una CELLA OCCUPATA da un ARM avversario nella tua stessa riga o colonna (senza MATCH): si svolge un CLASH come in un normale MOVIMENTO. |\n" +
+"| **Snipe** | ATTACCO | Non puoi effettuare la fase di ATTACCO questo turno; CONSUMA | Colpisci una CELLA OCCUPATA da un ARM avversario nella tua stessa riga o colonna (senza MATCH): si svolge un CLASH come in un normale ATTACCO. |\n" +
+"| **Santuario** | MOV / ATT | SCARTA [1] TOOL | PESCA [5] carte, SOVRASCRIVI la CELLA che OCCUPI e tutte le CELLE ORTOGONALI. |\n" +
+"| **Feedback Loop** | MOV / ATT | SCARTA [1] carta dalla STACK DI RISERVA | SOVRASCRIVI la CELLA occupata dal tuo ARM con una carta della STACK ATTIVA, poi PESCA [1] carta nella STACK ATTIVA. |\n" +
+"| **Swap!** | MOVIMENTO | Non puoi effettuare l'azione di ATTACCO questo turno | Solo se il tuo ARM è su una CELLA OFFLINE: PESCA [1] carta e SOVRASCRIVI la tua CELLA, poi scambia la posizione del tuo ARM con quella di un ARM avversario. |\n" +
+"| **Nuke** | ATTACCO | Non puoi effettuare la fase di ATTACCO questo turno; SCARTA [3] TOOL | MATCHA [1] CELLA: quella CELLA e tutte le CELLE ORTOGONALI diventano OFFLINE. Se avevano OBIETTIVI ne ottieni i punti (nessun TOOL). Gli ARM in quelle CELLE perdono [2] punti. |\n" +
+"| **Overcharge** | qualsiasi | SCARTA [1] TOOL | Ottieni **[+2]** al VALORE nei CLASH fino alla fine del turno. |\n" +
+"| **Toolbox** | qualsiasi | CONSUMA | PESCA [2] TOOL dal tuo mazzo. |\n" +
+"| **Shuffle** | MOV / ATT | — | Seleziona [2] CELLE ONLINE VUOTE e scambia le carte presenti nelle due CELLE. |");
 
     s.push(
 "## 9. Fine della partita\n\n" +
@@ -206,9 +227,11 @@
 "| **STACK ATTIVA** | le 3 carte scelte in DEPLOY (per MOVIMENTO e ATTACCO) |\n" +
 "| **STACK DI RISERVA** | le carte non scelte in DEPLOY (per i CLASH) |\n" +
 "| **DECK / HEAP** | il mazzo di pesca / la pila degli scarti |\n" +
-"| **TOOLS / TOOLS HEAP** | gli oggetti / la loro pila degli scarti |\n" +
+"| **mazzo TOOLS / scarti TOOLS** | il mazzo personale dei TOOLS di un PILOTA / la sua pila degli scarti |\n" +
 "| **CLASH** | il confronto di carte quando due ARM si scontrano |\n" +
 "| **COLPIRE** | mandare a segno un attacco (o vincere un CLASH) |\n" +
+"| **SOVRASCRIVI** | sostituisci la carta di una CELLA (scarti quella presente e ne metti un'altra) |\n" +
+"| **CONSUMA** | costo: solo su CELLA ONLINE; quella CELLA diventa OFFLINE |\n" +
 "| **REMIX** | in DEPLOY, scartare e ripescare carte |\n" +
 "| **ROUND / TURNO** | il giro completo / il turno di un singolo PILOTA |\n" +
 "| **DISTANZA [N]** | a N CELLE di distanza |");

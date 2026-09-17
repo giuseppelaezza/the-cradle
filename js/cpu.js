@@ -351,9 +351,27 @@
     var barrage = ownObj(game, id, 'barrage'); if (barrage && barrageUsable(game)) return { id: barrage.id, type: 'barrage' };
     // 7) Encore!: ricarica la SKILL del proprio ARM se esaurita (brawler/tactician/runner).
     var enc = ownObj(game, id, 'encore'); if (enc && encoreUseful(game, id)) return { id: enc.id, type: 'encore' };
-    // 8) Remix!: +1 uso a REMIX se sei a corto (torna utile nei DEPLOY successivi).
+    // 8) Nuovi TOOLS di manovra ----
+    // Carica Disperata (MOVIMENTO) / Snipe (ATTACCO): colpisci un ARM in riga/colonna se il CLASH è vincibile.
+    if (phase === 'move') { var chg = ownObj(game, id, 'carica_disperata'); if (chg && lineWinnable(game, id)) return { id: chg.id, type: 'carica_disperata' }; }
+    if (phase === 'attack') { var snp = ownObj(game, id, 'snipe'); if (snp && lineWinnable(game, id)) return { id: snp.id, type: 'snipe' }; }
+    // Ripristina/Santuario/Feedback/Nuke: manipolazione del campo (ultimo ripiego).
+    var san = ownObj(game, id, 'santuario'); if (san) return { id: san.id, type: 'santuario' };
+    var fbk = ownObj(game, id, 'feedback_loop'); if (fbk) return { id: fbk.id, type: 'feedback_loop' };
+    var nuk = ownObj(game, id, 'nuke'); if (nuk && phase === 'attack' && chooseNuke(game, id)) return { id: nuk.id, type: 'nuke' };
+    var swp = ownObj(game, id, 'swap'); if (swp && phase === 'move') return { id: swp.id, type: 'swap' };
+    // Toolbox: pesca 2 TOOL (buon valore quando ne hai pochi). Overcharge/Shuffle: manipolazione minore.
+    var tbx = ownObj(game, id, 'toolbox'); if (tbx && game.state.players[id].objects.length <= 3) return { id: tbx.id, type: 'toolbox' };
+    var ovc = ownObj(game, id, 'overcharge'); if (ovc && lineWinnable(game, id)) return { id: ovc.id, type: 'overcharge' };
+    var shf = ownObj(game, id, 'shuffle'); if (shf) return { id: shf.id, type: 'shuffle' };
+    // 9) Remix!: +1 uso a REMIX se sei a corto (torna utile nei DEPLOY successivi).
     var rem = ownObj(game, id, 'remix'); if (rem && game.state.players[id].reshuffleLeft === 0) return { id: rem.id, type: 'remix' };
     return null;
+  }
+  // Esiste un ARM avversario in riga/colonna con cui vincere un CLASH? (per Carica Disperata / Snipe)
+  function lineWinnable(game, id) {
+    var t = game._lineTargets ? game._lineTargets(id) : [];
+    return t.some(function (o) { return clashWinnable(game, id, o.oppId); });
   }
   function encoreUseful(game, id) {
     var p = game.state.players[id];
@@ -401,10 +419,61 @@
     var fig = opts.filter(function (o) { var c = game.getCell(o.x, o.y); return c.card && !c.faceDown && Deck.isFigure(c.card); })[0];
     return fig || opts[0];
   }
-  function cpuRandomizerCells(game, id) {
-    var opts = game.randomizerSelectOptions();
-    var dead = opts.filter(function (o) { var c = game.getCell(o.x, o.y); return !c.pawn && c.card && !Deck.isFigure(c.card); });
-    return (dead.length ? dead : opts).slice(0, 3);
+  // Randomizzatore (nuovo): per ogni carta pescata SOVRASCRIVI la CELLA meno preziosa disponibile.
+  function cellWorth(game, o) {
+    var c = game.getCell(o.x, o.y);
+    if (c.destroyed || !c.card) return -2;               // celle vuote/distrutte: sovrascrivile volentieri
+    if (c.faceDown) return -1;                           // OFFLINE
+    var w = 0;
+    if (Deck.isFigure(c.card)) w += 6;                   // non sprecare gli OBIETTIVI
+    if (isBonusC(o.x, o.y)) w += 3;
+    if (c.pawn) w += 4;
+    return w;
+  }
+  function cpuRandomizerPlace(game, id) {
+    var pr = game.state.pendingRandomizer;
+    var opts = game.randomizerPlaceOptions().slice().sort(function (a, b) { return cellWorth(game, a) - cellWorth(game, b); });
+    pr.drawn.forEach(function (card, i) { var cell = opts[i]; if (cell) game.randomizerPlace(card.id, cell.x, cell.y); });
+    game.randomizerDone();
+  }
+  // Costo "SCARTA [n] TOOL": scarta il TOOL meno utile (semplice: l'ultimo).
+  function worstTool(opts) { return opts[opts.length - 1]; }
+  // Carica Disperata / Snipe: scegli un ARM avversario in riga/colonna, preferendo un CLASH vincibile.
+  function chooseLineTarget(game, id, opts) {
+    if (!opts || !opts.length) return null;
+    var win = opts.filter(function (o) { return clashWinnable(game, id, o.oppId); });
+    return (win.length ? win : opts)[0];
+  }
+  // Nuke: MATCHA la CELLA che massimizza il danno (OBIETTIVI e ARM avversari nell'area).
+  function chooseNuke(game, id) {
+    var opts = game.nukeOptions(), best = null;
+    opts.forEach(function (o) {
+      var area = [{ x: o.x, y: o.y }].concat(Engine.orthogonalNeighbors(o.x, o.y, _SZ).map(function (d) { return { x: d[0], y: d[1] }; }));
+      var v = 0;
+      area.forEach(function (xy) {
+        var c = game.getCell(xy.x, xy.y);
+        if (c.destroyed) return;
+        if (c.card && !c.faceDown && Deck.isFigure(c.card)) v += Deck.figurePoints(c.card);
+        if (c.pawn && c.pawn !== id) v += 2;
+      });
+      if (!best || v > best.v) { var cards = game.availableRevealed(id).filter(function (c) { return game._matches(id, c, game.getCell(o.x, o.y)); }); if (cards.length) best = { x: o.x, y: o.y, v: v, cardId: minValueCard(cards).id }; }
+    });
+    return best;
+  }
+  // Wallie & Glass: se conviene, posiziona il segnalino GLASS su una CELLA ORTOGONALE (preferendo oro/coppe o CELLA BONUS).
+  function chooseGlass(game, id) {
+    if (!game.canGlass || !game.canGlass(id)) return null;
+    var opts = game.glassTargets(id); if (!opts.length) return null;
+    var revealed = game.availableRevealed(id), best = null;
+    opts.forEach(function (o) {
+      var cell = game.getCell(o.x, o.y);
+      var cards = revealed.filter(function (c) { return game._matches(id, c, cell); });
+      if (!cards.length) return;
+      var suitScore = ({ oro: 2, coppe: 2, bastoni: 1, spade: 1 })[cell.card.suit] || 0;
+      var v = suitScore + posBonus(o.x, o.y);
+      if (!best || v > best.v) best = { x: o.x, y: o.y, v: v, cardId: minValueCard(cards).id };
+    });
+    return best;
   }
   // Teletrasporto: scegli la CELLA di destinazione col miglior valore d'arrivo.
   function cpuTeleportTarget(game, id, opts) {
@@ -441,8 +510,14 @@
     if (s.subPhase === 'barrage-first') { if (s.pendingBarrage.playerId === id) { var f = cpuBarrageFirst(game, id); if (f) game.barrageFirst(f.x, f.y); } return {}; }
     if (s.subPhase === 'tool-discard') { if (s.pendingToolDiscard.playerId === id) { var lo = minValueCard(game.toolDiscardOptions()); if (lo) game.toolDiscardChoose(lo.id); } return {}; }
     if (s.subPhase === 'runner-figure') { if (s.pendingRunner.playerId === id) { var rlo = minValueCard(game.runnerFigureOptions()); if (rlo) game.runnerFigureHit(rlo.id); else game.runnerFigureSkip(); } return {}; }
-    if (s.subPhase === 'randomizer-select') { if (s.pendingRandomizer.playerId === id) { cpuRandomizerCells(game, id).forEach(function (c) { game.randomizerToggle(c.x, c.y); }); game.randomizerConfirm(); } return {}; }
-    if (s.subPhase === 'randomizer-place') { if (s.pendingRandomizer.playerId === id) { var pr = s.pendingRandomizer; pr.chosen.forEach(function (ch, i) { if (pr.drawn[i]) game.randomizerPlace(pr.drawn[i].id, ch.x, ch.y); }); game.randomizerDone(); } return {}; }
+    if (s.subPhase === 'randomizer-place') { if (s.pendingRandomizer.playerId === id) { cpuRandomizerPlace(game, id); } return {}; }
+    if (s.subPhase === 'tool-sacrifice') { if (s.pendingToolSac.playerId === id) { var tso = game.toolSacrificeOptions(); if (tso.length) game.toolSacrificeChoose(worstTool(tso).id); } return {}; }
+    if (s.subPhase === 'charge-select') { if (s.pendingCharge.playerId === id) { var ct = chooseLineTarget(game, id, game.chargeTargets()); if (ct) game.chargeChoose(ct.x, ct.y); } return {}; }
+    if (s.subPhase === 'snipe-select') { if (s.pendingSnipe.playerId === id) { var snt = chooseLineTarget(game, id, game.snipeTargets()); if (snt) game.snipeChoose(snt.x, snt.y); } return {}; }
+    if (s.subPhase === 'feedback-select') { if (s.pendingFeedback.playerId === id) { var fo = game.feedbackOptions(); if (fo.length) game.feedbackChoose(minValueCard(fo).id); } return {}; }
+    if (s.subPhase === 'swap-target') { if (s.pendingSwap.playerId === id) { var swt = game.swapTargets(); if (swt.length) game.swapChoose(swt[0]); } return {}; }
+    if (s.subPhase === 'nuke-select') { if (s.pendingNuke.playerId === id) { var nk = chooseNuke(game, id); if (nk) game.nukeChoose(nk.x, nk.y, nk.cardId); } return {}; }
+    if (s.subPhase === 'shuffle-select') { if (s.pendingShuffle.playerId === id) { var sho = game.shuffleOptions(); if (sho.length) game.shuffleChoose(sho[0].x, sho[0].y); } return {}; }
     if (s.subPhase === 'object-discard') { if (s.pendingObjectDiscard.playerId === id) game.discardObject(id, chooseDiscard(game, id)); return {}; }
     if (s.subPhase === 'end-discard') { if (s.pendingEndDiscard.playerId === id) { chooseEndDiscard(game, id).forEach(function (cid) { game.endDiscardToggle(cid); }); game.endDiscardConfirm(); } return {}; }
     if (s.subPhase === 'rebuild-select') { if (s.pendingRebuild.playerId === id) { var rd = game.rebuildDrawn(); if (rd.length) game.rebuildSelectCard(maxValueCard(rd).id); } return {}; }
@@ -480,6 +555,7 @@
       if (mv.action !== 'pass') { game.move(id, mv.x, mv.y, mv.cardId); return {}; }
       // Passeremmo: prova un oggetto di ripiego (ricarica/sifone/ricostruisci/randomizer/…).
       var mf = chooseFiller(game, id, 'move'); if (mf) { game.useObject(id, mf.id); return {}; }
+      var glm = chooseGlass(game, id); if (glm) { game.glassPlace(id, glm.x, glm.y, glm.cardId); return {}; }
       game.passMove(id);
       return {};
     }
@@ -496,6 +572,7 @@
       }
       // Passeremmo: prova un oggetto di ripiego / manipolazione del campo.
       var af = chooseFiller(game, id, 'attack'); if (af) { game.useObject(id, af.id); return {}; }
+      var gla = chooseGlass(game, id); if (gla) { game.glassPlace(id, gla.x, gla.y, gla.cardId); return {}; }
       game.passShoot(id);
       return {};
     }
@@ -511,6 +588,6 @@
     chooseSelectObject: chooseSelectObject, chooseMoveObject: chooseMoveObject, chooseAttackObject: chooseAttackObject,
     choosePower: choosePower, cpuAct: cpuAct,
     cpuTimebombSuit: cpuTimebombSuit, cpuElementalTarget: cpuElementalTarget, cpuElementalSuit: cpuElementalSuit,
-    cpuBarrageFirst: cpuBarrageFirst, cpuRandomizerCells: cpuRandomizerCells
+    cpuBarrageFirst: cpuBarrageFirst
   };
 });

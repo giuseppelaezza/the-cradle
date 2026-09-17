@@ -15,7 +15,9 @@
 
   // Stato della configurazione. I poteri seguono automaticamente il modulo Personaggi.
   var cfg = { opponent: 'cpu', suitMode: 'rotating', characters: true, objects: true, reshuffle: true, reshuffleCount: 2,
-              ruleset: 'C', gridSize: 4, gridMode: 'random', turnMode: '1221', maxRounds: 8, clashOnAttack: true, objectMode: 'random', objectSelection: [],
+              ruleset: 'C', gridSize: 4, gridMode: 'draft', turnMode: '1221', maxRounds: 8, clashOnAttack: true, objectMode: 'select',
+              // Composizione dei mazzi TOOLS: array indicizzato per slot Pilota (0..3), ogni voce è una count-map { type: copie }.
+              objectDecks: [{}, {}, {}, {}],
               numPlayers: 2, chars: ['runner', 'brawler', 'tactician', 'fighter'] };
 
   // Icona del seme (SVG inline, colorata dal CSS come in partita).
@@ -73,15 +75,15 @@
     os.title = 'Composizione del DECK dei TOOLS.';
     [['random', 'TOOLS casuali'], ['select', 'Seleziona TOOLS']].forEach(function (o) {
       var op = h('option', null, o[1]); op.value = o[0]; if (cfg.objectMode === o[0]) op.selected = true;
-      op.title = o[0] === 'random' ? '5 tipi casuali (2 copie ciascuno).' : 'Scegli tu quali TOOLS (2 copie di ciascuno).';
+      op.title = o[0] === 'random' ? 'Ogni Pilota riceve un mazzo di 4 TOOLS casuali (3 copie ciascuno).' : 'Componi tu il mazzo TOOLS di ogni Pilota (12 carte, max 3 copie per tipo).';
       os.appendChild(op);
     });
     os.onchange = function () { cfg.objectMode = os.value; renderConfig(); };
     objRow.appendChild(os);
     if (cfg.objectMode === 'select') {
-      var toolsBtn = h('button', 'ghost', 'TOOLS' + (cfg.objectSelection.length ? ' (' + cfg.objectSelection.length + ')' : ''));
+      var toolsBtn = h('button', 'ghost', 'Mazzi TOOLS');
       toolsBtn.type = 'button';
-      toolsBtn.title = 'Apri la selezione dei TOOLS da includere nel DECK.';
+      toolsBtn.title = 'Apri la composizione dei mazzi TOOLS dei Piloti.';
       toolsBtn.onclick = openToolsDialog;
       objRow.appendChild(toolsBtn);
     }
@@ -115,7 +117,7 @@
     addl.appendChild(gm);
     sheet.appendChild(addl);
     sheet.appendChild(h('p', 'cfg-desc', cfg.gridMode === 'draft'
-      ? 'Draft: prima si determina il 1° Pilota e il TOOL iniziale, poi a turno (Piazzamento) ognuno pesca 4 carte, ne piazza 2 sulla griglia e scarta le altre. A griglia piena inizia la partita.'
+      ? 'Draft: prima si determina il 1° Pilota, poi a turno (Piazzamento) ognuno pesca 4 carte, ne piazza 2 sulla griglia e scarta le altre. A griglia piena inizia la partita.'
       : (cfg.turnMode === '1212'
         ? 'Struttura del TURNO: DEPLOY → MOVIMENTO G1 → MOVIMENTO G2 → ATTACCO G1 → ATTACCO G2 → Fine ROUND.'
         : 'Struttura del TURNO: DEPLOY → MOVIMENTO G1 → MOVIMENTO G2 → ATTACCO G2 → ATTACCO G1 → Fine ROUND.')));
@@ -198,18 +200,6 @@
     semeChip.appendChild(h('span', 'cd-chip-name', SUIT_LABEL[ch.suit]));
     attachTip(semeChip, 'ARM SUIT: ' + SUIT_LABEL[ch.suit] + ' (funziona come una GLOBAL SUIT personale e fissa).');
     semeBox.appendChild(semeChip); d.appendChild(semeBox);
-    // TOOL di partenza (nome + fase, con tooltip descrizione)
-    var objBox = h('div', 'cd-box');
-    objBox.appendChild(h('div', 'cd-label', 'TOOL'));
-    (ch.startObjects || []).forEach(function (t) {
-      var def = Objects && Objects.def(t);
-      var chip = h('div', 'cd-chip');
-      chip.appendChild(h('span', 'cd-chip-name', def ? def.label : t));
-      chip.appendChild(h('span', 'cd-chip-sub', objPhaseTextCfg(t)));
-      attachTip(chip, def ? def.desc : t);
-      objBox.appendChild(chip);
-    });
-    d.appendChild(objBox);
     // SKILL (nome + numero di usi, con tooltip descrizione)
     var abBox = h('div', 'cd-box');
     abBox.appendChild(h('div', 'cd-label', 'SKILL'));
@@ -240,54 +230,219 @@
   }
   function hideCfgTip() { if (cfgTipEl) cfgTipEl.style.display = 'none'; }
 
-  // Dialog "Tools": scegli quali oggetti comporranno il mazzo (2 copie di ciascuno scelto).
+  // ---- Tooltip "scheda TOOL" (uguale a quello in partita), posizionato via JS ----
+  var cardTipEl = null;
+  function attachCardTip(el, type) {
+    el.addEventListener('mouseenter', function () { showCardTip(el, type); });
+    el.addEventListener('mouseleave', hideCardTip);
+  }
+  function showCardTip(el, type) {
+    var UI = window.CradleUI;
+    if (!cardTipEl || !cardTipEl.isConnected) { cardTipEl = h('div', 'tooltip card-tip'); document.body.appendChild(cardTipEl); }
+    cardTipEl.innerHTML = ''; cardTipEl.appendChild(UI.objectCardEl(type));
+    cardTipEl.style.display = 'block'; cardTipEl.style.visibility = 'hidden'; cardTipEl.style.left = '0'; cardTipEl.style.top = '0';
+    var r = el.getBoundingClientRect(), tw = cardTipEl.offsetWidth, th = cardTipEl.offsetHeight;
+    var left = Math.min(Math.max(8, r.right + 8), Math.max(8, window.innerWidth - tw - 8));
+    if (r.right + 8 + tw > window.innerWidth) left = Math.max(8, r.left - tw - 8);
+    var top = Math.min(Math.max(8, r.top), window.innerHeight - th - 8);
+    cardTipEl.style.left = left + 'px'; cardTipEl.style.top = top + 'px'; cardTipEl.style.visibility = '';
+  }
+  function hideCardTip() { if (cardTipEl) cardTipEl.style.display = 'none'; }
+
+  // Etichette dei filtri fase → chiave interna del TOOL.
+  var PHASE_TAGS = [['select', 'DEPLOY'], ['move', 'MOVIMENTO'], ['attack', 'ATTACCO']];
+
+  // Schermata "Componi mazzi TOOLS": un mazzo personale per Pilota (12 carte, max 3 copie per tipo).
   function openToolsDialog() {
     var OBJ = window.CradleObjects, UI = window.CradleUI;
-    var back = h('div', 'dialog-back');
-    var box = h('div', 'dialog rules-dialog');
-    var head = h('div', 'rules-head');
-    head.appendChild(h('h2', null, 'Tools — oggetti in partita'));
-    var x = h('button', 'rules-x', '✕'); x.title = 'Chiudi';
-    var close = function () { back.remove(); document.removeEventListener('keydown', onKey); renderConfig(); };
-    x.onclick = close; head.appendChild(x); box.appendChild(head);
+    var effNP = cfg.gridSize === 5 ? cfg.numPlayers : 2;
+    var DECK_SIZE = OBJ.TOOL_DECK_SIZE, MAX = OBJ.TOOL_MAX_COPIES;
+    var pool = OBJ.selectablePool(cfg.ruleset);
+    var cur = 0;               // slot Pilota corrente
+    var phaseFilter = null;    // null = tutte, altrimenti 'select'|'move'|'attack'
 
-    var content = h('div', 'opt-content');
-    content.appendChild(h('p', 'setup-sub', 'Il DECK dei TOOLS sarà composto da 2 copie di ciascun TOOL selezionato. Clicca per selezionare/deselezionare.'));
-    var grid = h('div', 'obj-card-grid');
+    function specOf(slot) { if (!cfg.objectDecks[slot]) cfg.objectDecks[slot] = {}; return cfg.objectDecks[slot]; }
+    function total(slot) { return OBJ.specTotal(specOf(slot)); }
+    function isFull(slot) { return total(slot) >= DECK_SIZE; }
+    function allComplete() { for (var i = 0; i < effNP; i++) if (total(i) !== DECK_SIZE) return false; return true; }
+
+    var back = h('div', 'dialog-back');
+    var box = h('div', 'dialog tools-dialog');
+
+    // Intestazione: titolo + tab dei Piloti + chiudi.
+    var head = h('div', 'rules-head tools-head');
+    head.appendChild(h('h2', null, 'Tools'));
+    var tabs = h('div', 'tools-tabs');
+    var x = h('button', 'rules-x', '✕'); x.title = 'Chiudi';
+    head.appendChild(tabs); head.appendChild(x); box.appendChild(head);
+
+    // Corpo: colonna mazzo (sinistra, fixed) + griglia carte (destra, scrollabile).
+    var body = h('div', 'tools-body');
+    var deckCol = h('div', 'tools-deck-col');
+    var deckHead = h('div', 'tools-deck-head');
+    var deckTitle = h('div', 'tools-deck-title');
+    var deckCount = h('span', 'tools-deck-count');
+    deckHead.appendChild(deckTitle); deckHead.appendChild(deckCount);
+    var deckList = h('div', 'tools-deck-list');
+    var fillBtn = h('button', 'ghost tools-fill', 'Fill');
+    fillBtn.title = 'Riempi gli slot vuoti con il minor numero possibile di TOOLS casuali (max copie).';
+    deckCol.appendChild(deckHead); deckCol.appendChild(deckList); deckCol.appendChild(fillBtn);
+
+    var gridCol = h('div', 'tools-grid-col');
+    var tagRow = h('div', 'tools-tag-row');
+    var grid = h('div', 'obj-card-grid tools-card-grid');
+    gridCol.appendChild(tagRow); gridCol.appendChild(grid);
+    body.appendChild(deckCol); body.appendChild(gridCol);
+    box.appendChild(body);
+
+    function renderTabs() {
+      tabs.innerHTML = '';
+      for (var i = 0; i < effNP; i++) (function (slot) {
+        var t = total(slot);
+        var pill = h('button', 'tools-tab' + (slot === cur ? ' active' : '') + (t === DECK_SIZE ? ' complete' : ''));
+        pill.appendChild(h('span', 'tt-name', 'G' + (slot + 1)));
+        pill.appendChild(h('span', 'tt-count', t + '/' + DECK_SIZE));
+        pill.onclick = function () { cur = slot; renderAll(); };
+        tabs.appendChild(pill);
+      })(i);
+    }
+
+    function renderDeck() {
+      var spec = specOf(cur);
+      deckTitle.textContent = 'Giocatore ' + (cur + 1);
+      var t = total(cur);
+      deckCount.textContent = t + '/' + DECK_SIZE;
+      deckCount.className = 'tools-deck-count' + (t === DECK_SIZE ? ' complete' : '');
+      deckList.innerHTML = '';
+      var types = Object.keys(spec);
+      if (!types.length) { deckList.appendChild(h('div', 'hint', 'Mazzo vuoto: aggiungi TOOLS dalla griglia.')); return; }
+      // Ordina per fase poi per nome.
+      types.sort(function (a, b) {
+        var da = OBJ.def(a), db = OBJ.def(b);
+        return (da.phaseLabel + da.label).localeCompare(db.phaseLabel + db.label);
+      });
+      types.forEach(function (type) {
+        var d = OBJ.def(type), n = spec[type];
+        var row = h('div', 'tools-deck-item');
+        var name = h('span', 'tdi-name');
+        name.appendChild(h('span', 'tdi-label', d ? d.label : type));
+        // Fase abbreviata (D/M/A) per stare nella pillola senza overflow.
+        name.appendChild(h('span', 'tdi-phase', d ? (d.phaseAbbr || d.phaseLabel) : ''));
+        attachCardTip(name, type);
+        row.appendChild(name);
+        var ctrl = h('span', 'tdi-ctrl');
+        var minus = h('button', 'tdi-btn', '−');
+        minus.title = 'Riduci (a 1, elimina il TOOL).';
+        minus.onclick = function () {
+          spec[type] -= 1; if (spec[type] <= 0) delete spec[type];
+          renderAll();
+        };
+        var qty = h('span', 'tdi-qty', String(n));
+        var plus = h('button', 'tdi-btn', '+');
+        plus.disabled = n >= MAX || isFull(cur);
+        plus.title = n >= MAX ? 'Massimo 3 copie.' : (isFull(cur) ? 'Mazzo pieno.' : 'Aggiungi una copia.');
+        plus.onclick = function () { if (spec[type] < MAX && !isFull(cur)) { spec[type] += 1; renderAll(); } };
+        ctrl.appendChild(minus); ctrl.appendChild(qty); ctrl.appendChild(plus);
+        row.appendChild(ctrl);
+        // "x" cerchiata: elimina del tutto il TOOL dal mazzo (senza ridurne la quantità una alla volta).
+        var del = h('button', 'tdi-del', '✕');
+        del.title = 'Elimina il TOOL dal mazzo.';
+        del.onclick = function () { delete spec[type]; renderAll(); };
+        row.appendChild(del);
+        deckList.appendChild(row);
+      });
+    }
+
+    function renderTags() {
+      tagRow.innerHTML = '';
+      PHASE_TAGS.forEach(function (pt) {
+        var tag = h('button', 'tools-tag' + (phaseFilter === pt[0] ? ' active' : ''), pt[1]);
+        tag.onclick = function () { phaseFilter = (phaseFilter === pt[0]) ? null : pt[0]; renderAll(); };
+        tagRow.appendChild(tag);
+      });
+    }
+
+    // Tipi ordinati alfabeticamente per etichetta (per la griglia di selezione).
+    var poolSorted = pool.slice().sort(function (a, b) {
+      var la = (OBJ.def(a) && OBJ.def(a).label) || a, lb = (OBJ.def(b) && OBJ.def(b).label) || b;
+      return la.localeCompare(lb);
+    });
     function renderGrid() {
       grid.innerHTML = '';
-      // Gli oggetti "solo Ruleset C" (cOnly) sono selezionabili solo se il ruleset è C.
-      OBJ.ALL_TYPES.forEach(function (type) {
+      var spec = specOf(cur), full = isFull(cur);
+      poolSorted.forEach(function (type) {
         var d = OBJ.def(type);
-        if (d && d.cOnly && cfg.ruleset !== 'C') return;
-        var selected = cfg.objectSelection.indexOf(type) !== -1;
-        var card = UI.objectCardEl(type, { selectable: true, selected: selected });
+        if (phaseFilter) { var ps = d.phases || [d.phase]; if (ps.indexOf(phaseFilter) === -1) return; }
+        var n = spec[type] || 0;
+        var card = UI.objectCardEl(type, { selectable: true, half: true });
+        if (n > 0) { card.classList.add('in-deck'); card.appendChild(h('span', 'ovc-count', '×' + n)); }
+        var blocked = (n >= MAX) || full;
+        if (blocked) card.classList.add('ovc-blocked');
         card.onclick = function () {
-          var i = cfg.objectSelection.indexOf(type);
-          if (i !== -1) cfg.objectSelection.splice(i, 1); else cfg.objectSelection.push(type);
-          renderGrid();
+          if (n >= MAX || isFull(cur)) return;
+          spec[type] = n + 1; renderAll();
         };
         grid.appendChild(card);
       });
+      if (!grid.children.length) grid.appendChild(h('div', 'hint', 'Nessun TOOL per questa fase.'));
     }
-    renderGrid();
-    content.appendChild(grid);
-    box.appendChild(content);
-    var foot = h('div', 'tools-foot');
-    var done = h('button', 'primary', 'Fatto'); done.onclick = close;
-    foot.appendChild(done); box.appendChild(foot);
 
+    function renderAll() { renderTabs(); renderDeck(); renderTags(); renderGrid(); }
+
+    fillBtn.onclick = function () {
+      cfg.objectDecks[cur] = OBJ.fillToolDeckSpec(specOf(cur), Math.random, cfg.ruleset);
+      renderAll();
+    };
+
+    function finish() { hideCardTip(); back.remove(); document.removeEventListener('keydown', onKey); renderConfig(); }
+    function tryClose() {
+      if (allComplete()) { finish(); return; }
+      openIncompleteDialog(function () {
+        // Conferma: Fill per ogni Pilota, poi chiudi.
+        for (var i = 0; i < effNP; i++) cfg.objectDecks[i] = OBJ.fillToolDeckSpec(specOf(i), Math.random, cfg.ruleset);
+        finish();
+      });
+    }
+    x.onclick = tryClose;
+
+    renderAll();
     back.appendChild(box);
-    back.onclick = function (e) { if (e.target === back) close(); };
-    function onKey(e) { if (e.key === 'Escape') close(); }
+    back.onclick = function (e) { if (e.target === back) tryClose(); };
+    function onKey(e) { if (e.key === 'Escape') tryClose(); }
     document.addEventListener('keydown', onKey);
+    document.body.appendChild(back);
+  }
+
+  // Modale di conferma quando si chiude con mazzi incompleti.
+  function openIncompleteDialog(onConfirm) {
+    var back = h('div', 'dialog-back tools-confirm-back');
+    var box = h('div', 'dialog tools-confirm');
+    box.appendChild(h('h2', null, 'Mazzi TOOLS incompleti'));
+    box.appendChild(h('p', 'setup-sub', 'I mazzi dei TOOLS sono incompleti, se si procede verranno aggiunte carte casuali per ottenere un mazzo completo.'));
+    var foot = h('div', 'tools-foot');
+    var backBtn = h('button', 'ghost', 'Indietro');
+    var okBtn = h('button', 'primary', 'Conferma');
+    backBtn.onclick = function () { back.remove(); };
+    okBtn.onclick = function () { back.remove(); onConfirm(); };
+    foot.appendChild(backBtn); foot.appendChild(okBtn); box.appendChild(foot);
+    back.appendChild(box);
+    back.onclick = function (e) { if (e.target === back) back.remove(); };
     document.body.appendChild(back);
   }
 
   // Costruisce le opzioni per createGame dalla configurazione corrente.
   function buildOpts(extra) {
-    var useSelection = cfg.objects && cfg.objectMode === 'select' && cfg.objectSelection.length > 0;
     var effNP = cfg.gridSize === 5 ? cfg.numPlayers : 2;
+    // In modalità "select" passa la composizione per Pilota; se vuota per un Pilota, l'engine genera un mazzo casuale.
+    var useSelection = cfg.objects && cfg.objectMode === 'select';
+    var objectDecks = null;
+    if (useSelection) {
+      objectDecks = [];
+      for (var pi = 0; pi < effNP; pi++) {
+        var spec = cfg.objectDecks[pi] || {};
+        objectDecks[pi] = Object.keys(spec).length ? spec : null;
+      }
+    }
     var opts = {
       suitMode: cfg.suitMode,
       modules: { characters: cfg.characters, objects: cfg.objects, powers: cfg.characters, reshuffle: cfg.reshuffle },
@@ -299,7 +454,7 @@
       turnMode: cfg.turnMode,
       maxRounds: cfg.ruleset === 'C' ? cfg.maxRounds : 9,
       clashOnAttack: cfg.clashOnAttack,
-      objectSelection: useSelection ? cfg.objectSelection.slice() : null,
+      objectDecks: objectDecks,
       characters: cfg.chars.slice(0, effNP) // array per indice (Pilota 1..n)
     };
     if (extra) for (var k in extra) opts[k] = extra[k];
@@ -349,7 +504,14 @@
     if (s.subPhase === 'timebomb-suit') return s.pendingTimebomb.playerId;
     if (s.subPhase === 'elemental-target' || s.subPhase === 'elemental-suit') return s.pendingElemental.playerId;
     if (s.subPhase === 'barrage-first' || s.subPhase === 'barrage-second' || s.subPhase === 'barrage-third') return s.pendingBarrage.playerId;
-    if (s.subPhase === 'randomizer-select' || s.subPhase === 'randomizer-place') return s.pendingRandomizer.playerId;
+    if (s.subPhase === 'randomizer-place') return s.pendingRandomizer.playerId;
+    if (s.subPhase === 'tool-sacrifice') return s.pendingToolSac.playerId;
+    if (s.subPhase === 'charge-select') return s.pendingCharge.playerId;
+    if (s.subPhase === 'snipe-select') return s.pendingSnipe.playerId;
+    if (s.subPhase === 'feedback-select') return s.pendingFeedback.playerId;
+    if (s.subPhase === 'swap-target') return s.pendingSwap.playerId;
+    if (s.subPhase === 'nuke-select') return s.pendingNuke.playerId;
+    if (s.subPhase === 'shuffle-select') return s.pendingShuffle.playerId;
     if (s.subPhase === 'altmatch-object') return s.pendingAltMatch.playerId;
     if (s.subPhase === 'clash-cards') return g.clashCurrentChooser();
     if (s.subPhase === 'clash-reloc') return s.pendingClash.relocatorId;
@@ -483,7 +645,7 @@
       ['Giocatori', String(effNP)],
       ['ROUND', String(cfg.maxRounds)],
       ['ARM', armList],
-      ['TOOLS', cfg.objectMode === 'select' ? ('Selezione (' + cfg.objectSelection.length + ')') : 'Random'],
+      ['TOOLS', cfg.objectMode === 'select' ? 'Selezione (mazzi personali)' : 'Random'],
       ['REMIX', cfg.reshuffleCount + '/partita'],
       ['Turno', cfg.turnMode === '1212' ? '1-2-1-2' : '1-2-2-1'],
       ['Modalità', 'CPU vs CPU']
