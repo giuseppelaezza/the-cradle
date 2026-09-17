@@ -217,8 +217,9 @@
       detectTacticianPeek();
       renderBody();
       lockActionHeight();
-      // La griglia si adatta solo al primo layout utile (e ai resize): non cambia tra le fasi.
-      if (ui.needFit) { fitLayout(); if (ui.actionH) ui.needFit = false; }
+      // Su mobile il layout è fisso: ridimensiona la griglia ad ogni render (l'altezza dei pannelli varia).
+      if (isMobile()) { fitLayout(); }
+      else if (ui.needFit) { fitLayout(); if (ui.actionH) ui.needFit = false; }
       renderClashModal();
       renderTacticianModal();
       renderToolChoiceModal(game.state);
@@ -243,6 +244,8 @@
     // così non cambia tra le fasi. Rimisura il riferimento quando la mano è mostrata in scelta carte.
     function lockActionHeight() {
       var s = game.state;
+      // Su mobile il pannello azione è ad altezza automatica (nessun blocco): la griglia assorbe lo spazio.
+      if (isMobile()) { dom.action.style.minHeight = ''; var rm = dom.action.querySelector('.act-row'); if (rm) rm.style.minHeight = ''; return; }
       var row = dom.action.querySelector('.act-row');
       if (!s.gameOver && !ui.gate && !s.subPhase && s.phase === 'select' && dom.action.querySelector('.act-hand')) {
         dom.action.style.minHeight = '';
@@ -275,32 +278,79 @@
       dom.hud.innerHTML = '';
       var top = h('div', 'hud-top');
       top.appendChild(pill('Round', s.phase === 'draft' ? 'Draft' : (s.round + '/' + (s.maxRounds || 9))));
-      top.appendChild(pill('Turno', s.gameOver ? '—' : s.activePlayer));
-      // Seme di turno: etichetta colorata + icona del seme.
-      var sp = h('span', 'pill'); sp.appendChild(document.createTextNode('GLOBAL SUIT: '));
-      var suitB = h('b', 'suit-' + s.currentSuit, SUIT_LABEL[s.currentSuit] + ' '); sp.appendChild(suitB);
-      sp.appendChild(suitIcon(s.currentSuit));
-      top.appendChild(sp);
-      if (s.suitMode === 'rotating') top.appendChild(suitSequence(s.currentSuit));
+      var turnPill = pill('Turno', s.gameOver ? '—' : s.activePlayer); turnPill.classList.add('hud-turn');
+      top.appendChild(turnPill);
+      // Indicatore di rotazione dei semi (sostituisce la vecchia pillola "GLOBAL SUIT").
+      top.appendChild(suitSequence(s.currentSuit));
       var spacer = h('div', 'spacer'); top.appendChild(spacer);
+      // Controlli desktop (nascosti su mobile via CSS).
+      var dctl = h('span', 'hud-desktop-ctrls');
       var undo = h('button', 'ghost', '↶ Annulla');
-      undo.disabled = !game.canUndo();
-      undo.onclick = doUndo;
-      top.appendChild(undo);
+      undo.disabled = !game.canUndo(); undo.onclick = doUndo; dctl.appendChild(undo);
       var reset = h('button', 'ghost', '↺ Nuova partita');
-      reset.onclick = function () { location.reload(); };
-      top.appendChild(reset);
-      var opts = h('button', 'ghost', '⚙️ Opzioni');
-      opts.onclick = openOptionsDialog;
-      top.appendChild(opts);
-      var rules = h('button', 'ghost', '📖 Regolamento');
-      rules.onclick = function () { openRulesDialog('C'); };
-      top.appendChild(rules);
+      reset.onclick = function () { location.reload(); }; dctl.appendChild(reset);
+      var opts = h('button', 'ghost', '⚙️ Opzioni'); opts.onclick = openOptionsDialog; dctl.appendChild(opts);
+      var rules = h('button', 'ghost', '📖 Regolamento'); rules.onclick = function () { openRulesDialog('C'); }; dctl.appendChild(rules);
+      top.appendChild(dctl);
+      // Controlli mobile compatti: annulla + hamburger (nascosti su desktop via CSS).
+      var mctl = h('span', 'hud-mobile-ctrls');
+      var mUndo = h('button', 'ghost hud-icon-btn', '↶'); mUndo.title = 'Annulla';
+      mUndo.disabled = !game.canUndo(); mUndo.onclick = doUndo; mctl.appendChild(mUndo);
+      var burger = h('button', 'ghost hud-icon-btn', '☰'); burger.title = 'Menu';
+      burger.onclick = openMobileMenu; mctl.appendChild(burger);
+      top.appendChild(mctl);
       dom.hud.appendChild(top);
 
-      var pl = h('div', 'players' + (game.allPlayers().length > 2 ? ' players-multi' : ''));
+      // Schede giocatore complete (desktop) + barra compatta (mobile, con dettaglio a scomparsa che copre la griglia).
+      var expanded = ui.playersExpanded && isMobile();
+      var pl = h('div', 'players' + (game.allPlayers().length > 2 ? ' players-multi' : '') + (expanded ? ' expanded' : ''));
+      if (expanded) {
+        var cbar = h('div', 'players-close-bar');
+        var cbtn = h('button', 'ghost', '✕ Chiudi'); cbtn.onclick = function () { ui.playersExpanded = false; render(); };
+        cbar.appendChild(cbtn); pl.appendChild(cbar);
+        pl.addEventListener('click', function (e) { if (e.target === pl) { ui.playersExpanded = false; render(); } }); // tap sullo sfondo: chiudi
+      }
       game.allPlayers().forEach(function (id) { pl.appendChild(playerCard(s, id)); });
+      dom.hud.appendChild(renderPlayersCompact(s));
       dom.hud.appendChild(pl);
+    }
+
+    // Barra compatta dei giocatori (mobile): 1°Pilota · nome · seme · punti, + pulsante per il dettaglio.
+    function renderPlayersCompact(s) {
+      var bar = h('div', 'players-compact');
+      game.allPlayers().forEach(function (id) {
+        var p = s.players[id];
+        var pillEl = h('div', 'pcx' + (!s.gameOver && s.activePlayer === id ? ' active' : ''));
+        var first = h('span', 'pcx-first'); first.title = '1° Pilota';
+        if (s.firstPlayer === id) { first.classList.add('on'); first.style.background = PLAYER_COLOR[id] || '#fff'; }
+        pillEl.appendChild(first);
+        var seed = h('span', 'pcx-seed' + (p.belongingSuit ? ' bg-' + p.belongingSuit : ''));
+        if (p.belongingSuit) seed.appendChild(suitIcon(p.belongingSuit, true));
+        pillEl.appendChild(seed);
+        var nm = h('span', 'pcx-name'); var dot = h('span', 'pcx-dot'); dot.style.background = PLAYER_COLOR[id] || '#888'; nm.appendChild(dot);
+        nm.appendChild(document.createTextNode('Pilota ' + id)); pillEl.appendChild(nm);
+        pillEl.appendChild(h('span', 'pcx-score', String(p.score)));
+        bar.appendChild(pillEl);
+      });
+      var exp = h('button', 'ghost pcx-expand', ui.playersExpanded ? '▲' : '▼'); exp.title = 'Dettaglio giocatori';
+      exp.onclick = function () { ui.playersExpanded = !ui.playersExpanded; render(); };
+      bar.appendChild(exp);
+      return bar;
+    }
+
+    // Menu mobile (hamburger): Nuova partita · Regolamento · Opzioni.
+    function openMobileMenu() {
+      var back = h('div', 'dialog-back');
+      var box = h('div', 'dialog mobile-menu');
+      box.appendChild(h('h2', null, 'Menu'));
+      function item(label, onClick) { var b = h('button', 'primary big-btn', label); b.onclick = function () { back.remove(); onClick(); }; box.appendChild(b); }
+      item('↺ Nuova partita', function () { location.reload(); });
+      item('📖 Regolamento', function () { openRulesDialog('C'); });
+      item('⚙️ Opzioni', function () { openOptionsDialog(); });
+      var close = h('button', 'ghost', 'Chiudi'); close.onclick = function () { back.remove(); }; box.appendChild(close);
+      back.appendChild(box);
+      back.onclick = function (e) { if (e.target === back) back.remove(); };
+      document.body.appendChild(back);
     }
 
     function phaseLabel(s) {
@@ -508,6 +558,7 @@
       if (s.subPhase === 'snipe-select') return game.snipeTargets();
       if (s.subPhase === 'nuke-select') return game.nukeOptions();
       if (s.subPhase === 'shuffle-select') return game.shuffleOptions();
+      if (s.subPhase === 'overtake-select') { var oc = []; for (var ox = 1; ox <= s.gridSize; ox++) for (var oy = 1; oy <= s.gridSize; oy++) oc.push({ key: ox + ',' + oy }); return oc; }
       if (!s.subPhase && ui.glassMode && (s.phase === 'move' || s.phase === 'attack')) return game.glassTargets(s.activePlayer);
       if (!s.subPhase && ui.brawlerMode && (s.phase === 'move' || s.phase === 'attack')) return game.brawlerTargets(s.activePlayer);
       return [];
@@ -830,11 +881,20 @@
       return { segs: segs, active: active };
     }
     function renderTimeline(s) {
-      if (!ui.tlSegRow) { // struttura: riga fasi + pillola descrizione
+      if (!ui.tlSegRow) { // struttura: riga fasi (+ conteggi DECK/HEAP su mobile) + pillola descrizione
         dom.timeline.innerHTML = '';
-        ui.tlSegRow = h('div', 'tl-segrow'); ui.tlHint = h('div', 'phase-hint'); ui.tlHint.hidden = true;
-        dom.timeline.appendChild(ui.tlSegRow); dom.timeline.appendChild(ui.tlHint); ui.tlSig = null;
+        var segWrap = h('div', 'tl-segwrap');
+        ui.tlSegRow = h('div', 'tl-segrow'); segWrap.appendChild(ui.tlSegRow);
+        ui.tlCounts = h('div', 'tl-counts');
+        ui.tlDeck = h('span', 'tl-count tl-deck'); ui.tlHeap = h('span', 'tl-count tl-heap');
+        ui.tlCounts.appendChild(ui.tlDeck); ui.tlCounts.appendChild(ui.tlHeap);
+        segWrap.appendChild(ui.tlCounts);
+        ui.tlHint = h('div', 'phase-hint'); ui.tlHint.hidden = true;
+        dom.timeline.appendChild(segWrap); dom.timeline.appendChild(ui.tlHint); ui.tlSig = null;
       }
+      // Conteggi DECK / HEAP (carte) — visibili su mobile accanto alla barra delle fasi.
+      ui.tlDeck.textContent = '🂠 ' + s.deck.length;
+      ui.tlHeap.textContent = '♺ ' + s.discard.length;
       var model = timelineModel(s);
       var sig = model.segs.map(function (x) { return x.key; }).join('|');
       if (ui.tlSig !== sig) {
@@ -846,7 +906,7 @@
       }
       // Etichette: nomi estesi; se la barra andrebbe su 2 righe, passa alle abbreviazioni (una riga).
       function applyLabels(abbr) { model.segs.forEach(function (seg) { if (ui.tlSegs[seg.key]) ui.tlSegs[seg.key].textContent = abbr ? seg.abbr : seg.full; }); }
-      var forceAbbr = (s.playerOrder && s.playerOrder.length > 2);
+      var forceAbbr = (s.playerOrder && s.playerOrder.length > 2) || isMobile();
       applyLabels(forceAbbr);
       if (!forceAbbr) {
         // Con le etichette estese la barra sta su una riga? Misura la larghezza a riga singola (nowrap)
@@ -940,6 +1000,8 @@
       if (s.subPhase === 'swap-target') return renderSwapTarget(s);
       if (s.subPhase === 'nuke-select') return renderPickWho(s, s.pendingNuke.playerId, '☢️ Nuke', 'Clicca una CELLA da MATCHARE (userai la carta più bassa che la abbina).');
       if (s.subPhase === 'shuffle-select') return renderPickWho(s, s.pendingShuffle.playerId, '🔀 Shuffle', s.pendingShuffle.first ? 'Clicca la seconda CELLA ONLINE VUOTA: scambierai le due carte.' : 'Clicca la prima CELLA ONLINE VUOTA da scambiare.');
+      if (s.subPhase === 'overtake-select') return renderPickWho(s, s.pendingOvertake.playerId, '📡 Overtake', 'Clicca una CELLA per scegliere la sua COLONNA: le CELLE OFFLINE/DISTRUTTE si RIGENERANO e l\'intera colonna diventa SUIT ' + (SUIT_LABEL[s.pendingOvertake.suit] || s.pendingOvertake.suit).toUpperCase() + '.');
+      if (s.subPhase === 'fighter-select') return renderFighterSelect(s);
       if (s.subPhase === 'altmatch-object') return renderAltObject(s);
       if (s.phase === 'select') return renderSelect(s);
       if (s.phase === 'move' || s.phase === 'attack') return renderAction(s);
@@ -994,7 +1056,7 @@
     function powersPanel(s, playerId, mode) {
       if (mode === 'select' || !s.modules.powers) return null;
       var p = s.players[playerId];
-      if (p.character !== 'tactician' && p.character !== 'brawler' && p.character !== 'wallie') return null;
+      if (p.character !== 'tactician' && p.character !== 'brawler' && p.character !== 'wallie' && p.character !== 'fighter') return null;
       var wrap = h('div', 'obj-panel power-panel');
       wrap.appendChild(h('div', 'obj-panel-title', 'Attiva SKILL'));
       var row = h('div', 'obj-panel-row');
@@ -1024,6 +1086,15 @@
         box3.appendChild(h('span', 'tooltip', characterPowerDesc('wallie')));
         if (canG) box3.onclick = function () { ui.glassMode = !ui.glassMode; ui.armedCardId = null; render(); };
         row.appendChild(box3); bindTip(box3);
+      }
+      if (p.character === 'fighter') {
+        var canF = game.canFighter && game.canFighter(playerId);
+        var box4 = h('div', 'obj-card power-card' + (canF ? ' usable' : ' disabled'));
+        box4.appendChild(h('span', 'obj-name', 'Soldier Boy'));
+        box4.appendChild(usesDots(p.fighterTotal, p.fighterLeft, playerId));
+        box4.appendChild(h('span', 'tooltip', characterPowerDesc('fighter')));
+        if (canF) box4.onclick = function () { game.fighterActivate(playerId); ui.armedCardId = null; render(); };
+        row.appendChild(box4); bindTip(box4);
       }
       wrap.appendChild(row);
       if (ui.brawlerMode) wrap.appendChild(h('div', 'hint', 'Clicca una CELLA evidenziata: userai 3 carte per MATCHARE qualsiasi CELLA.'));
@@ -1156,6 +1227,20 @@
       setAction('🔧 Ricostruisci — scegli 1 carta da posizionare', body, null);
     }
 
+    // ---- SKILL fighter (Soldier Boy): PESCA 3, scegline 1 per SOVRASCRIVERE la propria CELLA ----
+    function renderFighterSelect(s) {
+      var who = s.pendingFighter.playerId;
+      if (isCpu(who)) { thinking('🤖 Il computer sceglie la carta…'); return; }
+      var body = h('div', 'hand');
+      game.fighterDrawn().forEach(function (c) {
+        var card = h('div', 'card selectable ' + (isFigureVal(c.value) ? 'inv suit-bg-' + c.suit : 'suit-' + c.suit));
+        card.appendChild(cardFace(c, isFigureVal(c.value)));
+        card.onclick = function () { game.fighterSelectCard(c.id); render(); };
+        body.appendChild(card);
+      });
+      setAction('🛠️ Soldier Boy — scegli 1 carta: SOVRASCRIVI la tua CELLA', body, null);
+    }
+
     // ---- Scelta seme (generica: timebomb / elemental bomb) ----
     function renderSuitChoice(title, onPick) {
       var body = h('div', 'choices');
@@ -1200,7 +1285,9 @@
     }
     function renderToolChoiceModal(s) {
       var existing = document.querySelector('.toolchoice-modal-back');
-      var show = s.subPhase === 'altmatch-object' && s.pendingAltMatch && !isCpu(s.pendingAltMatch.playerId) && !ui.gate;
+      // Se la scelta TOOL nasce da un CLASH, mostra PRIMA la finestra del risultato del CLASH: la scelta
+      // TOOL compare solo dopo che il giocatore ha chiuso quella finestra (ui.clashModal === null).
+      var show = s.subPhase === 'altmatch-object' && s.pendingAltMatch && !isCpu(s.pendingAltMatch.playerId) && !ui.gate && !ui.clashModal;
       if (!show) { if (existing) existing.remove(); return; }
       if (existing) return;
       document.body.appendChild(buildToolChoiceModal(s));
@@ -1319,6 +1406,7 @@
     }
 
     // ---- Rendering mano ----
+    function isMobile() { return window.innerWidth <= 640; }
     function renderHand(s, playerId, mode) {
       var p = s.players[playerId];
       var clashB = game._clashBonus ? game._clashBonus(playerId) : 0; // bonus CLASH (+N) mostrato sulle carte
@@ -1345,16 +1433,31 @@
         card.appendChild(cardFace(c, isFig, false, showBonus));
         var interactive = (mode === 'select') || avail;
         if (interactive) {
-          // Hover: evidenzia sul campo le celle abbinabili + tooltip con le condizioni di abbinamento.
-          (function (cc) { card.onmouseenter = function () { highlightMatches(playerId, cc); }; card.onmouseleave = clearMatchHints; })(c);
+          // Desktop: hover per evidenziare le celle abbinabili. Mobile: LONG-PRESS per lo stesso effetto.
+          (function (cc, cd) {
+            cd.onmouseenter = function () { highlightMatches(playerId, cc); };
+            cd.onmouseleave = clearMatchHints;
+            attachLongPress(cd, function () { highlightMatches(playerId, cc); }, clearMatchHints);
+          })(c, card);
           if (mode === 'action' && avail) attachConditionTip(card, playerId, c);
         }
         card.onclick = function () {
+          if (card._suppressClick) { card._suppressClick = false; return; } // era un long-press: non selezionare
           if (mode === 'select') toggleChosen(playerId, c.id);
           else if (avail) { ui.armedCardId = (ui.armedCardId === c.id) ? null : c.id; render(); }
         };
         body.appendChild(card);
       });
+      // ---- MOBILE: STACK · TOOLS(mazzo·slot·scarti) · barra [Remix | Conferma | Skill] a posizioni fisse ----
+      if (isMobile()) {
+        var m = h('div', 'act-mobile');
+        var stack = h('div', 'am-stack'); body.classList.add('am-stack-cards'); stack.appendChild(body);
+        m.appendChild(stack);
+        m.appendChild(mobileToolsRow(s, playerId));
+        m.appendChild(mobileButtonBar(s, playerId, mode));
+        setAction('', m, null);
+        return;
+      }
       var layout = h('div', 'act-layout');
       // Riga: [ mano | SKILL | TOOLS | conferma/azioni ] — tutto su una sola riga (le colonne si stringono).
       var row = h('div', 'act-row');
@@ -1371,6 +1474,89 @@
       row.appendChild(handActions(s, playerId, mode));
       layout.appendChild(row);
       setAction(actionTitle(s, p, playerId), layout, null);
+    }
+
+    // ---- MOBILE: riga TOOLS con mazzo (sinistra) e scarti (destra) + slot dei TOOL ----
+    function mobileToolsRow(s, playerId) {
+      var p = s.players[playerId], row = h('div', 'am-tools');
+      if (!s.modules.objects) return row;
+      var deck = h('div', 'am-pile'); deck.title = 'Mazzo TOOLS'; deck.appendChild(h('b', null, String(p.objectDeck.length))); row.appendChild(deck);
+      var slots = h('div', 'am-tool-slots'); row.appendChild(slots);
+      var usableIds = game.usableObjects(playerId).map(function (o) { return o.id; });
+      var count = Math.max(5, p.objects.length);
+      for (var i = 0; i < count; i++) {
+        var o = p.objects[i] || null;
+        if (!o) { slots.appendChild(h('div', 'am-tool empty')); continue; }
+        var def = OBJ ? OBJ.def(o.type) : null;
+        var usable = usableIds.indexOf(o.id) !== -1;
+        var box = h('div', 'am-tool' + (usable ? ' usable' : ' disabled'));
+        box.appendChild(h('span', 'am-tool-name', def ? def.label : o.type));
+        var tip = h('span', 'tooltip card-tip'); tip.appendChild(objectCardEl(o.type)); box.appendChild(tip);
+        (function (oid, us) { if (us) box.onclick = function () { game.useObject(playerId, oid); ui.armedCardId = null; render(); }; })(o.id, usable);
+        bindTip(box);
+        slots.appendChild(box);
+      }
+      var disc = h('div', 'am-pile am-disc'); disc.title = 'Scarti TOOLS (tocca per consultare)';
+      disc.appendChild(h('b', null, String(p.objectDiscard.length)));
+      disc.onclick = function () { openPlayerToolsDialog(s, playerId); };
+      row.appendChild(disc);
+      return row;
+    }
+
+    // ---- MOBILE: barra a 3 pulsanti fissi: Remix | Conferma | Skill (disabilitati se non disponibili) ----
+    function mobileButtonBar(s, playerId, mode) {
+      var bar = h('div', 'am-bar'), p = s.players[playerId];
+      // REMIX (mulligan): attivo solo in DEPLOY quando disponibile; mostra gli usi rimasti.
+      var remixBtn = h('button', 'ghost am-btn am-remix');
+      remixBtn.appendChild(h('span', 'am-btn-lbl', 'Remix'));
+      if (s.modules.reshuffle) remixBtn.appendChild(usesDots(p.reshuffleTotal || 0, p.reshuffleLeft || 0, playerId, 'am-uses'));
+      var canResh = mode === 'select' && s.modules.reshuffle && game.canReshuffle && game.canReshuffle(playerId) && ui.chosen.length >= 1;
+      remixBtn.disabled = !canResh;
+      remixBtn.onclick = function () { game.reshuffleHand(playerId, ui.chosen.slice()); ui.chosen = []; render(); };
+      bar.appendChild(remixBtn);
+      // CONFERMA (DEPLOY) / PASSA (MOVIMENTO/ATTACCO).
+      if (mode === 'select') {
+        var need = game.selectCount(playerId), k = ui.chosen.length;
+        var conf = confirmBtn('Conferma (' + k + '/' + need + ')', playerId); conf.classList.add('am-btn', 'am-confirm');
+        conf.disabled = k !== need;
+        conf.onclick = function () { game.selectCards(playerId, ui.chosen.slice()); ui.selectingPlayer = null; ui.chosen = []; render(); };
+        bar.appendChild(conf);
+      } else {
+        var list = s.phase === 'move' ? game.legalMoves(playerId) : game.legalShots(playerId);
+        var pass = h('button', (list.length ? 'ghost' : 'primary') + ' am-btn am-confirm', 'Passa');
+        pass.onclick = function () { ui.armedCardId = null; if (s.phase === 'move') game.passMove(playerId); else game.passShoot(playerId); render(); };
+        bar.appendChild(pass);
+      }
+      // SKILL: attiva il potere del personaggio (o disabilitato); mostra gli usi rimasti.
+      var skillBtn = h('button', 'ghost am-btn am-skill' + (ui.brawlerMode || ui.glassMode ? ' active' : ''));
+      skillBtn.appendChild(h('span', 'am-btn-lbl', 'Skill'));
+      var su = skillUses(s, playerId);
+      if (su) skillBtn.appendChild(usesDots(su.total, su.left, playerId, 'am-uses'));
+      var sk = mobileSkillAction(s, playerId, mode);
+      skillBtn.disabled = !sk;
+      if (sk) skillBtn.onclick = sk;
+      bar.appendChild(skillBtn);
+      return bar;
+    }
+    // Usi rimasti della SKILL del personaggio (o null se passiva/senza usi).
+    function skillUses(s, playerId) {
+      if (!s.modules.powers) return null;
+      var p = s.players[playerId];
+      if (p.character === 'brawler') return { total: p.brawlerTotal, left: p.brawlerLeft };
+      if (p.character === 'tactician') return { total: p.tacticianTotal, left: p.tacticianLeft };
+      if (p.character === 'runner') return { total: p.runnerTotal, left: p.runnerLeft };
+      if (p.character === 'fighter') return { total: p.fighterTotal, left: p.fighterLeft };
+      return null;
+    }
+    // Ritorna la funzione da eseguire per la SKILL del personaggio corrente (o null se non disponibile).
+    function mobileSkillAction(s, playerId, mode) {
+      if (!s.modules.powers || mode === 'select') return null;
+      var p = s.players[playerId];
+      if (p.character === 'tactician' && game.canActivatePower && game.canActivatePower(playerId)) return function () { game.activatePower(playerId); ui.armedCardId = null; render(); };
+      if (p.character === 'brawler' && game.canBrawler && game.canBrawler(playerId)) return function () { ui.brawlerMode = !ui.brawlerMode; ui.armedCardId = null; render(); };
+      if (p.character === 'wallie' && game.canGlass && game.canGlass(playerId)) return function () { ui.glassMode = !ui.glassMode; ui.armedCardId = null; render(); };
+      if (p.character === 'fighter' && game.canFighter && game.canFighter(playerId)) return function () { game.fighterActivate(playerId); ui.armedCardId = null; render(); };
+      return null;
     }
 
     // Intestazione della mano: "Mano — Giocatore X" + seme di appartenenza + personaggio.
@@ -1495,6 +1681,8 @@
         return;
       }
       if (s.subPhase === 'shuffle-select') { if (!isCpu(s.pendingShuffle.playerId) && game.shuffleOptions().some(function (o) { return o.x === x && o.y === y; })) { game.shuffleChoose(x, y); render(); } return; }
+      // Overtake: clicca una CELLA per scegliere la sua COLONNA (x).
+      if (s.subPhase === 'overtake-select') { if (!isCpu(s.pendingOvertake.playerId)) { game.overtakeChoose(x); render(); } return; }
       // GLASS (Wallie & Glass): posiziona il segnalino sulla CELLA ORTOGONALE matchata.
       if (!s.subPhase && ui.glassMode && (s.phase === 'move' || s.phase === 'attack') && !isCpu(s.activePlayer)) {
         if (game.glassTargets(s.activePlayer).some(function (o) { return o.x === x && o.y === y; })) {
@@ -1515,6 +1703,7 @@
         var m = list.filter(function (e) { return e.key === key && e.cardIds.indexOf(ui.armedCardId) !== -1; })[0];
         if (!m) return;
         var card = ui.armedCardId; ui.armedCardId = null;
+        ui.handHidden = false; // dopo aver giocato la carta, rimostra la mano
         if (s.phase === 'move') game.move(s.activePlayer, x, y, card);
         else { var sc = game.pawnCell(s.activePlayer); if (sc) ui.pendingShot = { from: { x: sc.x, y: sc.y }, to: { x: x, y: y } }; game.shoot(s.activePlayer, x, y, card); }
         render();
@@ -1544,6 +1733,19 @@
       });
     }
     function clearMatchHints() { var ns = dom.board.querySelectorAll('.match-hint'); for (var i = 0; i < ns.length; i++) ns[i].classList.remove('match-hint'); }
+    // Long-press (touch): tenendo premuto si esegue onStart (anteprima abbinamenti), al rilascio onEnd.
+    // Marca el._suppressClick per non far scattare il click (selezione carta) dopo il long-press.
+    function attachLongPress(el, onStart, onEnd) {
+      var timer = null;
+      el.addEventListener('touchstart', function () {
+        el._suppressClick = false;
+        timer = setTimeout(function () { timer = null; el._suppressClick = true; onStart(); }, 350);
+      }, { passive: true });
+      function done() { if (timer) { clearTimeout(timer); timer = null; } if (el._suppressClick) onEnd(); }
+      el.addEventListener('touchend', done);
+      el.addEventListener('touchcancel', done);
+      el.addEventListener('touchmove', function () { if (timer) { clearTimeout(timer); timer = null; } }, { passive: true });
+    }
 
     // Condizioni per cui una carta può abbinare una cella (valore, semi jolly, poteri).
     function conditionParts(playerId, card) {
@@ -1660,7 +1862,28 @@
     // lo spazio residuo e ne ricavo la dimensione di --cell (con vincolo anche sulla larghezza).
     function fitLayout() {
       var root = document.documentElement;
-      if (window.innerWidth < 940) { root.style.removeProperty('--cell'); return; } // layout mobile: gestito dal CSS
+      var Nm = (game.state && game.state.gridSize) || 5;
+      // Layout mobile FISSO (100dvh, niente scroll): la griglia è l'unico elemento flessibile e
+      // riempie lo spazio residuo del board-wrap (misurato: dipende da HUD/timeline/azione).
+      if (window.innerWidth <= 640) {
+        var gg = 6, sidePad = 5, gridBox = 8 * 2 + 2; // padding 8px per lato + bordo della griglia
+        // Larghezza: riempi lo spazio orizzontale disponibile (finestra − 5px per lato). Fonte affidabile
+        // cross-browser (Firefox non ridimensionava misurando il board-wrap flex).
+        var availW = window.innerWidth - sidePad * 2 - gridBox;
+        var cw2 = Math.floor((availW - gg * (Nm - 1)) / Nm);
+        // Altezza disponibile: finestra − HUD − timeline − azione − gap dell'app − box della griglia.
+        var appGap = 4;
+        var availH = window.innerHeight - sidePad * 2 - gridBox
+          - (dom.hud ? dom.hud.getBoundingClientRect().height : 0)
+          - (dom.timeline ? dom.timeline.getBoundingClientRect().height : 0)
+          - (dom.action ? dom.action.getBoundingClientRect().height : 0)
+          - appGap * 3 - 2;
+        var ch2 = Math.floor((availH - gg * (Nm - 1)) / Nm);
+        var cm = Math.max(30, Math.min(cw2, ch2));
+        root.style.setProperty('--cell', cm + 'px');
+        return;
+      }
+      if (window.innerWidth < 940) { root.style.removeProperty('--cell'); return; } // tablet: gestito dal CSS
       // La griglia è N×N (5 di default, 4 nella variante del Ruleset C): scala la cella
       // in base al numero di righe/colonne così che il campo riempia l'altezza in ogni caso.
       var N = (game.state && game.state.gridSize) || 5;
@@ -1932,7 +2155,7 @@
     function resetUiTransient() {
       ui.armedCardId = null; ui.chosen = []; ui.selectingPlayer = null; ui.clashChooser = null;
       ui.reshuffleMode = null; ui.reshuffleSel = [];
-      ui.gate = null; ui.pendingShot = null; ui.brawlerMode = false; ui.glassMode = false; ui.selectedDrawn = null;
+      ui.gate = null; ui.pendingShot = null; ui.brawlerMode = false; ui.glassMode = false; ui.handHidden = false; ui.selectedDrawn = null;
       ui.clashModal = null; // chiudi l'eventuale finestra di confronto del clash
       ui.peekModal = null;  // chiudi l'eventuale modale "riserva avversaria" del tactician
     }

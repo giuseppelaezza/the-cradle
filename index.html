@@ -38,15 +38,16 @@
     <div id="sheet" class="sheet"></div>
   </div>
 
-  <!-- Script classici (nessun build step): apribile via file:// (o server statico) -->
-  <script src="js/deck.js"></script>
-  <script src="js/objects.js"></script>
-  <script src="js/characters.js"></script>
-  <script src="js/suits.js"></script>
-  <script src="js/regolamento.js"></script>
-  <script src="js/engine.js"></script>
-  <script src="js/cpu.js"></script>
-  <script src="js/ui.js"></script>
-  <script src="js/main.js"></script>
+  <!-- Script classici (nessun build step): apribile via file:// (o server statico).
+       Ordine = dipendenze: core → model → content → engine → ai → ui. -->
+  <script src="js/core/deck.js"></script>
+  <script src="js/core/suits.js"></script>
+  <script src="js/model/objects.js"></script>
+  <script src="js/model/characters.js"></script>
+  <script src="js/content/regolamento.js"></script>
+  <script src="js/engine/engine.js"></script>
+  <script src="js/ai/cpu.js"></script>
+  <script src="js/ui/ui.js"></script>
+  <script src="js/ui/main.js"></script>
 </body>
 </html>

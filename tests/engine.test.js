@@ -4,8 +4,8 @@
  * (rotazione, personaggi/belongingSuit, oggetti: pesca/limite/effetti, celle distrutte).
  */
 'use strict';
-var Deck = require('../js/deck.js');
-var Engine = require('../js/engine.js');
+var Deck = require('../js/core/deck.js');
+var Engine = require('../js/engine/engine.js');
 
 var passed = 0, failed = 0;
 function ok(c, m) { if (c) passed++; else { failed++; console.error('  ✗ FAIL: ' + m); } }
@@ -1151,7 +1151,7 @@ console.log('# Struttura del turno: ordine di attacco 1-2-2-1 vs 1-2-1-2');
 // -------------------------------------------------------------------- Statistiche di partita
 console.log('# Statistiche di partita (breakdown punti, contatori azioni/oggetti)');
 (function () {
-  var Cpu = require('../js/cpu.js');
+  var Cpu = require('../js/ai/cpu.js');
   function whoActs(s, g) {
     if (s.gameOver) return null;
     if (s.subPhase === 'object-discard') return s.pendingObjectDiscard.playerId;
@@ -1170,6 +1170,8 @@ console.log('# Statistiche di partita (breakdown punti, contatori azioni/oggetti
     if (s.subPhase === 'swap-target') return s.pendingSwap.playerId;
     if (s.subPhase === 'nuke-select') return s.pendingNuke.playerId;
     if (s.subPhase === 'shuffle-select') return s.pendingShuffle.playerId;
+    if (s.subPhase === 'overtake-select') return s.pendingOvertake.playerId;
+    if (s.subPhase === 'fighter-select') return s.pendingFighter.playerId;
     if (s.subPhase === 'altmatch-choice' || s.subPhase === 'altmatch-object') return s.pendingAltMatch.playerId;
     if (s.subPhase === 'clash-cards') return g.clashCurrentChooser();
     if (s.subPhase === 'clash-reloc') return s.pendingClash.relocatorId;
@@ -1291,7 +1293,7 @@ console.log('# Multiplayer: seggi agli angoli, ordine orario, struttura del TURN
 // -------------------------------------------------------------------- Regressione: clash da MOVIMENTO senza ricollocazione
 console.log('# Clash MOVIMENTO vinto senza cella per il difensore: nessun softlock, pedine integre');
 (function () {
-  var Cpu = require('../js/cpu.js');
+  var Cpu = require('../js/ai/cpu.js');
   function whoActs(s, g) {
     if (s.gameOver) return null;
     if (s.subPhase === 'object-discard') return s.pendingObjectDiscard.playerId;
@@ -1314,6 +1316,8 @@ console.log('# Clash MOVIMENTO vinto senza cella per il difensore: nessun softlo
     if (s.subPhase === 'swap-target') return s.pendingSwap.playerId;
     if (s.subPhase === 'nuke-select') return s.pendingNuke.playerId;
     if (s.subPhase === 'shuffle-select') return s.pendingShuffle.playerId;
+    if (s.subPhase === 'overtake-select') return s.pendingOvertake.playerId;
+    if (s.subPhase === 'fighter-select') return s.pendingFighter.playerId;
     if (s.subPhase === 'altmatch-object') return s.pendingAltMatch.playerId;
     if (s.subPhase === 'clash-cards') return g.clashCurrentChooser();
     if (s.subPhase === 'clash-reloc') return s.pendingClash.relocatorId;
@@ -1454,8 +1458,9 @@ console.log('# Wallie & Glass: segnalino GLASS, bonus CLASH +2, distruzione, bon
   var g = Engine.createGame({ rng: makeRng(3), firstPlayer: 'N', suitMode: 'rotating', ruleset: 'C', gridSize: 5,
     modules: { characters: true, objects: true, powers: true }, characters: { N: 'wallie', S: 'runner' } });
   var s = g.state;
-  // Passiva: +2 nei CLASH quando non ha GLASS.
-  eq(g._clashBonus('N'), 2, 'Wallie: +2 CLASH senza GLASS');
+  // Passiva: +2 nei CLASH sulle sole carte ORO quando non ha GLASS.
+  eq(g._clashBonus('N', { suit: 'oro' }), 2, 'Wallie: +2 CLASH su carta ORO senza GLASS');
+  eq(g._clashBonus('N', { suit: 'spade' }), 0, 'Wallie: nessun +2 su carta non-ORO');
   // Piazza il GLASS su una CELLA ORTOGONALE matchata (fase movimento).
   s.phase = 'move'; s.subPhase = null; s.activePlayer = 'N'; s.actionsLeft = 1; s.moveModifier = null;
   var pc = g.pawnCell('N'); // [1,1]
@@ -1465,7 +1470,7 @@ console.log('# Wallie & Glass: segnalino GLASS, bonus CLASH +2, distruzione, bon
   ok(g.canGlass('N'), 'Wallie: può posizionare GLASS');
   g.glassPlace('N', 2, 1, 'm');
   ok(s.players.N.glass && s.players.N.glass.x === 2 && s.players.N.glass.y === 1, 'GLASS posizionato su [2,1]');
-  eq(g._clashBonus('N'), 0, 'Wallie: niente +2 CLASH mentre il GLASS è in campo');
+  eq(g._clashBonus('N', { suit: 'oro' }), 0, 'Wallie: niente +2 CLASH mentre il GLASS è in campo');
   ok(g.pawnCell('N').x === 1 && g.pawnCell('N').y === 1, 'GLASS: l\'ARM resta fermo');
   // Distruzione: un avversario MATCHA la CELLA del GLASS (attacco).
   s.phase = 'attack'; s.subPhase = null; s.activePlayer = 'S'; s.actionsLeft = 1; s.attackModifier = null; s.clashOnAttack = false;
@@ -1511,6 +1516,100 @@ console.log('# Overcharge (+2 CLASH), Toolbox (pesca 2 TOOL), Shuffle (scambia 2
   eq(g3.getCell(3, 1).card.id, cb, 'Shuffle: le carte sono scambiate (A)');
   eq(g3.getCell(4, 1).card.id, ca, 'Shuffle: le carte sono scambiate (B)');
   ok(s3.subPhase == null && s3.actionsLeft === 1, 'Shuffle: non consuma l\'azione');
+})();
+
+// -------------------------------------------------------------------- Novità: RIGENERA, Overtake, Drenaggio, SKILL fighter, passive
+console.log('# RIGENERA (Swap/Drenaggio): gating su CELLA OFFLINE + pesca/sovrascrivi');
+(function () {
+  function mov(g, id) { var s = g.state; s.phase = 'move'; s.subPhase = null; s.activePlayer = id; s.actionsLeft = 1; s.moveModifier = null; }
+  var g = Engine.createGame({ rng: makeRng(5), firstPlayer: 'N', gridSize: 5, modules: { objects: true } });
+  var s = g.state; mov(g, 'N');
+  s.players.N.objects = [{ id: 'drn', type: 'drenaggio', phase: 'move', fromCharacter: false }, { id: 'sp', type: 'jump', phase: 'move', fromCharacter: false }];
+  var pc = g.pawnCell('N'); // [1,1] ONLINE all'inizio
+  // Su CELLA ONLINE il TOOL con RIGENERA NON è utilizzabile.
+  ok(!g.usableObjects('N').some(function (o) { return o.type === 'drenaggio'; }), 'Drenaggio non usabile su CELLA ONLINE (RIGENERA)');
+  pc.faceDown = true; // ARM ora su CELLA OFFLINE
+  ok(g.usableObjects('N').some(function (o) { return o.type === 'drenaggio'; }), 'Drenaggio usabile su CELLA OFFLINE');
+  g.useObject('N', 'drn');
+  ok(!g.pawnCell('N').faceDown && !!g.pawnCell('N').card, 'RIGENERA: la CELLA dell\'ARM torna ONLINE (pescata)');
+  eq(s.subPhase, 'tool-sacrifice', 'Drenaggio: chiede lo SCARTA [1] TOOL');
+  g.toolSacrificeChoose('sp');
+  // Le CELLE ORTOGONALI a [1,1] ([2,1] e [1,2]) diventano OFFLINE.
+  ok(g.getCell(2, 1).faceDown && g.getCell(1, 2).faceDown, 'Drenaggio: le CELLE ORTOGONALI diventano OFFLINE');
+})();
+
+console.log('# Overtake: RIGENERA la colonna, converte la SUIT, gli ARM in colonna perdono 1');
+(function () {
+  function mov(g, id) { var s = g.state; s.phase = 'move'; s.subPhase = null; s.activePlayer = id; s.actionsLeft = 1; s.moveModifier = null; }
+  var g = Engine.createGame({ rng: makeRng(7), firstPlayer: 'N', gridSize: 5, modules: { objects: true } });
+  var s = g.state; mov(g, 'N');
+  s.players.N.objects = [{ id: 'ov', type: 'overtake_oro', phase: 'move', fromCharacter: false },
+                         { id: 't1', type: 'jump', phase: 'move', fromCharacter: false },
+                         { id: 't2', type: 'jetpack', phase: 'move', fromCharacter: false }];
+  g.getCell(3, 2).faceDown = true;                 // una CELLA OFFLINE nella colonna 3
+  g.getCell(3, 4).destroyed = true; g.getCell(3, 4).card = null; // una DISTRUTTA nella colonna 3
+  var scoreBefore = s.players.N.score;
+  // Metti l'ARM di N nella colonna 3 per verificare la penalità -1.
+  g.pawnCell('N').pawn = null; g.getCell(3, 3).pawn = 'N';
+  g.useObject('N', 'ov');
+  eq(s.subPhase, 'tool-sacrifice', 'Overtake: chiede lo SCARTA [2] TOOL');
+  g.toolSacrificeChoose('t1'); g.toolSacrificeChoose('t2');
+  eq(s.subPhase, 'overtake-select', 'Overtake: apre la scelta della colonna');
+  g.overtakeChoose(3);
+  var allOro = true; for (var y = 1; y <= 5; y++) { var c = g.getCell(3, y); if (c.card && c.card.suit !== 'oro') allOro = false; }
+  ok(allOro, 'Overtake: tutte le CELLE della colonna diventano ORO');
+  ok(!g.getCell(3, 2).faceDown && !g.getCell(3, 4).destroyed, 'Overtake: RIGENERA CELLE OFFLINE/DISTRUTTE della colonna');
+  eq(s.players.N.score, scoreBefore - 1, 'Overtake: l\'ARM nella colonna perde 1 punto');
+})();
+
+console.log('# SKILL fighter (Soldier Boy): pesca 3, scegli 1, SOVRASCRIVI la propria CELLA');
+(function () {
+  function mov(g, id) { var s = g.state; s.phase = 'move'; s.subPhase = null; s.activePlayer = id; s.actionsLeft = 1; s.moveModifier = null; }
+  var g = Engine.createGame({ rng: makeRng(9), firstPlayer: 'N', gridSize: 5, modules: { objects: true, characters: true, powers: true }, characters: { N: 'fighter', S: 'runner' } });
+  var s = g.state; mov(g, 'N');
+  eq(s.players.N.fighterLeft, 3, 'fighter: 3 usi iniziali');
+  ok(g.canFighter('N'), 'fighter: SKILL attivabile');
+  g.fighterActivate('N');
+  eq(s.subPhase, 'fighter-select', 'fighter: apre la scelta 1 su 3');
+  var drawn = g.fighterDrawn(); eq(drawn.length, 3, 'fighter: pesca 3 carte');
+  var chosen = drawn[0];
+  g.fighterSelectCard(chosen.id);
+  eq(g.pawnCell('N').card.id, chosen.id, 'fighter: SOVRASCRIVE la propria CELLA con la carta scelta');
+  eq(s.players.N.fighterLeft, 2, 'fighter: consuma 1 uso');
+  ok(s.subPhase == null && s.actionsLeft === 1, 'fighter: non consuma l\'azione');
+})();
+
+console.log('# Passiva runner (E-RUN-01): +1 se si muove, -1 se non si muove');
+(function () {
+  var g = Engine.createGame({ rng: makeRng(11), firstPlayer: 'N', gridSize: 5, modules: { characters: true, powers: true }, characters: { N: 'runner', S: 'fighter' } });
+  var s = g.state;
+  var before = s.players.N.score;
+  s.phase = 'move'; s.activePlayer = 'N'; s.actionsLeft = 1; s.moveModifier = null;
+  s.players.N._moveStartKey = '1,1'; // ha iniziato il segmento su [1,1]
+  g._applyRunnerMovePassive('N'); // ARM ancora su [1,1] → non si è mosso
+  eq(s.players.N.score, before - 1, 'runner: -1 se non si muove');
+  var before2 = s.players.N.score;
+  s.players.N._moveStartKey = '3,3'; // fingi partenza diversa dalla posizione attuale ([1,1])
+  g._applyRunnerMovePassive('N');
+  eq(s.players.N.score, before2 + 1, 'runner: +1 se si muove');
+})();
+
+console.log('# Passiva The Sniper (brawler): +2 alle carte COPPE nei CLASH');
+(function () {
+  var g = Engine.createGame({ rng: makeRng(13), firstPlayer: 'N', gridSize: 5, modules: { characters: true, powers: true }, characters: { N: 'brawler', S: 'runner' } });
+  eq(g._clashBonus('N', { suit: 'coppe' }), 2, 'brawler: +2 su carta COPPE');
+  eq(g._clashBonus('N', { suit: 'oro' }), 0, 'brawler: nessun bonus su carta non-COPPE');
+})();
+
+console.log('# Fine partita: nessuna CELLA ONLINE a fine ROUND → si conta');
+(function () {
+  var g = Engine.createGame({ rng: makeRng(15), firstPlayer: 'N', gridSize: 5, ruleset: 'C', modules: {} });
+  var s = g.state;
+  // Rendi OFFLINE/DISTRUTTE tutte le CELLE.
+  for (var x = 1; x <= 5; x++) for (var y = 1; y <= 5; y++) { var c = g.getCell(x, y); if (c.card) c.faceDown = true; }
+  ok(!g._anyOnlineCell(), 'nessuna CELLA ONLINE');
+  g._endRound();
+  ok(s.gameOver, 'partita finita a fine ROUND senza CELLE ONLINE');
 })();
 
 // --------------------------------------------------------------------

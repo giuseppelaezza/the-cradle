@@ -9,7 +9,7 @@
  */
 (function (root, factory) {
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = factory(require('./deck.js'), require('./engine.js'));
+    module.exports = factory(require('../core/deck.js'), require('../engine/engine.js'));
   } else {
     root.CradleCpu = factory(root.CradleDeck, root.CradleEngine);
   }
@@ -364,6 +364,11 @@
     var tbx = ownObj(game, id, 'toolbox'); if (tbx && game.state.players[id].objects.length <= 3) return { id: tbx.id, type: 'toolbox' };
     var ovc = ownObj(game, id, 'overcharge'); if (ovc && lineWinnable(game, id)) return { id: ovc.id, type: 'overcharge' };
     var shf = ownObj(game, id, 'shuffle'); if (shf) return { id: shf.id, type: 'shuffle' };
+    // Overtake: converte una colonna a una SUIT e RIGENERA le sue CELLE OFFLINE/DISTRUTTE.
+    var ovt = ['overtake_oro', 'overtake_spade', 'overtake_coppe', 'overtake_bastoni'].map(function (t) { return ownObj(game, id, t); }).filter(Boolean)[0];
+    if (ovt) return { id: ovt.id, type: ovt.type };
+    // Drenaggio: costo RIGENERA (serve l'ARM su CELLA OFFLINE) → rende OFFLINE le CELLE ortogonali.
+    var drn = ownObj(game, id, 'drenaggio'); if (drn) return { id: drn.id, type: 'drenaggio' };
     // 9) Remix!: +1 uso a REMIX se sei a corto (torna utile nei DEPLOY successivi).
     var rem = ownObj(game, id, 'remix'); if (rem && game.state.players[id].reshuffleLeft === 0) return { id: rem.id, type: 'remix' };
     return null;
@@ -397,6 +402,12 @@
       game.brawlerTargets(id).forEach(function (t) { var v = phase === 'move' ? arrivalValue(game, id, t.x, t.y).pts : shotValue(game, id, t.x, t.y); if (v > bestV) { bestV = v; bestT = t; } });
       var normal = phase === 'move' ? bestArrival(game, id, revealed, s.moveModifier).value : bestShotWith(game, id, revealed).value;
       if (bestT && bestV > normal && bestV > 0) return { kind: 'brawler', x: bestT.x, y: bestT.y };
+    }
+    // Fighter (Soldier Boy) — SKILL attiva: RIGENERA la propria CELLA. La CPU la usa quando l'ARM si
+    // trova su una CELLA OFFLINE (chiaro vantaggio: torna ONLINE), evitando di sprecarne gli usi.
+    if (p.character === 'fighter' && game.canFighter && game.canFighter(id)) {
+      var fpc = game.pawnCell(id);
+      if (fpc && fpc.card && fpc.faceDown && !fpc.destroyed) return { kind: 'fighter' };
     }
     // Tactician: il potere (guardare la riserva avversaria) è informativo e la CPU non lo sa sfruttare → non lo usa.
     return null;
@@ -435,6 +446,22 @@
     var opts = game.randomizerPlaceOptions().slice().sort(function (a, b) { return cellWorth(game, a) - cellWorth(game, b); });
     pr.drawn.forEach(function (card, i) { var cell = opts[i]; if (cell) game.randomizerPlace(card.id, cell.x, cell.y); });
     game.randomizerDone();
+  }
+  // Overtake: scegli la colonna che colpisce più ARM avversari; a parità, quella con più CELLE
+  // OFFLINE/DISTRUTTE da RIGENERARE. Evita, a parità, la colonna del proprio ARM.
+  function cpuOvertakeCol(game, id, opts) {
+    var s = game.state, pc = game.pawnCell(id), best = opts[0].col, bestScore = -Infinity;
+    opts.forEach(function (o) {
+      var col = o.col, opp = 0, mine = 0, regen = 0;
+      for (var y = 1; y <= _SZ; y++) {
+        var c = game.getCell(col, y);
+        if (c.pawn) { if (c.pawn === id) mine++; else opp++; }
+        if (c.destroyed || (c.card && c.faceDown)) regen++;
+      }
+      var score = opp * 10 + regen - mine * 8;
+      if (score > bestScore) { bestScore = score; best = col; }
+    });
+    return best;
   }
   // Costo "SCARTA [n] TOOL": scarta il TOOL meno utile (semplice: l'ultimo).
   function worstTool(opts) { return opts[opts.length - 1]; }
@@ -518,6 +545,8 @@
     if (s.subPhase === 'swap-target') { if (s.pendingSwap.playerId === id) { var swt = game.swapTargets(); if (swt.length) game.swapChoose(swt[0]); } return {}; }
     if (s.subPhase === 'nuke-select') { if (s.pendingNuke.playerId === id) { var nk = chooseNuke(game, id); if (nk) game.nukeChoose(nk.x, nk.y, nk.cardId); } return {}; }
     if (s.subPhase === 'shuffle-select') { if (s.pendingShuffle.playerId === id) { var sho = game.shuffleOptions(); if (sho.length) game.shuffleChoose(sho[0].x, sho[0].y); } return {}; }
+    if (s.subPhase === 'overtake-select') { if (s.pendingOvertake.playerId === id) { var ovo = game.overtakeOptions(); if (ovo.length) game.overtakeChoose(cpuOvertakeCol(game, id, ovo)); } return {}; }
+    if (s.subPhase === 'fighter-select') { if (s.pendingFighter.playerId === id) { var fgd = game.fighterDrawn(); if (fgd.length) game.fighterSelectCard(maxValueCard(fgd).id); } return {}; }
     if (s.subPhase === 'object-discard') { if (s.pendingObjectDiscard.playerId === id) game.discardObject(id, chooseDiscard(game, id)); return {}; }
     if (s.subPhase === 'end-discard') { if (s.pendingEndDiscard.playerId === id) { chooseEndDiscard(game, id).forEach(function (cid) { game.endDiscardToggle(cid); }); game.endDiscardConfirm(); } return {}; }
     if (s.subPhase === 'rebuild-select') { if (s.pendingRebuild.playerId === id) { var rd = game.rebuildDrawn(); if (rd.length) game.rebuildSelectCard(maxValueCard(rd).id); } return {}; }
@@ -549,6 +578,7 @@
       var pw = choosePower(game, id, 'move');
       if (pw && pw.kind === 'tactician') { game.activatePower(id); return {}; }
       if (pw && pw.kind === 'brawler') { game.brawlerAction(id, pw.x, pw.y); return {}; }
+      if (pw && pw.kind === 'fighter') { game.fighterActivate(id); return {}; }
       var mo = chooseMoveObject(game, id); if (mo) { game.useObject(id, mo.id); return {}; }
       var tp = chooseTeleport(game, id); if (tp) { game.useObject(id, tp.id); return {}; }
       var mv = chooseMove(game, id);
@@ -564,6 +594,7 @@
       var pw2 = choosePower(game, id, 'attack');
       if (pw2 && pw2.kind === 'tactician') { game.activatePower(id); return {}; }
       if (pw2 && pw2.kind === 'brawler') { var cc = game.pawnCell(id), rb = { type: 'shoot', from: cc ? { x: cc.x, y: cc.y } : null, to: { x: pw2.x, y: pw2.y } }; game.brawlerAction(id, pw2.x, pw2.y); return rb; }
+      if (pw2 && pw2.kind === 'fighter') { game.fighterActivate(id); return {}; }
       var ao = chooseAttackObject(game, id); if (ao) { game.useObject(id, ao.id); return {}; }
       var sh = chooseShot(game, id);
       if (sh.action !== 'pass') {

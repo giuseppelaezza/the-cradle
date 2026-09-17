@@ -8,7 +8,7 @@
  */
 (function (root, factory) {
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = factory(require('./deck.js'));
+    module.exports = factory(require('../core/deck.js'));
   } else {
     root.CradleObjects = factory(root.CradleDeck);
   }
@@ -136,8 +136,8 @@
     },
     swap: {
       type: 'swap', phase: 'move', label: 'Swap!',
-      cost: 'Non puoi effettuare l\'azione di ATTACCO questo turno', costSpec: { forfeit: 'attack' },
-      effect: 'Solo se il tuo ARM è su una CELLA OFFLINE: PESCA [1] carta e SOVRASCRIVI la tua CELLA, poi scambia la posizione del tuo ARM con quella di un ARM avversario.'
+      cost: 'RIGENERA; Non puoi effettuare l\'azione di ATTACCO questo turno', costSpec: { regen: true, forfeit: 'attack' },
+      effect: 'Scambia la posizione del tuo ARM con quella di un ARM avversario.'
     },
     nuke: {
       type: 'nuke', phase: 'attack', label: 'Nuke',
@@ -147,7 +147,7 @@
     overcharge: {
       type: 'overcharge', phase: 'select', phases: ['select', 'move', 'attack'], label: 'Overcharge',
       cost: 'SCARTA [1] TOOL', costSpec: { tools: 1 },
-      effect: 'Ottieni [+2] al VALORE nei CLASH fino alla fine del turno.'
+      effect: 'Ottieni [+2] al VALORE nei CLASH fino all\'inizio del tuo prossimo turno.'
     },
     toolbox: {
       type: 'toolbox', phase: 'select', phases: ['select', 'move', 'attack'], label: 'Toolbox',
@@ -158,6 +158,33 @@
       type: 'shuffle', phase: 'move', phases: ['move', 'attack'], label: 'Shuffle',
       cost: null, costSpec: {},
       effect: 'Seleziona [2] CELLE ONLINE VUOTE e scambia le carte presenti nelle due CELLE.'
+    },
+    // ---- Overtake: scegli una colonna, RIGENERA le CELLE OFFLINE/DISTRUTTE della colonna e
+    //      converti tutte le CELLE della colonna a una SUIT fissa (una variante per SUIT). ----
+    overtake_oro: {
+      type: 'overtake_oro', phase: 'move', phases: ['move', 'attack'], label: 'Oro Overtake', overtakeSuit: 'oro',
+      cost: 'SCARTA [2] TOOL', costSpec: { tools: 2 },
+      effect: 'Scegli [1] colonna: per ogni CELLA OFFLINE o DISTRUTTA PESCA una carta e con essa SOVRASCRIVI la CELLA, poi tutte le CELLE della colonna diventano SUIT ORO. Ogni ARM in quella colonna perde [1] punto.'
+    },
+    overtake_spade: {
+      type: 'overtake_spade', phase: 'move', phases: ['move', 'attack'], label: 'Spade Overtake', overtakeSuit: 'spade',
+      cost: 'SCARTA [2] TOOL', costSpec: { tools: 2 },
+      effect: 'Scegli [1] colonna: per ogni CELLA OFFLINE o DISTRUTTA PESCA una carta e con essa SOVRASCRIVI la CELLA, poi tutte le CELLE della colonna diventano SUIT SPADE. Ogni ARM in quella colonna perde [1] punto.'
+    },
+    overtake_coppe: {
+      type: 'overtake_coppe', phase: 'move', phases: ['move', 'attack'], label: 'Coppe Overtake', overtakeSuit: 'coppe',
+      cost: 'SCARTA [2] TOOL', costSpec: { tools: 2 },
+      effect: 'Scegli [1] colonna: per ogni CELLA OFFLINE o DISTRUTTA PESCA una carta e con essa SOVRASCRIVI la CELLA, poi tutte le CELLE della colonna diventano SUIT COPPE. Ogni ARM in quella colonna perde [1] punto.'
+    },
+    overtake_bastoni: {
+      type: 'overtake_bastoni', phase: 'move', phases: ['move', 'attack'], label: 'Bastoni Overtake', overtakeSuit: 'bastoni',
+      cost: 'SCARTA [2] TOOL', costSpec: { tools: 2 },
+      effect: 'Scegli [1] colonna: per ogni CELLA OFFLINE o DISTRUTTA PESCA una carta e con essa SOVRASCRIVI la CELLA, poi tutte le CELLE della colonna diventano SUIT BASTONI. Ogni ARM in quella colonna perde [1] punto.'
+    },
+    drenaggio: {
+      type: 'drenaggio', phase: 'move', phases: ['move', 'attack'], label: 'Drenaggio',
+      cost: 'RIGENERA; SCARTA [1] TOOL', costSpec: { regen: true, tools: 1 },
+      effect: 'Rendi OFFLINE tutte le CELLE ORTOGONALI alla posizione del tuo ARM.'
     }
   };
   // Deriva l'etichetta di fase e il testo del tooltip (fase + costo + effetto).
@@ -170,7 +197,7 @@
     if (!d.costSpec) d.costSpec = {};
   });
 
-  var ALL_TYPES = ['jetpack', 'jump', 'hook', 'homing_missile', 'rush_juice', 'combat_juice', 'timebomb', 'elemental_bomb', 'barrage', 'randomizer', 'energy_boost', 'energy_drain', 'rebuild', 'remix', 'encore', 'teleport', 'grapple', 'carica_disperata', 'snipe', 'santuario', 'feedback_loop', 'swap', 'nuke', 'overcharge', 'toolbox', 'shuffle'];
+  var ALL_TYPES = ['jetpack', 'jump', 'hook', 'homing_missile', 'rush_juice', 'combat_juice', 'timebomb', 'elemental_bomb', 'barrage', 'randomizer', 'energy_boost', 'energy_drain', 'rebuild', 'remix', 'encore', 'teleport', 'grapple', 'carica_disperata', 'snipe', 'santuario', 'feedback_loop', 'swap', 'nuke', 'overcharge', 'toolbox', 'shuffle', 'overtake_oro', 'overtake_spade', 'overtake_coppe', 'overtake_bastoni', 'drenaggio'];
 
   // Composizione del mazzo TOOLS personale: 12 carte, ogni tipo al massimo 3 copie.
   var TOOL_DECK_SIZE = 12;

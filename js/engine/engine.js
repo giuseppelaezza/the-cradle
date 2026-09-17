@@ -9,7 +9,7 @@
  */
 (function (root, factory) {
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = factory(require('./deck.js'), require('./objects.js'), require('./characters.js'));
+    module.exports = factory(require('../core/deck.js'), require('../model/objects.js'), require('../model/characters.js'));
   } else {
     root.CradleEngine = factory(root.CradleDeck, root.CradleObjects, root.CradleCharacters);
   }
@@ -134,8 +134,10 @@
       tacticianLeft: 2,            // tactician: attivazioni rimaste
       brawlerTotal: 3,             // brawler: attivazioni totali per partita
       brawlerLeft: 3,              // brawler: attivazioni rimaste
-      runnerTotal: 2,             // runner: usi della passiva "colpisci figura in movimento"
+      runnerTotal: 2,             // runner: usi della SKILL attiva "colpisci figura in movimento"
       runnerLeft: 2,
+      fighterTotal: 3,            // fighter: usi della SKILL attiva "RIGENERA la propria CELLA (pesca 3, scegli 1)"
+      fighterLeft: 3,
       targetObjectUsed: false,    // Ruleset C: scelta oggetto (una tantum) al raggiungimento della riga avversaria
       actedThisRound: false,      // true se il PILOTA ha fatto almeno un'azione nel ROUND corrente
       // Statistiche di partita per la schermata finale.
@@ -244,6 +246,7 @@
         if (ch.type === 'tactician' && ch.powerUses != null) { players[id].tacticianTotal = players[id].tacticianLeft = ch.powerUses | 0; }
         if (ch.type === 'brawler' && ch.powerUses != null) { players[id].brawlerTotal = players[id].brawlerLeft = ch.powerUses | 0; }
         if (ch.type === 'runner' && ch.powerUses != null) { players[id].runnerTotal = players[id].runnerLeft = ch.powerUses | 0; }
+        if (ch.type === 'fighter' && ch.powerUses != null) { players[id].fighterTotal = players[id].fighterLeft = ch.powerUses | 0; }
       });
     }
 
@@ -321,6 +324,8 @@
       pendingSwap: null,       // {playerId} durante 'swap-target' (Swap!)
       pendingNuke: null,       // {playerId} durante 'nuke-select' (Nuke)
       pendingShuffle: null,    // {playerId,first} durante 'shuffle-select' (Shuffle)
+      pendingOvertake: null,   // {playerId,suit} durante 'overtake-select' (Overtake)
+      pendingFighter: null,    // {playerId,drawn} durante 'fighter-select' (SKILL attiva di Soldier Boy)
       gameOver: false, endTriggered: false, result: null, log: []
     };
 
@@ -576,7 +581,20 @@
     s.activePlayer = id;
     s.moveModifier = null;
     s.actionsLeft = s.players[id].pendingActions.moves;
+    // Passiva runner (E-RUN-01): memorizza la posizione a inizio fase per premiare/punire il MOVIMENTO.
+    var pcs = this.pawnCell(id);
+    s.players[id]._moveStartKey = pcs ? (pcs.x + ',' + pcs.y) : null;
     this._promptMove();
+  };
+  // Passiva runner (E-RUN-01): a fine fase di MOVIMENTO, +1 punto se l'ARM si è spostato, -1 se non si è
+  // mosso. Attiva solo con il modulo Personaggi e per il personaggio runner.
+  Game.prototype._applyRunnerMovePassive = function (id) {
+    var s = this.state, p = s.players[id];
+    if (!s.modules.powers || p.character !== 'runner') return;
+    var pc = this.pawnCell(id), nowKey = pc ? (pc.x + ',' + pc.y) : null;
+    if (nowKey && nowKey !== p._moveStartKey) { this._addScore(id, 1, 'ptsBonus'); this._log(id + ' (runner) si è mosso: +1 punto.'); }
+    else { this._losePoints(id, 1); this._log(id + ' (runner) non si è mosso in MOVIMENTO: -1 punto.'); }
+    p._moveStartKey = null;
   };
   Game.prototype._promptMove = function () {
     var s = this.state;
@@ -585,6 +603,7 @@
   };
   Game.prototype._endMoveSegment = function () {
     var s = this.state;
+    this._applyRunnerMovePassive(s.activePlayer); // passiva runner: premio/penalità di MOVIMENTO
     var next = this._nextInOrder(this._moveOrder(), s.activePlayer);
     if (next) this._beginMoveSegment(next);
     else this._beginAttackPhase();
@@ -1288,6 +1307,7 @@
     if (p.character === 'tactician') return p.tacticianLeft < p.tacticianTotal;
     if (p.character === 'brawler') return p.brawlerLeft < p.brawlerTotal;
     if (p.character === 'runner') return p.runnerLeft < p.runnerTotal;
+    if (p.character === 'fighter') return p.fighterLeft < p.fighterTotal;
     return false;
   };
   // Remix! ripristina un uso di REMIX: usabile solo se c'è un uso già consumato da recuperare.
@@ -1304,6 +1324,16 @@
     }
     return false;
   };
+  // Esiste almeno una CELLA ONLINE (scoperta, con carta, non distrutta)? Se a fine ROUND non ce n'è
+  // nessuna, la partita finisce e si contano i punti.
+  Game.prototype._anyOnlineCell = function () {
+    var s = this.state;
+    for (var x = 1; x <= s.gridSize; x++) for (var y = 1; y <= s.gridSize; y++) {
+      var c = s.grid[x][y];
+      if (!c.destroyed && c.card && !c.faceDown) return true;
+    }
+    return false;
+  };
 
   // ---- Modello dei COSTI dei TOOL ----
   Game.prototype._toolCost = function (type) { var d = Objects.def(type); return (d && d.costSpec) || {}; };
@@ -1317,6 +1347,7 @@
     if (c.stack && this.availableRevealed(playerId).length < c.stack) return false;
     if (c.reserve && this.availableReserve(playerId).length < c.reserve) return false;
     if (c.consume && (!pc || pc.destroyed || !pc.card || pc.faceDown)) return false; // serve una CELLA ONLINE
+    if (c.regen && (!pc || pc.destroyed || !pc.card || !pc.faceDown)) return false; // RIGENERA: serve l'ARM su una CELLA OFFLINE
     if (c.tools && this._otherToolCount(playerId, obj.id) < c.tools) return false;
     return true; // points/forfeit sempre pagabili
   };
@@ -1338,6 +1369,15 @@
     var pc = this.pawnCell(id);
     if (pc && pc.card && !pc.faceDown && !pc.destroyed) { pc.faceDown = true; this._log(id + ' CONSUMA: [' + pc.x + ',' + pc.y + '] diventa OFFLINE.'); }
   };
+  // RIGENERA (costo): solo con l'ARM su una CELLA OFFLINE — PESCA [1] carta e con essa SOVRASCRIVI
+  // la CELLA occupata dall'ARM (che torna ONLINE). La gating è in _toolCostAffordable (c.regen).
+  Game.prototype._payRegen = function (id) {
+    var s = this.state, pc = this.pawnCell(id);
+    if (s.deck.length === 0) this._reshuffleDiscardIntoDeck();
+    var nc = this._drawCard();
+    if (pc) this._overwriteCell(pc, nc || null);
+    this._log(id + ' RIGENERA: PESCA 1 e SOVRASCRIVE la CELLA [' + (pc ? pc.x + ',' + pc.y : '?') + '] (ora ONLINE).');
+  };
 
   Game.prototype.useObject = function (playerId, objectId, params) {
     var s = this.state; params = params || {};
@@ -1355,6 +1395,7 @@
     var cost = this._toolCost(obj.type);
     if (cost.points) this._losePoints(playerId, cost.points);
     if (cost.consume) this._payConsume(playerId);
+    if (cost.regen) this._payRegen(playerId);
     if (cost.reserve) this._payReserveCost(playerId, cost.reserve);
     // "Non puoi effettuare l'azione di ATTACCO questo turno" (usato in fase select/move): azzera gli attacchi.
     if (cost.forfeit === 'attack' && (s.phase === 'select' || s.phase === 'move')) s.players[playerId].pendingActions.attacks = 0;
@@ -1407,6 +1448,7 @@
         if (ch === 'tactician' && pe.tacticianLeft < pe.tacticianTotal) pe.tacticianLeft += 1;
         else if (ch === 'brawler' && pe.brawlerLeft < pe.brawlerTotal) pe.brawlerLeft += 1;
         else if (ch === 'runner' && pe.runnerLeft < pe.runnerTotal) pe.runnerLeft += 1;
+        else if (ch === 'fighter' && pe.fighterLeft < pe.fighterTotal) pe.fighterLeft += 1;
         this._log(playerId + ' usa Encore!: ripristina 1 uso della SKILL del proprio ARM.');
         break;
       }
@@ -1468,7 +1510,59 @@
         break;
       }
       case 'shuffle': s.subPhase = 'shuffle-select'; s.pendingShuffle = { playerId: playerId, first: null }; break;
+      // Overtake: scegli una colonna (sub-fase 'overtake-select'); la SUIT bersaglio è nella def del TOOL.
+      case 'overtake_oro': case 'overtake_spade': case 'overtake_coppe': case 'overtake_bastoni': {
+        var od = Objects.def(type);
+        s.subPhase = 'overtake-select'; s.pendingOvertake = { playerId: playerId, suit: od.overtakeSuit };
+        break;
+      }
+      case 'drenaggio': this._runDrenaggio(playerId); break;
     }
+  };
+
+  // ---- Drenaggio: rende OFFLINE tutte le CELLE ORTOGONALI alla posizione dell'ARM (il costo RIGENERA
+  //      ha già riportato ONLINE la CELLA dell'ARM). Non consuma l'azione. ----
+  Game.prototype._runDrenaggio = function (playerId) {
+    var s = this.state, pc = this.pawnCell(playerId), self = this, n = 0;
+    if (pc) orthogonalNeighbors(pc.x, pc.y, s.gridSize).forEach(function (d) {
+      var c = s.grid[d[0]][d[1]];
+      if (!c.destroyed && c.card && !c.faceDown) { c.faceDown = true; self._breakGlassAt(d[0], d[1], playerId); n++; }
+    });
+    this._log(playerId + ' usa Drenaggio: ' + n + ' CELLE ORTOGONALI diventano OFFLINE.');
+    this._promptCurrentPhase(); // effetto immediato: non consuma l'azione
+  };
+
+  // ---- Overtake (overtake-select): scegli una colonna, RIGENERA le CELLE OFFLINE/DISTRUTTE della
+  //      colonna (PESCA + SOVRASCRIVI) e converti tutte le CELLE della colonna alla SUIT del TOOL;
+  //      ogni ARM presente nella colonna perde [1] punto. Non consuma l'azione. ----
+  Game.prototype.overtakeOptions = function () {
+    var s = this.state, out = [];
+    if (s.subPhase !== 'overtake-select' || !s.pendingOvertake) return out;
+    for (var x = 1; x <= s.gridSize; x++) out.push({ col: x, key: 'col-' + x });
+    return out;
+  };
+  Game.prototype.overtakeChoose = function (col) {
+    var s = this.state, po = s.pendingOvertake, self = this;
+    if (s.subPhase !== 'overtake-select' || !po) throw new Error('Nessun Overtake in corso.');
+    if (col < 1 || col > s.gridSize) throw new Error('Colonna non valida.');
+    var id = po.playerId, suit = po.suit, regen = 0, hitPawns = {};
+    for (var y = 1; y <= s.gridSize; y++) {
+      var c = s.grid[col][y];
+      if (c.destroyed || (c.card && c.faceDown)) { // CELLA DISTRUTTA o OFFLINE → RIGENERA
+        if (s.deck.length === 0) self._reshuffleDiscardIntoDeck();
+        var nc = self._drawCard();
+        self._overwriteCell(c, nc || null); regen++;
+      }
+    }
+    for (var y2 = 1; y2 <= s.gridSize; y2++) {
+      var c2 = s.grid[col][y2];
+      if (!c2.destroyed && c2.card) c2.card.suit = suit;
+      if (c2.pawn) hitPawns[c2.pawn] = true;
+    }
+    Object.keys(hitPawns).forEach(function (pid) { self._losePoints(pid, 1); });
+    this._log(id + ' usa Overtake sulla colonna ' + col + ': RIGENERA ' + regen + ' CELLE, colonna → SUIT ' + suit + '.');
+    s.pendingOvertake = null; s.subPhase = null;
+    this._promptCurrentPhase(); // effetto immediato: non consuma l'azione
   };
 
   // ---- Sifone Energetico (energy_drain): ruba 1 carta scelta dal bersaglio ----
@@ -1741,6 +1835,45 @@
       this._chain.push(this._step_afterAttack(playerId));
       this._advanceChain();
     }
+  };
+
+  // Fighter (Soldier Boy) — SKILL attiva (3 usi): PESCA [3] carte, scegline [1] e con essa SOVRASCRIVI
+  // la CELLA su cui si trova l'ARM; scarta le altre due (simile a Ripristina). Non consuma l'azione.
+  Game.prototype.canFighter = function (playerId) {
+    var s = this.state, p = s.players[playerId];
+    if (!s.modules.powers || s.subPhase || p.character !== 'fighter') return false;
+    if (!(p.fighterLeft > 0)) return false;
+    if (s.activePlayer !== playerId || s.actionsLeft <= 0) return false;
+    if (s.phase !== 'move' && s.phase !== 'attack') return false;
+    if (!this.pawnCell(playerId)) return false;           // serve una CELLA da SOVRASCRIVERE
+    return s.deck.length > 0 || s.discard.length > 0;      // serve poter pescare
+  };
+  Game.prototype.fighterActivate = function (playerId) {
+    if (!this.canFighter(playerId)) throw new Error('SKILL fighter non disponibile.');
+    var s = this.state, drawn = [];
+    for (var i = 0; i < 3; i++) { if (s.deck.length === 0) this._reshuffleDiscardIntoDeck(); var c = this._drawCard(); if (c) drawn.push(c); }
+    if (!drawn.length) throw new Error('Nessuna carta da pescare.');
+    s.players[playerId].fighterLeft -= 1;
+    this._markActed(playerId);
+    s.subPhase = 'fighter-select'; s.pendingFighter = { playerId: playerId, drawn: drawn };
+    this._log(playerId + ' (fighter) attiva la SKILL: PESCA ' + drawn.length + ', scegline 1 (usi rimasti ' + s.players[playerId].fighterLeft + ').');
+  };
+  Game.prototype.fighterDrawn = function () {
+    var s = this.state, pf = s.pendingFighter;
+    return (s.subPhase === 'fighter-select' && pf) ? pf.drawn.slice() : [];
+  };
+  Game.prototype.fighterSelectCard = function (cardId) {
+    var s = this.state, pf = s.pendingFighter, self = this;
+    if (s.subPhase !== 'fighter-select' || !pf) throw new Error('Nessuna scelta fighter in corso.');
+    var chosen = null, rest = [];
+    pf.drawn.forEach(function (c) { if (c.id === cardId && !chosen) chosen = c; else rest.push(c); });
+    if (!chosen) throw new Error('Carta non valida.');
+    var id = pf.playerId, pc = this.pawnCell(id);
+    if (pc) this._overwriteCell(pc, chosen); // SOVRASCRIVI la CELLA su cui si trova l'ARM
+    rest.forEach(function (c) { self._discard(c); });
+    this._log(id + ' (fighter) SOVRASCRIVE la propria CELLA e scarta le altre ' + rest.length + '.');
+    s.pendingFighter = null; s.subPhase = null;
+    this._promptCurrentPhase(); // non consuma l'azione
   };
 
   // ================================================================== OGGETTI AVANZATI (attacco)
@@ -2029,11 +2162,8 @@
 
   // ================================================================== Swap! (swap-target)
   Game.prototype._startSwap = function (id) {
-    var s = this.state, pc = this.pawnCell(id);
-    if (s.deck.length === 0) this._reshuffleDiscardIntoDeck();
-    var nc = this._drawCard();
-    if (pc) this._overwriteCell(pc, nc || null); // PESCA 1 e SOVRASCRIVI la propria CELLA
-    this._log(id + ' usa Swap!: PESCA 1 e SOVRASCRIVE la propria CELLA.');
+    var s = this.state;
+    // Il costo RIGENERA ha già PESCATO 1 e SOVRASCRITTO la CELLA dell'ARM (ora ONLINE).
     var opps = this._swapTargets(id);
     if (opps.length === 1) { this._swapWith(id, opps[0]); return; }
     s.subPhase = 'swap-target'; s.pendingSwap = { playerId: id };
@@ -2154,15 +2284,22 @@
     this._log(id + ' (Wallie & Glass) posiziona il segnalino GLASS su [' + x + ',' + y + '].');
     if (s.phase === 'move') this._afterMoveAction(id); else this._afterAttackAction(id); // sostituisce l'azione
   };
-  // Bonus al VALORE nei CLASH: Wallie & Glass (+2 se non ha GLASS sul campo) + Overcharge (+2 fino a fine turno).
-  Game.prototype._clashBonus = function (id) {
-    var p = this.state.players[id];
-    return ((this._isWallie(id) && !p.glass) ? 2 : 0) + (p.clashBonusTurn || 0);
+  // Bonus al VALORE nei CLASH, in funzione della CARTA giocata:
+  //  - Overcharge: +2 a QUALSIASI carta fino all'inizio del prossimo turno (clashBonusTurn).
+  //  - Wallie & Glass (passiva): +2 alle sole carte ORO se non ha un GLASS sul campo.
+  //  - The Sniper / brawler (passiva): +2 alle carte COPPE giocate.
+  Game.prototype._clashBonus = function (id, card) {
+    var p = this.state.players[id], b = (p.clashBonusTurn || 0);
+    if (card) {
+      if (this._isWallie(id) && !p.glass && card.suit === 'oro') b += 2;
+      if (this.state.modules.powers && p.character === 'brawler' && card.suit === 'coppe') b += 2;
+    }
+    return b;
   };
   // Esito del CLASH con il bonus passivo di CLASH sommato al VALORE delle carte.
   Game.prototype._resolveClashWithBonus = function (attId, attCard, defId, defCard) {
-    var av = attCard.value + this._clashBonus(attId);
-    var dv = defCard.value + this._clashBonus(defId);
+    var av = attCard.value + this._clashBonus(attId, attCard);
+    var dv = defCard.value + this._clashBonus(defId, defCard);
     if (av !== dv) return av > dv ? 'attacker' : 'defender';
     var w = suitClash(attCard.suit, defCard.suit);
     return w === 'a' ? 'attacker' : (w === 'b' ? 'defender' : 'tie');
@@ -2221,7 +2358,10 @@
       p.pendingActions = { moves: 1, attacks: 1 };
       p.clashBonusTurn = 0; // il bonus CLASH di Overcharge dura fino a fine turno
     });
-    if (s.endTriggered || s.round >= s.maxRounds) {
+    // Fine partita anticipata: se a fine ROUND non c'è più alcuna CELLA ONLINE, si conta e si chiude.
+    var noOnline = !this._anyOnlineCell();
+    if (noOnline) this._log('Nessuna CELLA ONLINE a fine ROUND: la partita finisce e si contano i punti.');
+    if (s.endTriggered || s.round >= s.maxRounds || noOnline) {
       // Ultimo ROUND: nessuna pesca, ma i bonus di SUIT che valgono punti (oro, spade) contano lo stesso.
       this._chain = [];
       if (s.ruleset === 'C') everyone.forEach(function (id) { self._chain.push(self._step_endCellBonus(id, true)); self._chain.push(self._step_endGlassBonus(id, true)); });

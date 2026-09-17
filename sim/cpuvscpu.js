@@ -15,8 +15,8 @@
  * i tool che non valuta (es. energy boost/drain) risulteranno poco o mai usati — è un dato utile.
  */
 'use strict';
-var Engine = require('../js/engine.js');
-var Cpu = require('../js/cpu.js');
+var Engine = require('../js/engine/engine.js');
+var Cpu = require('../js/ai/cpu.js');
 
 var SCALE = parseFloat(process.argv[2]) || 1;
 var CHARS = ['runner', 'brawler', 'tactician', 'fighter'];

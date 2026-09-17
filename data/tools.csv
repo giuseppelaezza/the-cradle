@@ -3,7 +3,7 @@ Jetpack;MOVIMENTO;Per questo MOVIMENTO puoi MATCHARE anche le CELLE DIAGONALI.;S
 Salto;MOVIMENTO;Per questo MOVIMENTO puoi MATCHARE solo a DISTANZA [2] su CELLE ORTOGONALI.;SCARTA [1] carta dalla STACK ATTIVA.;FALSE
 Arpione;MOVIMENTO;Per questo MOVIMENTO puoi MATCHARE anche le CELLE ORTOGONALI all'ARM avversario.;SCARTA [1] carta dalla STACK ATTIVA.;FALSE
 Teletrasporto;MOVIMENTO;Muovi su una qualsiasi CELLA VUOTA scoperta con lo stesso VALORE della CELLA da cui parti.;Non puoi effettuare la fase di MOVIMENTO questo turno;FALSE
-Spinta;ATTACCO;Se COLPISCI un ARM avversario, lo sposti su una CELLA ORTOGONALE a DISTANZA [1].;Scarta [1] TOOL;TRUE
+Spinta;ATTACCO;Se COLPISCI un ARM avversario, lo sposti su una CELLA ORTOGONALE a DISTANZA [1].;Scarta [1] TOOL;FALSE
 Granata;ATTACCO;DISTRUGGE la CELLA colpita. Se era occupata, sposti quell'ARM su una CELLA ORTOGONALE a DISTANZA [1].;CONSUMA;FALSE
 Barrage!;ATTACCO;Scegli [1] CELLA VUOTA e DISTRUGGILA.;CONSUMA;FALSE
 Bomba Elementale;ATTACCO;Scegli [1] CELLA: la sua SUIT e quella delle CELLE ORTOGONALI diventano una SUIT a tua scelta.;CONSUMA;FALSE
@@ -20,8 +20,13 @@ Carica Disperata;MOVIMENTO;Muovi su una CELLA OCCUPATA da un ARM avversario che 
 Snipe;ATTACCO;Colpisci una CELLA OCCUPATA da un ARM avversario che si trova nella tua stessa colonna o riga;Non puoi effettuare la fase di ATTACCO questo turno, CONSUMA;FALSE
 Santuario;MOV / ATT;PESCA [5] carte, SOVRASCRIVI la CELLA che OCCUPI e tutte le CELLE ORTOGONALI;Scarta [1] TOOL;FALSE
 Feedback Loop;MOV / ATT;SOVRASCRIVI la CELLA occupata dal tuo ARM utilizzando una delle carte nella tua STACK ATTIVA, dopodichè PESCA [1] carta e aggiungila alla tua STACK ATTIVA;SCARTA [1] carta dalla STACK DI RISERVA.;FALSE
-Swap!;MOVIMENTO;Solo se il tuo ARM occupa una cella OFFLINE: PESCA [1] carta e SOVRASCRIVI la cella occupata dal tuo ARM poi cambia la posizione del tuo ARM con quella di un ARM avversario.;Non puoi effettuare l’azione di ATTACCO questo turno;FALSE
+Swap!;MOVIMENTO;cambia la posizione del tuo ARM con quella di un ARM avversario.;RIGENERA, Non puoi effettuare l’azione di ATTACCO questo turno;FALSE
 Nuke;ATTACCO;MATCHA [1] CELLA, la CELLA matchata e le tutte le CELLE ORTOGONALI diventano OFFLINE. Se una o più di queste CELLE avevano obiettivi, guadagna i relativi punti (non ottieni oggetti). Tutti i giocatore che hanno un ARM in una di queste celle perdono [2] punti.;Non puoi effettuare l’azione di ATTACCO questo turno, scarta [3] TOOL;FALSE
-Overcharge;Qualsiasi;Ottieni [+2] durante i CLASH fino alla fine del turno;Scarta [1] TOOL;TRUE
-Toolbox;Qualsiasi;PESCA [2] TOOL dal mazzo;CONSUMA;TRUE
-Shuffle;MOV / ATT;Seleziona [2] CELLE ONLINE VUOTE e scambia le carte presenti nelle CELLE;Nessuno;TRUE
+Overcharge;Qualsiasi;Ottieni [+2] durante i CLASH fino all’inizio del tuo prossimo turno;Scarta [1] TOOL;TRUE
+Toolbox;Qualsiasi;PESCA [2] TOOL dal mazzo;CONSUMA;FALSE
+Shuffle;MOV / ATT;Seleziona [2] CELLE ONLINE VUOTE e scambia le carte presenti nelle CELLE;Nessuno;FALSE
+Coppe Overtake;MOV / ATT;scegli [1] colonna, se ci sono CELLE OFFLINE o DISTRUTTE per ogni CELLA pesca una carta e con quella carta SOVRASCRIVI la CELLA, poi cambia la SUIT di tutte le celle nella colonna in COPPE. Ogni giocatore che possiede un ARM in quella colonna perde [1] punto;Scarta [2] TOOL;TRUE
+Oro Overtake;MOV / ATT;scegli [1] colonna, se ci sono CELLE OFFLINE o DISTRUTTE per ogni CELLA pesca una carta e con quella carta SOVRASCRIVI la CELLA, poi cambia la SUIT di tutte le celle nella colonna in ORO. Ogni giocatore che possiede un ARM in quella colonna perde [1] punto;Scarta [2] TOOL;TRUE
+Spade Overtake;MOV / ATT;scegli [1] colonna, se ci sono CELLE OFFLINE o DISTRUTTE per ogni CELLA pesca una carta e con quella carta SOVRASCRIVI la CELLA, poi cambia la SUIT di tutte le celle nella colonna in SPADE. Ogni giocatore che possiede un ARM in quella colonna perde [1] punto;Scarta [2] TOOL;TRUE
+Bastoni Overtake;MOV / ATT;scegli [1] colonna, se ci sono CELLE OFFLINE o DISTRUTTE per ogni CELLA pesca una carta e con quella carta SOVRASCRIVI la CELLA, poi cambia la SUIT di tutte le celle nella colonna scelta in BASTONI. Ogni giocatore che possiede un ARM in quella colonna perde [1] punto;Scarta [2] TOOL;TRUE
+Drenaggio;MOV / ATT;Rendi OFFLINE tutte le CELLE ORTOGONALI alla posizione del tuo ARM;RIGENERA, Scarta [1] TOOL;TRUE

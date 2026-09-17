@@ -1,176 +1,207 @@
-# The Cradle — Specifiche del prototipo (istruzioni per Claude Code)
+# The Cradle — Specifiche tecniche (build-spec)
 
-> **Fonte di verità delle regole:** `the-cradle-regolamento.md`. Qui traduco le regole in requisiti implementativi (modello dati, flusso, UI, casi limite, criteri di accettazione). In caso di dubbio prevale il regolamento.
-
-Versione 2: modalità seme (fissa/rotazione), moduli **Personaggi** e **Oggetti**, nuova struttura del turno e modifiche grafiche.
+> **Fonte di verità delle regole di gioco:** `the-cradle-regolamento.md` (mirror di
+> `js/content/regolamento.js`). Questo file traduce le regole in **requisiti implementativi**:
+> architettura, modello dati, flusso, invarianti. In caso di dubbio sulle regole prevale il regolamento;
+> in caso di dubbio su "dove sta il codice" vedi `CLAUDE.md`.
+>
+> Stato: **v0.6** — multiplayer 2–4, tre ruleset (A/B/C), griglia 5×5 e 4×4, modalità Draft, moduli
+> Personaggi/Oggetti/Poteri/Reshuffle, TOOL con costi machine-readable, SKILL attive+passive per ARM.
 
 ---
 
 ## 1. Obiettivo e vincoli
-Prototipo giocabile **hot-seat** (2 giocatori, stesso dispositivo) in **JavaScript vanilla** — solo HTML+CSS+JS, **nessun framework**, **nessun build step**, avviabile aprendo `index.html` (se usi ES modules, documenta un server locale). Separa **engine** (logica pura, testabile) da **ui**. Priorità: correttezza delle regole + chiarezza dell'interfaccia.
 
-### Struttura file suggerita
-```
-index.html
-css/styles.css
-js/deck.js        // carte, mazzo, shuffle
-js/objects.js     // definizioni oggetti + mazzo oggetti
-js/characters.js  // definizioni personaggi
-js/engine.js      // stato + regole: setup, matching, movimento, clash, sparo, oggetti, scoring, fine
-js/ui.js          // rendering + interazioni + tooltip + schemi movimento
-js/main.js        // schermata iniziale (mode + moduli) e wiring
-tests/engine.test.js
-README.md
-```
+Gioco giocabile **hot-seat** e **vs CPU** (e CPU-vs-CPU per test/demo) in **JavaScript vanilla**:
+solo HTML+CSS+JS, **nessun framework**, **nessun build step**, avviabile aprendo `index.html` (o via
+server statico). Vincolo architetturale: **engine puro e deterministico** (RNG iniettabile, nessun DOM,
+interamente testabile) separato dalla **UI**. Priorità: correttezza delle regole e chiarezza dell'UI.
+
+Moduli caricati come **UMD** (`window.CradleXxx` + `module.exports`). Vedi `CLAUDE.md` per la mappa
+delle cartelle e l'ordine di caricamento.
 
 ---
 
-## 2. Configurazione di partita (schermata iniziale)
-- **Dropdown modalità seme:** `fisso` (default) | `rotazione`.
-- **Checkbox moduli:** `Personaggi`, `Oggetti` (indipendenti).
-- Se `Personaggi` attivo: ogni giocatore sceglie un personaggio. **Lo stesso personaggio può essere scelto da entrambi.** In modalità seme `fisso` il **tactician non è selezionabile** (disabilitalo nella UI).
-- Combinazioni: nessun modulo = base; solo Personaggi = solo seme di appartenenza; solo Oggetti = mazzo Oggetti attivo, niente seme di appartenenza né oggetto iniziale; entrambi = seme di appartenenza + oggetto iniziale + mazzo Oggetti.
+## 2. Configurazione di partita (`createGame(opts)`)
+
+`opts` (tutti opzionali):
+
+| Campo | Valori | Note |
+|---|---|---|
+| `rng` | `() => [0,1)` | iniettabile; **default `Math.random`**. I test passano un RNG con seed. |
+| `numPlayers` | `2`\|`3`\|`4` | 3–4 **solo** su griglia 5×5. Seggi agli angoli, in senso orario. |
+| `ruleset` | `'A'`\|`'B'`\|`'C'` | `B` standard; `A` abbinamento alternativo; `C` (basato su A) con controllo del centro / celle bonus. `altMatch:true` ≡ `A`. |
+| `gridSize` | `5`\|`4` | `4` **solo** con ruleset `C`. |
+| `gridMode` | `'random'`\|`'draft'` | `draft` = i PILOTI costruiscono la griglia a turno. |
+| `suitMode` | `'fixed'`\|`'rotating'` | GLOBAL SUIT fissa o che ruota a ogni ROUND. |
+| `turnMode` | `'1221'`\|`'1212'` | ordine di attacco nel multiplayer. |
+| `maxRounds` | intero | default 8 (configurabile ~7–11). |
+| `clashOnAttack` | bool | attaccare un ARM apre sempre un CLASH. |
+| `modules` | `{characters, objects, powers, reshuffle}` | flag indipendenti. |
+| `characters` | `{N,S,…}` o `['runner',…]` | tipo di ARM per seggio o per indice. |
+| `objectSelection` | `string[]` | forza la composizione del mazzo TOOL (usato dai test). |
+
+Combinazioni moduli: nessuno = base; solo Personaggi = solo ARM SUIT; solo Oggetti = mazzo TOOL senza
+ARM SUIT né TOOL iniziale; entrambi = ARM SUIT + TOOL iniziale + mazzo TOOL; `powers` richiede
+`characters`.
 
 ---
 
-## 3. Modello dei dati
+## 3. Modello dei dati (essenziale)
+
 ```
 Suit       = 'oro' | 'spade' | 'coppe' | 'bastoni'
-SUIT_RANK  = { oro:4, spade:3, coppe:2, bastoni:1 }          // clash
-SUIT_CYCLE = ['oro','spade','coppe','bastoni']               // rotazione (loop)
+SUIT_RANK  = { oro:4, spade:3, coppe:2, bastoni:1 }         // spareggio CLASH (ciclico)
+Card       = { id, value:1..10, suit:Suit }                 // 8/9/10 = OBIETTIVI (figure)
 
-Card  = { id, value:1..10, suit:Suit }
+Cell = { x, y, card:Card|null, faceDown:bool, destroyed:bool, pawn:null|<id> }
+       // ONLINE = card && !faceDown && !destroyed ; OFFLINE = card && faceDown ; DISTRUTTA = destroyed
 
-Cell  = { x,y, card:Card|null, faceDown:bool, destroyed:bool, pawn:null|'N'|'S' }
-        // destroyed=true => card=null, non abbinabile né percorribile
+ObjectCard = { id, type, phase, fromCharacter:bool }        // TOOL; fromCharacter esclude dal limite
+OBJECT_DEFS[type] = { type, label, phase, phases?, cost, costSpec, effect, overtakeSuit? }
+  costSpec keys: stack|reserve|points|consume|regen|tools|forfeit   // costo machine-readable
 
-ObjectCard = { id, type:'jetpack'|'jump'|'hook'|'homing_missile'|'rush_juice'|'combat_juice'|'timebomb',
-               phase:'select'|'move'|'attack', fromCharacter:bool }   // fromCharacter esclude dal limite
+Character = { type, suit, startObjects[], label, powerUses, power }  // js/model/characters.js
 
-Character  = { type:'runner'|'brawler'|'tactician'|'fighter', suit:Suit, startObject:ObjectType }
+Player = { id, score, hand:Card[], revealedIds[], revealedCards[], trophies[],
+           character, belongingSuit, objects[], objectDeck[], objectDiscard[],
+           glass, clashBonusTurn, pendingActions:{moves,attacks},
+           tacticianLeft/Total, brawlerLeft/Total, runnerLeft/Total, fighterLeft/Total,
+           reshuffleLeft/Total, stats:{…} }
 
-Player = {
-  id:'N'|'S', score, hand:Card[], revealedIds:Set,
-  trophies:Card[],
-  character:Character|null, belongingSuit:Suit|null,
-  objects:ObjectCard[],           // include l'oggetto iniziale (marcato fromCharacter)
-  pendingActions:{ moves:1, attacks:1 }   // modificato da rush/combat juice
-}
-
-GameState = {
-  deck:Card[], objectDeck:ObjectCard[],
-  grid:Cell[][], centerInitialSuit:Suit,
-  suitMode:'fixed'|'rotating', currentSuit:Suit,   // seme di turno
-  modules:{ characters:bool, objects:bool },
-  players:{N,S}, firstPlayer:'N'|'S',
-  round:1..9, phase:'select'|'move'|'attack'|'end',
-  gameOver:bool, endTriggered:bool, log:string[]
-}
+GameState = { deck[], grid[x][y], gridSize, ruleset, altMatch, gridMode, numPlayers,
+              suitMode, currentSuit, centerInitialSuit, turnMode, maxRounds, clashOnAttack,
+              modules, players, firstPlayer, activePlayer, round, phase, actionsLeft,
+              moveModifier, attackModifier, subPhase, pending<Xxx>…,
+              gameOver, endTriggered, result, log[] }
 ```
-**Costanti personaggi:** runner→spade+jetpack, brawler→coppe+combat_juice, tactician→oro+timebomb, fighter→bastoni+hook.
+
+`phase ∈ {select, move, attack, end}`. I sotto-flussi interattivi vivono in `subPhase` con un oggetto
+`pending<Xxx>` associato (vedi §5).
 
 ---
 
-## 4. Matching
-```
-canMatch(handCard, cell, player, state):
-  if cell.destroyed: return false
-  if cell.faceDown:
-    return handCard.suit === state.currentSuit
-        || (player.belongingSuit && handCard.suit === player.belongingSuit)   // il personaggio sblocca le coperte
-  if handCard.value === cell.card.value: return true                          // per valore
-  if cell.card.suit === state.currentSuit && handCard.suit === state.currentSuit: return true   // jolly seme di turno
-  if player.belongingSuit && cell.card.suit === player.belongingSuit && handCard.suit === player.belongingSuit:
-       return true                                                            // jolly personale del personaggio
-  return false
-```
-> Il **seme di appartenenza** si comporta esattamente come il seme di turno, ma personale e fisso: vale sia per le carte scoperte sia per le **coperte**.
+## 4. Responsabilità dei moduli
 
-Clash invariato (`resolveClash`: valore → SUIT_RANK → 'tie').
-
----
-
-## 5. Flusso del round (con moduli)
-Fasi: `select → move → attack → fine`. Con il modulo Oggetti, prima di ogni azione c'è una **finestra "uso oggetto"** per il giocatore di turno (struttura in §11.4 del regolamento). In ogni fase agisce prima il Primo Giocatore, poi l'altro.
-
-- **select:** finestra oggetti-`select` (P1 poi P2) → ogni giocatore sceglie 3 carte (segretamente) → **rivela** (diventano pubbliche e restano mostrate nella scheda). rush/combat juice impostano `pendingActions` (rush: 2/0; combat: 0/2). timebomb qui sposta `currentSuit`.
-- **move:** per ciascun giocatore, finestra oggetti-`move` (jetpack/jump) → esegue `pendingActions.moves` movimenti (default 1; 0 = salta).
-- **attack:** per ciascun giocatore, finestra oggetti-`attack` (hook/homing_missile) → esegue `pendingActions.attacks` attacchi (default 1; 0 = salta).
-- **fine round:** scarta rivelate non usate (resta con 3), passa Primo Giocatore, pesca `min(3,deck)`, poi **se `rotating`** avanza `currentSuit` nel loop. Reset `pendingActions` a {1,1}.
-- Fine partita: `endTriggered` (completa il round) oppure dopo il round 9.
-
-**Effetti movimento/sparo/clash/spostamento forzato/scoring:** come nel regolamento §5–§8.
+- **`core/deck.js`** — carte, `buildDeck`, `shuffle(rng)`, `nextSuit`, `figurePoints`, `isFigure`.
+- **`core/suits.js`** — ciclo/spareggio SUIT e icone per la UI.
+- **`model/objects.js`** — `OBJECT_DEFS`, `ALL_TYPES`, costruzione/normalizzazione del mazzo TOOL
+  personale (12 carte, max 3 copie/tipo), pool selezionabile per ruleset.
+- **`model/characters.js`** — `CHARACTERS` (ARM SUIT, TOOL iniziale, `powerUses`, testo `power`).
+- **`content/regolamento.js`** — testo del regolamento in-app (markdown). **Fonte di verità delle
+  regole**; `the-cradle-regolamento.md` ne è il mirror.
+- **`engine/engine.js`** — stato + regole. API pubblica principale: `createGame`, `Game`,
+  `canMatch`, `resolveClash`, `computeResult`, helper di griglia. Sul prototipo `Game`: setup,
+  `selectCards`, `move`/`shoot`/`passMove`/`passShoot`, `useObject`, attivazioni SKILL
+  (`activatePower`/`brawlerAction`/`fighterActivate`/`glassPlace`), e i risolutori dei sotto-flussi
+  (`clashChoose`, `rebuild*`, `overtakeChoose`, `fighterSelectCard`, `toolSacrificeChoose`, …).
+  **NO DOM, deterministico.**
+- **`ai/cpu.js`** — `cpuAct(game, id)`: decide/agisce per un giocatore e risolve ogni `subPhase`.
+  Euristiche pure, **NO DOM**.
+- **`ui/ui.js`** — `CradleUI.createController(game, opts)`: rendering di HUD/griglia/schede,
+  interazioni, modali (CLASH, scelta TOOL, peek), tooltip, il regolamento in-app.
+- **`ui/main.js`** — schermata di configurazione e wiring (crea `game` + controller).
 
 ---
 
-## 6. Oggetti — logica (effetti)
-- **jetpack** (move): per quel movimento, le caselle abbinabili includono anche le **4 diagonali**.
-- **jump** (move): per quel movimento, le uniche caselle abbinabili sono quelle a **2 celle ortogonali** ([x±2,y] e [x,y±2] entro i limiti); la pedina salta lì. Cella intermedia **ignorata** (anche se muro/coperta/distrutta/occupata). L'arrivo attiva normalmente centro/figura/riga-bersaglio/clash.
-- **hook** (attack): se lo sparo colpisce la pedina avversaria (+5), il **tiratore** può spostarla di 1 casella ortogonale, esclusa la centrale (e escluse celle occupate/distrutte); nessun bonus.
-- **homing missile** (attack): risolvi il normale sparo con i suoi **punti** (figura o +5 pedina), **poi** rimuovi la carta abbinata (`destroyed=true`, `card=null`). Se la cella aveva una pedina, il **proprietario** la ricolloca in una casella ortogonale adiacente (esclusa centrale, occupate, distrutte; nessun bonus). Celle distrutte escluse da ogni abbinamento e da ogni spostamento forzato; se una ricollocazione non ha destinazioni valide, la pedina resta ferma.
-- **rush juice** (select): `moves=2, attacks=0` per il round (le due mosse consecutive, stesso giocatore).
-- **combat juice** (select): `moves=0, attacks=2` per il round (i due attacchi consecutivi, stesso giocatore).
-- **timebomb** (select): imposta `currentSuit` a un seme scelto; il loop prosegue da lì. Solo in `rotating` (in `fixed` non esiste, e il tactician non è selezionabile).
+## 5. Flusso del ROUND e sotto-flussi
 
-**Acquisizione:** ogni volta che una **figura viene eliminata** (coperta con un match in **movimento** o in **sparo**, oppure distrutta), pesca 1 dal `objectDeck` (se non vuoto). Se superi il limite di 2 oggetti non-iniziali, scegli 1 oggetto da scartare (anche quello appena pescato). L'oggetto iniziale del personaggio non conta.
+Ordine: `select` (DEPLOY) → `move` → `attack` → fine ROUND. Nell'ordine di turno agisce prima il 1°
+Pilota, poi gli altri (in attacco l'ordine può invertirsi secondo `turnMode`).
 
-**Uso:** un oggetto è usabile solo nella sua `phase`, nella relativa finestra, prima dell'azione; poi è scartato. **Max 1 oggetto "modificatore" per finestra/azione** (jetpack *oppure* jump). Le juice si dichiarano in `select` e agiscono sul conteggio azioni.
+- **select/DEPLOY:** ogni giocatore sceglie 3 carte (STACK ATTIVA); le altre sono STACK DI RISERVA
+  (usate nei CLASH). I TOOL di fase `select` (rush/combat juice, timebomb) si usano qui.
+- **move / attack:** il giocatore attivo esegue `actionsLeft` azioni; i TOOL della fase e le SKILL si
+  usano dal pannello **prima** dell'azione. Entrare/colpire un ARM avversario apre un **CLASH**.
+- **fine ROUND:** scarti in eccesso (>6), pesca fino a 6, bonus di SUIT/posizione (ruleset C),
+  avanzamento GLOBAL SUIT (se `rotating`), poi ROUND successivo.
 
----
+**Fine partita:** dopo `maxRounds`, oppure quando `endTriggered` (es. riga-bersaglio nei ruleset A/B),
+oppure — **fine anticipata** — quando **a fine ROUND non resta alcuna CELLA ONLINE**. Il vincitore è
+determinato da `computeResult` (punti → controllo centro → n° OBIETTIVI).
 
-## 7. Requisiti UI/UX
+**Sotto-flussi (`subPhase`)** — ognuno con un `pending<Xxx>` e un risolutore sull'engine. Elenco attuale:
+`clash-cards`, `clash-reloc`, `forced-reloc`, `object-discard`, `end-discard`, `tool-discard`,
+`tool-sacrifice`, `runner-figure`, `altmatch-object`, `timebomb-suit`, `teleport-select`,
+`rebuild-select`/`rebuild-place`, `draft-select`/`draft-place`, `energy-target`, `endbonus-steal`,
+`elemental-target`/`elemental-suit`, `barrage-first`/`-second`/`-third`, `randomizer-place`,
+`charge-select`, `snipe-select`, `feedback-select`, `swap-target`, `nuke-select`, `shuffle-select`,
+`overtake-select`, `fighter-select`.
 
-### 7.1 Carte e semi (grafica)
-- Seme → colore → simbolo: **oro = giallo = cerchio (○)**, **spade = blu = picche (♠)**, **bastoni = verde = fiori (♣)**, **coppe = rosso = cuori (♥)**.
-- **Righe di partenza (y=1 e y=5):** bordo **tratteggiato**.
-- **Casella centrale:** schema colore **invertito** (fondo del colore del suo seme, testo bianco).
-- **Carte figura (8/9/10), in mano e su griglia:** stesso schema invertito (fondo del colore del seme, testo bianco) e, accanto al numero, un simbolo di **corona (♛)**.
-
-### 7.2 Barra superiore (HUD)
-- Testi in evidenza **in bianco**; **solo** il testo del **seme di turno** è colorato col colore del seme corrente.
-- Mostra: round `x/9`, fase, turno, Primo Giocatore, punteggi, conteggio trophies.
-- **Indicatore sequenza semi** (in modalità rotazione): `oro → spade → coppe → bastoni` con la posizione corrente evidenziata.
-
-### 7.3 Scheda giocatore
-- La mano (6 carte) con le 3 rivelate evidenziate.
-- **Area "carte scelte":** le 3 carte rivelate mostrate in piccolo (pubbliche), aggiornate quando vengono usate.
-- **Pannello Oggetti** sotto la mano: carte oggetto possedute; **hover → tooltip** con la spiegazione; oggetto **evidenziato solo quando utilizzabile**. L'oggetto iniziale è distinguibile (es. bordino) e non conta nel limite.
-
-### 7.4 Schemi di movimento per gli oggetti "move"
-- **jetpack:** griglia **3×3**; quadratino centrale con **outline bianco e fondo vuoto**; gli **8** circostanti con **outline e fondo bianco**.
-- **jump:** griglia **5×5**; evidenziati **solo** i quadratini a 2 celle ortogonali dal centro: **[3,1],[5,3],[3,5],[1,3]**.
-
-### 7.5 Interazioni
-Selezione 3 carte; click cella adiacente per muovere; click cella per sparare; UI per: carta del clash, ricollocazione, scelta oggetto da scartare (oltre il limite), destinazione hook/homing missile. Interstiziale **"pass the device"** per la scelta segreta delle 3 carte e per la carta del clash. **Log** eventi. **Schermata finale** con vincitore e criterio di spareggio.
+> **INVARIANTE (vedi CLAUDE.md):** ogni nuovo `subPhase` va gestito in `cpu.js`, in `ui.js`
+> (pannello + `onCellClick`/`pickCells`) e nelle **tre** `whoActs` dei test, oltre a dichiarare
+> `pending<Xxx>` in `createGame`. Altrimenti CPU/test vanno in stallo.
 
 ---
 
-## 8. Celle distrutte (stato)
-- `destroyed=true`: nessun abbinamento (move/shoot), non percorribile, esclusa da ogni spostamento forzato. Reso visivo dedicato.
-- Se tutte le destinazioni di uno spostamento forzato sono distrutte/escluse → la pedina resta ferma.
+## 6. TOOL (oggetti) e costi
+
+Definizioni in `model/objects.js`. Ogni TOOL ha `phase(s)`, `effect` e `costSpec` machine-readable:
+
+- `stack:N` / `reserve:N` — SCARTA N carte dalla STACK ATTIVA / DI RISERVA.
+- `points:N` — PERDI N punti.
+- `consume` — solo su CELLA ONLINE; quella CELLA diventa OFFLINE.
+- `regen` — **RIGENERA**: solo su CELLA OFFLINE; PESCA 1 e SOVRASCRIVI la CELLA dell'ARM (torna ONLINE).
+  Se non è possibile RIGENERARE il TOOL non è utilizzabile.
+- `tools:N` — SCARTA N **altri** TOOL (scelta interattiva: `tool-sacrifice`).
+- `forfeit:'move'|'attack'` — rinunci al resto di quella fase.
+
+Gating in `_toolCostAffordable`, pagamento in `useObject` (poi `_runToolEffect`). Acquisizione TOOL:
+scelta di [1] tra 3 (o 4 per Deep Mind) colpendo un OBIETTIVO / conquistando il centro / entrando in una
+CELLA BONUS. Limite di TOOL in mano: 5 (l'iniziale, `fromCharacter`, è escluso).
+
+**Pipeline dati TOOL:** `data/tools.numbers` (fonte, Apple Numbers) → `data/tools.csv` →
+`OBJECT_DEFS` (`objects.js`) → tabella nel regolamento (`regolamento.js`). Vedi `CLAUDE.md`.
+
+---
+
+## 7. PILOTI / ARM e SKILL
+
+Ogni ARM ha una **ARM SUIT**, una **SKILL ATTIVA** (usi limitati, `powerUses` in `characters.js`) e una
+**SKILL PASSIVA** (sempre attiva). Stato usi in `Player` (`…Left/…Total`); **Encore!** ripristina un uso.
+
+| ARM | SUIT | ATTIVA | PASSIVA |
+|---|---|---|---|
+| E-RUN-01 (runner) | spade | (2) colpo su OBIETTIVO in movimento scartando 1 carta | +1 se si muove / −1 se non si muove nella fase MOVIMENTO |
+| The Sniper (brawler) | coppe | (3) scarta 3 carte per MATCHARE una CELLA qualsiasi | carte COPPE nei CLASH valgono +2 |
+| Deep Mind (tactician) | oro | (3) sbircia la STACK DI RISERVA avversaria | scelta TOOL fra 4 invece che 3 |
+| Soldier Boy (fighter) | bastoni | (3) PESCA 3, scegli 1, SOVRASCRIVI la propria CELLA, scarta le altre | in ATTACCO le carte di VALORE PARI fanno MATCH tra loro |
+| Wallie & Glass (wallie) | oro | posiziona il segnalino GLASS (al posto di un'azione) | +2 nei CLASH sulle sole carte ORO se non ha GLASS in campo |
+
+Bilanciamento: `powerUses` in `characters.js`. Verifica con `sim/cpuvscpu.js`.
+
+---
+
+## 8. UI/UX (requisiti chiave)
+
+- **Semi → colore/simbolo:** oro=giallo ○, spade=blu ♠, bastoni=verde ♣, coppe=rosso ♥.
+- **CELLE:** centro e OBIETTIVI a schema invertito con corona ♛; OFFLINE a faccia in giù; DISTRUTTA con
+  reso dedicato; celle bonus evidenziabili (ruleset C).
+- **HUD:** round, fase, turno, 1° Pilota, punteggi; solo la GLOBAL SUIT è colorata; indicatore sequenza
+  semi in rotazione.
+- **Scheda giocatore:** mano, STACK ATTIVA pubblica, pannello TOOL (tooltip in hover; evidenziato solo
+  se utilizzabile), pannello SKILL con usi rimasti.
+- **Modali:** risultato **CLASH** mostrato **prima** dell'eventuale scelta TOOL che ne deriva; peek
+  Deep Mind; scelta 1-su-N per TOOL/carte.
+- **Interazioni:** selezione carte (segreta, "pass the device" in hot-seat), click griglia per
+  muovere/sparare/selezionare bersagli dei sotto-flussi, ↶ Annulla + log cliccabile (cronologia stati).
 
 ---
 
 ## 9. Criteri di accettazione (checklist)
-1. **Config:** dropdown seme e checkbox moduli funzionano; combinazioni corrette; **tactician disabilitato in modalità fissa**; stesso personaggio ammesso per entrambi.
-2. **Rotazione:** il seme di turno avanza nel loop a fine round; centro resta l'asso del seme iniziale; jolly e carte coperte seguono il seme di turno corrente; indicatore sequenza corretto.
-3. **Personaggi:** il seme di appartenenza abbina le carte di quel seme a qualsiasi valore **e sblocca le carte coperte** (come il seme di turno); oggetto iniziale solo se anche Oggetti è attivo, escluso dal limite.
-4. **Oggetti — acquisizione/limite:** pesca a ogni figura eliminata **sia in movimento sia in sparo** (e alla distruzione); mazzo di 4 distinti a faccia in giù; niente pesca se vuoto; limite 2 (oltre l'iniziale) con scarto forzato.
-5. **Oggetti — effetti:** jetpack (diagonali), jump (solo 2 celle ortogonali), hook (sposta pedina colpita), homing missile (**punti** + cella distrutta + pedina ricollocata), rush/combat juice (conteggio azioni, consecutive), timebomb (sposta seme di turno).
-6. **Struttura turno:** finestre "uso oggetto" nell'ordine corretto (P1/P2) prima di ogni azione; rush/combat cambiano il numero di azioni; le finestre si saltano se Oggetti è off. Max 1 modificatore per finestra.
-7. **UI grafica:** semi con colori/simboli corretti; righe di partenza tratteggiate; centro e figure a schema invertito con corona; HUD testi bianchi e solo seme di turno colorato; area carte scelte pubblica e aggiornata; pannello oggetti con tooltip e highlight; schemi 3×3 (jetpack) e 5×5 (jump).
-8. **Regressione base:** match/clash/movimento/sparo/economia carte/spareggio come da regolamento continuano a funzionare.
+
+1. **Config:** ogni combinazione di `opts` produce una partita valida; vincoli rispettati (4×4 solo C,
+   3–4 giocatori solo 5×5, tactician non selezionabile in modalità seme fissa).
+2. **Regole:** MATCH, CLASH ciclico, movimento/attacco, TOOL (tutti i `costSpec`), SKILL attive+passive,
+   scoring e spareggi come da regolamento.
+3. **Fine partita:** per `maxRounds`, per `endTriggered`, e **fine anticipata** senza CELLE ONLINE.
+4. **Determinismo:** stesso seed ⇒ stessa partita (i test si basano su questo).
+5. **Test verdi:** `node tests/engine.test.js` e `node tests/cpu.test.js` senza fallimenti.
+6. **UI:** nessun errore in console; CLASH prima della scelta TOOL; sotto-flussi risolvibili a mano.
 
 ---
 
-## 10. Decisioni consolidate (già riflesse nelle regole)
-1. Selezione carte: segreta poi rivelata (pass-the-device); dopo la rivelazione restano pubbliche.
-2. Seme di appartenenza: come il seme di turno, personale e fisso; **sblocca anche le carte coperte**.
-3. Personaggi: entrambi scelgono; **stesso personaggio ammesso**.
-4. Tactician: **non selezionabile in modalità seme fissa**.
-5. Pesca oggetto: a ogni figura eliminata **in movimento o in sparo** (o distrutta).
-6. Homing missile: si ottengono **i punti** (figura/pedina) **oltre** alla distruzione.
-7. Hook: destinazione scelta dal tiratore, esclusi centro/occupate/distrutte, nessun bonus.
-8. Stacking: max 1 oggetto modificatore per finestra/azione.
-9. Jump: cella intermedia ignorata; l'arrivo attiva normalmente gli effetti.
-10. Rush/combat juice: le due azioni sono consecutive per lo stesso giocatore.
+## 10. Manutenzione della documentazione
+
+Vedi la sezione finale di `CLAUDE.md`: dopo modifiche significative, aggiornare nello stesso commit
+`CLAUDE.md`, questo file, `README.md` e — rigenerandolo da `regolamento.js` — `the-cradle-regolamento.md`.

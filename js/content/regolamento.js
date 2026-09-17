@@ -138,13 +138,14 @@
 
     s.push(
 "## 7. Gli ARM\n\n" +
-"Ogni PILOTA guida un **ARM**, che gli dà due cose: una **ARM SUIT** (il jolly personale, §2) e una **SKILL**.\n\n" +
-"| ARM | ARM SUIT | SKILL |\n" +
-"|---|---|---|\n" +
-"| **E-RUN-01** | spade | *(2 usi)* Quando MATCHI un OBIETTIVO in MOVIMENTO, puoi SCARTARE [1] carta dalla STACK ATTIVA per COLPIRLO subito (prendi i punti e la scelta di [1] TOOL). Se la CELLA è occupata si fa CLASH: la SKILL vale solo se lo vinci. |\n" +
-"| **The Sniper** | coppe | *(3 usi)* In MOVIMENTO o ATTACCO, se hai 3 carte nella STACK ATTIVA le SCARTI tutte per MATCHARE una CELLA qualsiasi (SOSTITUISCE l'azione). In ATTACCO su un ARM avversario si apre comunque un CLASH. |\n" +
-"| **Deep Mind** | oro | *(3 usi)* Sbircia la STACK DI RISERVA dell'avversario. Inoltre, passiva: quando scegli [1] TOOL, scegli **tra 4** invece che tra 3. |\n" +
-"| **Soldier Boy** | bastoni | *Passiva:* in ATTACCO le carte di VALORE **PARI** fanno MATCH tra loro (una carta pari colpisce una CELLA di VALORE pari). |");
+"Ogni PILOTA guida un **ARM**, che gli dà tre cose: una **ARM SUIT** (il jolly personale, §2), una **SKILL ATTIVA** (si attiva un numero limitato di volte a partita) e una **SKILL PASSIVA** (sempre attiva, senza usi).\n\n" +
+"| ARM | ARM SUIT | SKILL ATTIVA | SKILL PASSIVA |\n" +
+"|---|---|---|---|\n" +
+"| **E-RUN-01** | spade | *(2 usi)* Quando MATCHI un OBIETTIVO in MOVIMENTO, puoi SCARTARE [1] carta dalla STACK ATTIVA per COLPIRLO subito (prendi i punti e la scelta di [1] TOOL). Se la CELLA è occupata si fa CLASH: la SKILL vale solo se lo vinci. | Se ti **muovi** durante la tua fase di MOVIMENTO guadagni **[+1]** punto; se **non ti muovi**, perdi **[1]** punto. |\n" +
+"| **The Sniper** | coppe | *(3 usi)* In MOVIMENTO o ATTACCO, se hai 3 carte nella STACK ATTIVA le SCARTI tutte per MATCHARE una CELLA qualsiasi (SOSTITUISCE l'azione). In ATTACCO su un ARM avversario si apre comunque un CLASH. | Nei CLASH le carte **COPPE** che giochi valgono **[+2]** al VALORE. |\n" +
+"| **Deep Mind** | oro | *(3 usi)* Sbircia la STACK DI RISERVA dell'avversario. | Quando scegli [1] TOOL, scegli **tra 4** invece che tra 3. |\n" +
+"| **Soldier Boy** | bastoni | *(3 usi)* PESCA [3] carte, scegline [1] e con essa **SOVRASCRIVI** la CELLA su cui ti trovi; scarta le altre due. | In ATTACCO le carte di VALORE **PARI** fanno MATCH tra loro (una carta pari colpisce una CELLA di VALORE pari). |\n" +
+"| **Wallie & Glass** | oro | Al posto di un'azione di MOVIMENTO/ATTACCO, se non hai un segnalino **GLASS** sul campo: MATCHA una CELLA ORTOGONALE e vi posizioni il GLASS (l'ARM resta fermo). Il GLASS resta finché un avversario non MATCHA la sua CELLA (nessun punto). A fine ROUND ottieni il bonus di SUIT sia della CELLA dell'ARM sia della CELLA del GLASS. | Se non hai un GLASS sul campo, **[+2]** al VALORE nei CLASH sulle sole carte **ORO**. |");
 
     s.push(
 "## 8. I TOOLS\n\n" +
@@ -157,6 +158,7 @@
 "- Ogni TOOL si usa **una sola volta**, **nella fase indicata**, e **prima** di svolgere l'azione a cui si riferisce.\n" +
 "- **Se non puoi pagare il COSTO di un TOOL, non puoi usarlo.**\n" +
 "- **CONSUMA:** attivabile solo se l'ARM è su una **CELLA ONLINE**; quella CELLA diventa **OFFLINE**.\n" +
+"- **RIGENERA:** attivabile solo se l'ARM è su una **CELLA OFFLINE**; PESCA [1] carta e con essa **SOVRASCRIVI** la CELLA occupata dal tuo ARM (che torna ONLINE). Se RIGENERA è nel COSTO e non è possibile RIGENERARE, il TOOL non può essere usato.\n" +
 "- **SCARTA [n] TOOL:** scegli tu quali **altri** TOOL scartare; se non ne hai a sufficienza non puoi giocare la carta.\n" +
 "- **SOVRASCRIVI una CELLA:** scarti la carta presente (se c'è) e la sostituisci con un'altra carta (di solito pescata). Salvo diversa indicazione, si può SOVRASCRIVERE **qualsiasi** CELLA.\n\n" +
 "### 8.3 Elenco dei TOOLS\n\n" +
@@ -183,15 +185,21 @@
 "| **Snipe** | ATTACCO | Non puoi effettuare la fase di ATTACCO questo turno; CONSUMA | Colpisci una CELLA OCCUPATA da un ARM avversario nella tua stessa riga o colonna (senza MATCH): si svolge un CLASH come in un normale ATTACCO. |\n" +
 "| **Santuario** | MOV / ATT | SCARTA [1] TOOL | PESCA [5] carte, SOVRASCRIVI la CELLA che OCCUPI e tutte le CELLE ORTOGONALI. |\n" +
 "| **Feedback Loop** | MOV / ATT | SCARTA [1] carta dalla STACK DI RISERVA | SOVRASCRIVI la CELLA occupata dal tuo ARM con una carta della STACK ATTIVA, poi PESCA [1] carta nella STACK ATTIVA. |\n" +
-"| **Swap!** | MOVIMENTO | Non puoi effettuare l'azione di ATTACCO questo turno | Solo se il tuo ARM è su una CELLA OFFLINE: PESCA [1] carta e SOVRASCRIVI la tua CELLA, poi scambia la posizione del tuo ARM con quella di un ARM avversario. |\n" +
+"| **Swap!** | MOVIMENTO | RIGENERA; Non puoi effettuare l'azione di ATTACCO questo turno | Scambia la posizione del tuo ARM con quella di un ARM avversario. |\n" +
 "| **Nuke** | ATTACCO | Non puoi effettuare la fase di ATTACCO questo turno; SCARTA [3] TOOL | MATCHA [1] CELLA: quella CELLA e tutte le CELLE ORTOGONALI diventano OFFLINE. Se avevano OBIETTIVI ne ottieni i punti (nessun TOOL). Gli ARM in quelle CELLE perdono [2] punti. |\n" +
-"| **Overcharge** | qualsiasi | SCARTA [1] TOOL | Ottieni **[+2]** al VALORE nei CLASH fino alla fine del turno. |\n" +
+"| **Overcharge** | qualsiasi | SCARTA [1] TOOL | Ottieni **[+2]** al VALORE nei CLASH fino all'inizio del tuo prossimo turno. |\n" +
 "| **Toolbox** | qualsiasi | CONSUMA | PESCA [2] TOOL dal tuo mazzo. |\n" +
-"| **Shuffle** | MOV / ATT | — | Seleziona [2] CELLE ONLINE VUOTE e scambia le carte presenti nelle due CELLE. |");
+"| **Shuffle** | MOV / ATT | — | Seleziona [2] CELLE ONLINE VUOTE e scambia le carte presenti nelle due CELLE. |\n" +
+"| **Oro Overtake** | MOV / ATT | SCARTA [2] TOOL | Scegli [1] colonna: per ogni CELLA OFFLINE o DISTRUTTA PESCA una carta e con essa SOVRASCRIVI la CELLA, poi tutte le CELLE della colonna diventano SUIT **ORO**. Ogni ARM in quella colonna perde [1] punto. |\n" +
+"| **Spade Overtake** | MOV / ATT | SCARTA [2] TOOL | Come Oro Overtake, ma la colonna diventa SUIT **SPADE**. |\n" +
+"| **Coppe Overtake** | MOV / ATT | SCARTA [2] TOOL | Come Oro Overtake, ma la colonna diventa SUIT **COPPE**. |\n" +
+"| **Bastoni Overtake** | MOV / ATT | SCARTA [2] TOOL | Come Oro Overtake, ma la colonna diventa SUIT **BASTONI**. |\n" +
+"| **Drenaggio** | MOV / ATT | RIGENERA; SCARTA [1] TOOL | Rendi OFFLINE tutte le CELLE ORTOGONALI alla posizione del tuo ARM. |");
 
     s.push(
 "## 9. Fine della partita\n\n" +
 "La partita dura un **numero fisso di ROUND** (di norma **8**, configurabile da **7 a 11**). Chiuso l'ultimo ROUND, vince chi ha **più punti**.\n\n" +
+"**Fine anticipata:** se **alla fine di un ROUND non resta alcuna CELLA ONLINE** sulla griglia, la partita finisce subito e si contano i punti.\n\n" +
 "In caso di parità, decide — in quest'ordine:\n\n" +
 "1. chi ha **conquistato la CELLA centrale**;\n" +
 "2. chi ha **più OBIETTIVI** tra i trofei;\n" +
@@ -232,6 +240,7 @@
 "| **COLPIRE** | mandare a segno un attacco (o vincere un CLASH) |\n" +
 "| **SOVRASCRIVI** | sostituisci la carta di una CELLA (scarti quella presente e ne metti un'altra) |\n" +
 "| **CONSUMA** | costo: solo su CELLA ONLINE; quella CELLA diventa OFFLINE |\n" +
+"| **RIGENERA** | costo: solo su CELLA OFFLINE; PESCA [1] carta e con essa SOVRASCRIVI la CELLA del tuo ARM (torna ONLINE). Se non puoi RIGENERARE, non puoi usare il TOOL |\n" +
 "| **REMIX** | in DEPLOY, scartare e ripescare carte |\n" +
 "| **ROUND / TURNO** | il giro completo / il turno di un singolo PILOTA |\n" +
 "| **DISTANZA [N]** | a N CELLE di distanza |");

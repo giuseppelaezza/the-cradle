@@ -3,8 +3,8 @@
  * node tests/cpu.test.js
  */
 'use strict';
-var Engine = require('../js/engine.js');
-var Cpu = require('../js/cpu.js');
+var Engine = require('../js/engine/engine.js');
+var Cpu = require('../js/ai/cpu.js');
 
 var passed = 0, failed = 0;
 function ok(c, m) { if (c) passed++; else { failed++; console.error('  ✗ FAIL: ' + m); } }
@@ -33,6 +33,8 @@ function whoActs(s, g) {
   if (s.subPhase === 'swap-target') return s.pendingSwap.playerId;
   if (s.subPhase === 'nuke-select') return s.pendingNuke.playerId;
     if (s.subPhase === 'shuffle-select') return s.pendingShuffle.playerId;
+  if (s.subPhase === 'overtake-select') return s.pendingOvertake.playerId;
+  if (s.subPhase === 'fighter-select') return s.pendingFighter.playerId;
   if (s.subPhase === 'altmatch-choice' || s.subPhase === 'altmatch-object') return s.pendingAltMatch.playerId;
   if (s.subPhase === 'clash-cards') return g.clashCurrentChooser();
   if (s.subPhase === 'clash-reloc') return s.pendingClash.relocatorId;
