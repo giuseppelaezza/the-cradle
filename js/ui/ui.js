@@ -246,8 +246,19 @@
     // così non cambia tra le fasi. Rimisura il riferimento quando la mano è mostrata in scelta carte.
     function lockActionHeight() {
       var s = game.state;
-      // Su mobile il pannello azione è ad altezza automatica (nessun blocco): la griglia assorbe lo spazio.
-      if (isMobile()) { dom.action.style.minHeight = ''; var rm = dom.action.querySelector('.act-row'); if (rm) rm.style.minHeight = ''; return; }
+      // Su mobile blocca l'altezza del pannello azione a quella della mano (DEPLOY/MOVIMENTO/ATTACCO),
+      // così non cambia tra le fasi e la griglia non "salta". Contenuti più alti dei sub-flussi scrollano.
+      if (isMobile()) {
+        dom.action.style.minHeight = '';
+        var hasHand = !!dom.action.querySelector('.act-mobile');
+        if (hasHand && !ui.gate) {
+          dom.action.style.height = '';
+          ui.mobileActionH = Math.ceil(dom.action.getBoundingClientRect().height);
+        }
+        dom.action.style.height = ui.mobileActionH ? (ui.mobileActionH + 'px') : '';
+        return;
+      }
+      dom.action.style.height = '';
       var row = dom.action.querySelector('.act-row');
       if (!s.gameOver && !ui.gate && !s.subPhase && s.phase === 'select' && dom.action.querySelector('.act-hand')) {
         dom.action.style.minHeight = '';
@@ -1295,10 +1306,12 @@
       var box = h('div', 'dialog toolchoice-modal');
       var head = h('div', 'rules-head'); head.appendChild(h('h2', null, 'Scegli un TOOL')); box.appendChild(head);
       box.appendChild(h('div', 'peek-sub', 'Pilota ' + pa.playerId + ': tieni [1] TOOL; gli altri vanno nei tuoi scarti TOOLS.'));
-      var row = h('div', 'toolchoice-row');
+      var row = h('div', 'toolchoice-row' + (isMobile() ? ' toolchoice-row-mobile' : ''));
       pa.drawn.forEach(function (o) {
-        var card = objectCardEl(o.type, { selectable: true });
-        card.onclick = function () { game.altMatchPickObject(o.id); render(); };
+        // Su mobile: card compresse (half) + long-press per la scheda intera (come i TOOL in basso); tap = scegli.
+        var card = objectCardEl(o.type, { selectable: true, half: isMobile() });
+        if (isMobile()) attachToolPreview(card, o.type, function () { game.altMatchPickObject(o.id); render(); });
+        else card.onclick = function () { game.altMatchPickObject(o.id); render(); };
         row.appendChild(card);
       });
       box.appendChild(row);
@@ -2278,6 +2291,8 @@
       if (s.subPhase === 'nuke-select') return s.pendingNuke ? s.pendingNuke.playerId : null;
       if (s.subPhase === 'shuffle-select') return s.pendingShuffle ? s.pendingShuffle.playerId : null;
       if (s.subPhase === 'altmatch-object') return s.pendingAltMatch ? s.pendingAltMatch.playerId : null;
+      if (s.subPhase === 'overtake-select') return s.pendingOvertake ? s.pendingOvertake.playerId : null;
+      if (s.subPhase === 'fighter-select') return s.pendingFighter ? s.pendingFighter.playerId : null;
       if (s.subPhase === 'clash-cards') return game.clashCurrentChooser();
       if (s.subPhase === 'clash-reloc') return s.pendingClash.relocatorId;
       if (s.subPhase === 'forced-reloc') return s.pendingForced.chooserId;
