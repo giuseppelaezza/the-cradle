@@ -313,6 +313,8 @@
         name.appendChild(h('span', 'tdi-phase', d ? (d.phaseAbbr || d.phaseLabel) : ''));
         attachCardTip(name, type);
         row.appendChild(name);
+        // Blocco quantità (− n + ✕): raggruppato così su mobile può stare sotto al nome con un divisore.
+        var actions = h('span', 'tdi-actions');
         var ctrl = h('span', 'tdi-ctrl');
         var minus = h('button', 'tdi-btn', '−');
         minus.title = 'Riduci (a 1, elimina il TOOL).';
@@ -326,12 +328,13 @@
         plus.title = n >= MAX ? 'Massimo 3 copie.' : (isFull(cur) ? 'Mazzo pieno.' : 'Aggiungi una copia.');
         plus.onclick = function () { if (spec[type] < MAX && !isFull(cur)) { spec[type] += 1; renderAll(); } };
         ctrl.appendChild(minus); ctrl.appendChild(qty); ctrl.appendChild(plus);
-        row.appendChild(ctrl);
+        actions.appendChild(ctrl);
         // "x" cerchiata: elimina del tutto il TOOL dal mazzo (senza ridurne la quantità una alla volta).
         var del = h('button', 'tdi-del', '✕');
         del.title = 'Elimina il TOOL dal mazzo.';
         del.onclick = function () { delete spec[type]; renderAll(); };
-        row.appendChild(del);
+        actions.appendChild(del);
+        row.appendChild(actions);
         deckList.appendChild(row);
       });
     }

@@ -1808,21 +1808,28 @@
       ui._toolPreview = back;
     }
     function hideToolPreview() { if (ui._toolPreview) { ui._toolPreview.remove(); ui._toolPreview = null; } }
-    // Aggancia a uno slot TOOL: TAP → onTap (usa il TOOL); LONG-PRESS → mostra la scheda finché si tiene premuto.
+    // Aggancia a uno slot TOOL: TAP → onTap (usa/sceglie il TOOL); LONG-PRESS → mostra la scheda finché si tiene premuto.
+    // L'azione avviene direttamente su `touchend` (non ci si affida al `click` sintetico, che dopo la comparsa
+    // dell'anteprima può non scattare → l'interazione sembrava "bloccata"). Uno scroll (touchmove) non seleziona.
     function attachToolPreview(el, type, onTap) {
-      var timer = null;
+      var timer = null, longPressed = false, moved = false, touchUsed = false;
       el.addEventListener('touchstart', function () {
-        el._suppressClick = false;
-        timer = setTimeout(function () { timer = null; el._suppressClick = true; showToolPreview(type); }, 350);
+        touchUsed = true; longPressed = false; moved = false;
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(function () { timer = null; longPressed = true; showToolPreview(type); }, 450);
       }, { passive: true });
-      function done() { if (timer) { clearTimeout(timer); timer = null; } hideToolPreview(); }
-      el.addEventListener('touchend', done);
-      el.addEventListener('touchcancel', done);
-      el.addEventListener('touchmove', function () { if (timer) { clearTimeout(timer); timer = null; } }, { passive: true });
-      el.onclick = function () {
-        if (el._suppressClick) { el._suppressClick = false; return; } // era un long-press: non usare il TOOL
+      el.addEventListener('touchmove', function () { moved = true; if (timer) { clearTimeout(timer); timer = null; } }, { passive: true });
+      el.addEventListener('touchend', function (e) {
+        if (timer) { clearTimeout(timer); timer = null; }
+        hideToolPreview();
+        if (!longPressed && !moved && onTap) { e.preventDefault(); onTap(); } // TAP breve → azione
+      });
+      el.addEventListener('touchcancel', function () { if (timer) { clearTimeout(timer); timer = null; } hideToolPreview(); });
+      // Fallback puntatore (desktop o pane emulato che invia eventi mouse): click = azione, ma non dopo un tocco.
+      el.addEventListener('click', function () {
+        if (touchUsed) { touchUsed = false; return; }
         if (onTap) onTap();
-      };
+      });
     }
 
     // Condizioni per cui una carta può abbinare una cella (valore, semi jolly, poteri).
