@@ -34,7 +34,7 @@
 
     // Avversario
     sheet.appendChild(fieldLabel('Avversario'));
-    var opp = h('div', 'cfg-row');
+    var opp = h('div', 'cfg-row cfg-row-nowrap');
     opp.appendChild(radio('opp', 'Hot Seat', cfg.opponent === '2p', function () { cfg.opponent = '2p'; renderConfig(); }, 'Due giocatori sullo stesso dispositivo, a turni (passa il dispositivo).'));
     opp.appendChild(radio('opp', 'VS CPU', cfg.opponent === 'cpu', function () { cfg.opponent = 'cpu'; renderConfig(); }, 'Giochi (come Nord) contro il computer.'));
     opp.appendChild(radio('opp', 'CPU vs CPU', cfg.opponent === 'cpucpu', function () { cfg.opponent = 'cpucpu'; renderConfig(); }, 'Due CPU giocano tra loro: modalità dimostrativa.'));
@@ -99,14 +99,8 @@
     [1, 2, 3].forEach(function (n) { var op = h('option', null, n + ' REMIX'); op.value = n; if (cfg.reshuffleCount === n) op.selected = true; rc.appendChild(op); });
     rc.onchange = function () { cfg.reshuffleCount = parseInt(rc.value, 10); };
     addl.appendChild(rc);
-    // Struttura del TURNO: ordine delle fasi di MOVIMENTO e ATTACCO.
-    var ts = h('select', 'cfg-select');
-    ts.title = 'Ordine delle fasi di MOVIMENTO e ATTACCO nel TURNO.';
-    [['1221', 'Turno 1-2-2-1'], ['1212', 'Turno 1-2-1-2']].forEach(function (o) {
-      var op = h('option', null, o[1]); op.value = o[0]; if (cfg.turnMode === o[0]) op.selected = true; ts.appendChild(op);
-    });
-    ts.onchange = function () { cfg.turnMode = ts.value; renderConfig(); };
-    addl.appendChild(ts);
+    // Struttura del TURNO: fissa a 1-2-2-1 (nessuna opzione).
+    cfg.turnMode = '1221';
     // Modalità griglia: Draft (i PILOTI la costruiscono) o Random (generata a caso).
     var gm = h('select', 'cfg-select');
     gm.title = 'Come si forma la griglia: Draft (i PILOTI la costruiscono a turno) o Random (generata a caso).';
@@ -118,9 +112,7 @@
     sheet.appendChild(addl);
     sheet.appendChild(h('p', 'cfg-desc', cfg.gridMode === 'draft'
       ? 'Draft: prima si determina il 1° Pilota, poi a turno (Piazzamento) ognuno pesca 4 carte, ne piazza 2 sulla griglia e scarta le altre. A griglia piena inizia la partita.'
-      : (cfg.turnMode === '1212'
-        ? 'Struttura del TURNO: DEPLOY → MOVIMENTO G1 → MOVIMENTO G2 → ATTACCO G1 → ATTACCO G2 → Fine ROUND.'
-        : 'Struttura del TURNO: DEPLOY → MOVIMENTO G1 → MOVIMENTO G2 → ATTACCO G2 → ATTACCO G1 → Fine ROUND.')));
+      : 'Struttura del TURNO: DEPLOY → MOVIMENTO G1 → MOVIMENTO G2 → ATTACCO G2 → ATTACCO G1 → Fine ROUND.'));
 
     // Scelta ARM (sempre parte del regolamento): uno slot per Pilota.
     sheet.appendChild(fieldLabel('ARM'));
@@ -131,7 +123,7 @@
     var start = h('button', 'primary big-btn start-main', '▶ Inizia partita');
     start.title = 'Avvia la partita con le impostazioni scelte.';
     start.onclick = startGame;
-    var batch = h('button', 'ghost big-btn start-batch', '⏱ Batch test');
+    var batch = h('button', 'ghost big-btn start-batch', '⏱ Test');
     batch.title = 'Esegue 2000 partite CPU vs CPU con queste impostazioni e mostra le statistiche.';
     batch.onclick = runBatchTest;
     startRow.appendChild(start); startRow.appendChild(batch);
@@ -163,10 +155,12 @@
   }
 
   // Selettore ARM per lo slot (0-based) "Pilota N". In VS CPU solo il Pilota 1 è umano.
+  // Layout su una sola riga: dropdown personaggio · seme (quadrato) · SKILL.
   function charSelect(slot) {
     var box = h('div', 'char-block');
     var isCpuSlot = cfg.opponent === 'cpucpu' || (cfg.opponent === 'cpu' && slot > 0);
     box.appendChild(h('div', 'char-who', 'Pilota ' + (slot + 1) + (isCpuSlot ? ' — CPU' : (cfg.opponent === '2p' ? '' : ' — Tu'))));
+    var row = h('div', 'char-row');
     var sel = h('select', 'cfg-select char-select');
     sel.title = 'Scegli l\'ARM.';
     var cur = cfg.chars[slot] || 'random';
@@ -177,38 +171,27 @@
       sel.appendChild(op);
     });
     sel.onchange = function () { cfg.chars[slot] = sel.value; renderConfig(); };
-    box.appendChild(sel);
-    box.appendChild(charDescription(cur));
+    row.appendChild(sel);
+    if (cur === 'random') {
+      row.appendChild(h('div', 'cd-random', 'ARM scelto casualmente a inizio partita.'));
+    } else {
+      var ch = Characters.get(cur);
+      if (ch) {
+        // Seme di appartenenza: quadrato colorato con l'icona del seme (senza nome).
+        var semeSq = h('div', 'char-seme bg-' + ch.suit);
+        var ic = suitIconEl(ch.suit); ic.classList.add('inv'); semeSq.appendChild(ic);
+        attachTip(semeSq, 'ARM SUIT: ' + SUIT_LABEL[ch.suit] + ' (funziona come una GLOBAL SUIT personale e fissa).');
+        row.appendChild(semeSq);
+        // SKILL: nome + numero di usi (o passiva), con tooltip descrizione.
+        var abChip = h('div', 'char-skill');
+        abChip.appendChild(h('span', 'cd-chip-name', ch.label));
+        abChip.appendChild(h('span', 'cd-chip-sub', ch.powerUses != null ? (ch.powerUses + ' usi') : 'passiva'));
+        attachTip(abChip, ch.power || '');
+        row.appendChild(abChip);
+      }
+    }
+    box.appendChild(row);
     return box;
-  }
-
-  // Etichetta della fase di un TOOL (DEPLOY / MOVIMENTO / ATTACCO).
-  function objPhaseTextCfg(type) {
-    var def = Objects && Objects.def(type);
-    return def ? def.phaseLabel : '';
-  }
-  // Descrizione compatta dell'ARM: 3 riquadri uguali (ARM SUIT, TOOL, SKILL) con tooltip.
-  function charDescription(type) {
-    var d = h('div', 'char-desc');
-    if (type === 'random') { d.appendChild(h('div', 'cd-random', 'ARM scelto casualmente a inizio partita.')); return d; }
-    var ch = Characters.get(type); if (!ch) return d;
-    // ARM SUIT (dentro un chip, così i 3 riquadri sono uguali)
-    var semeBox = h('div', 'cd-box');
-    semeBox.appendChild(h('div', 'cd-label', 'ARM SUIT'));
-    var semeChip = h('div', 'cd-chip cd-seme-chip');
-    var ic = suitIconEl(ch.suit); ic.classList.add('cd-suit'); semeChip.appendChild(ic);
-    semeChip.appendChild(h('span', 'cd-chip-name', SUIT_LABEL[ch.suit]));
-    attachTip(semeChip, 'ARM SUIT: ' + SUIT_LABEL[ch.suit] + ' (funziona come una GLOBAL SUIT personale e fissa).');
-    semeBox.appendChild(semeChip); d.appendChild(semeBox);
-    // SKILL (nome + numero di usi, con tooltip descrizione)
-    var abBox = h('div', 'cd-box');
-    abBox.appendChild(h('div', 'cd-label', 'SKILL'));
-    var abChip = h('div', 'cd-chip');
-    abChip.appendChild(h('span', 'cd-chip-name', ch.label));
-    abChip.appendChild(h('span', 'cd-chip-sub', ch.powerUses != null ? (ch.powerUses + ' usi') : 'passiva'));
-    attachTip(abChip, ch.power || '');
-    abBox.appendChild(abChip); d.appendChild(abBox);
-    return d;
   }
 
   // ---- Tooltip custom del configuratore (posizionato via JS, come in partita) ----
@@ -655,7 +638,7 @@
     var back = h('div', 'dialog-back');
     var box = h('div', 'dialog rules-dialog');
     var head = h('div', 'rules-head');
-    head.appendChild(h('h2', null, 'Risultati Batch Test'));
+    head.appendChild(h('h2', null, 'Risultati Test'));
     var x = h('button', 'rules-x', '✕'); x.title = 'Chiudi';
     var close = function () { back.remove(); };
     x.onclick = close; head.appendChild(x); box.appendChild(head);

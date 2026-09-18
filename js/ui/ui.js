@@ -204,7 +204,8 @@
     var dom = {
       hud: el('hud'), board: el('board'), sideTop: el('sideTop'), sideBottom: el('sideBottom'),
       action: el('action'), log: el('log'), overlay: el('overlay'), sheet: el('sheet'),
-      timeline: el('timeline'), piles: el('piles'), objectPiles: el('objectPiles')
+      timeline: el('timeline'), piles: el('piles'), objectPiles: el('objectPiles'),
+      mobilePiles: el('mobilePiles')
     };
 
     // ============================================================ RENDER
@@ -223,6 +224,7 @@
       renderClashModal();
       renderTacticianModal();
       renderToolChoiceModal(game.state);
+      if (isMobile()) mobileMatchHint();
       postRenderAnimations(); renderActionsOverlay(); scheduleCpu();
     }
     // Quando un clash si risolve (nuovo token), mostra la finestra di confronto (tranne in CPU vs CPU,
@@ -266,7 +268,7 @@
 
     function renderBody() {
       var s = game.state;
-      renderHud(s); renderBoard(s); renderPiles(s); renderObjectPiles(s); renderTimeline(s); renderLog(s);
+      renderHud(s); renderBoard(s); renderPiles(s); renderObjectPiles(s); renderMobilePiles(s); renderTimeline(s); renderLog(s);
       if (s.gameOver) { renderFinal(s); return; }
       hideOverlay();
       if (ui.gate) { renderGate(); return; }
@@ -342,12 +344,16 @@
     function openMobileMenu() {
       var back = h('div', 'dialog-back');
       var box = h('div', 'dialog mobile-menu');
-      box.appendChild(h('h2', null, 'Menu'));
-      function item(label, onClick) { var b = h('button', 'primary big-btn', label); b.onclick = function () { back.remove(); onClick(); }; box.appendChild(b); }
+      var head = h('div', 'rules-head');
+      head.appendChild(h('h2', null, 'Menu'));
+      var x = h('button', 'rules-x', '✕'); x.title = 'Chiudi'; x.onclick = function () { back.remove(); };
+      head.appendChild(x); box.appendChild(head);
+      var list = h('div', 'mm-list');
+      function item(label, onClick) { var b = h('button', 'ghost mm-item', label); b.onclick = function () { back.remove(); onClick(); }; list.appendChild(b); }
       item('↺ Nuova partita', function () { location.reload(); });
       item('📖 Regolamento', function () { openRulesDialog('C'); });
       item('⚙️ Opzioni', function () { openOptionsDialog(); });
-      var close = h('button', 'ghost', 'Chiudi'); close.onclick = function () { back.remove(); }; box.appendChild(close);
+      box.appendChild(list);
       back.appendChild(box);
       back.onclick = function (e) { if (e.target === back) back.remove(); };
       document.body.appendChild(back);
@@ -764,6 +770,22 @@
       var db = h('div', 'pile-badge'); db.appendChild(h('b', null, String(s.deck.length))); deck.appendChild(db);
       deckWrap.appendChild(deck); deckWrap.appendChild(h('div', 'pile-cap', 'DECK'));
       dom.objectPiles.appendChild(deckWrap);
+    }
+
+    // ---- Solo mobile: DECK / HEAP sotto la griglia (conteggi compatti; HEAP consultabile) ----
+    function renderMobilePiles(s) {
+      if (!dom.mobilePiles) return;
+      dom.mobilePiles.innerHTML = '';
+      var deck = h('div', 'mp-pile');
+      deck.appendChild(h('span', 'mp-ic', '🂠'));
+      deck.appendChild(h('b', 'mp-num', String(s.deck.length)));
+      deck.appendChild(h('span', 'mp-cap', 'DECK'));
+      var heap = h('div', 'mp-pile mp-heap');
+      heap.appendChild(h('span', 'mp-ic', '♺'));
+      heap.appendChild(h('b', 'mp-num', String(s.discard.length)));
+      heap.appendChild(h('span', 'mp-cap', 'HEAP'));
+      heap.onclick = function () { openDiscardDialog(s); };
+      dom.mobilePiles.appendChild(deck); dom.mobilePiles.appendChild(heap);
     }
 
     // Dialog: scarti TOOLS PERSONALE di un giocatore (consultabile). Il mazzo (pesca coperta) non è consultabile.
@@ -1491,9 +1513,10 @@
         var usable = usableIds.indexOf(o.id) !== -1;
         var box = h('div', 'am-tool' + (usable ? ' usable' : ' disabled'));
         box.appendChild(h('span', 'am-tool-name', def ? def.label : o.type));
-        var tip = h('span', 'tooltip card-tip'); tip.appendChild(objectCardEl(o.type)); box.appendChild(tip);
-        (function (oid, us) { if (us) box.onclick = function () { game.useObject(playerId, oid); ui.armedCardId = null; render(); }; })(o.id, usable);
-        bindTip(box);
+        // TAP: usa il TOOL (se usabile). LONG-PRESS: mostra la scheda al centro finché si tiene premuto.
+        (function (oid, us, typ) {
+          attachToolPreview(box, typ, us ? function () { game.useObject(playerId, oid); ui.armedCardId = null; render(); } : null);
+        })(o.id, usable, o.type);
         slots.appendChild(box);
       }
       var disc = h('div', 'am-pile am-disc'); disc.title = 'Scarti TOOLS (tocca per consultare)';
@@ -1733,6 +1756,22 @@
       });
     }
     function clearMatchHints() { var ns = dom.board.querySelectorAll('.match-hint'); for (var i = 0; i < ns.length; i++) ns[i].classList.remove('match-hint'); }
+    // Mobile: quando è selezionata UNA sola carta (DEPLOY: 1 scelta; MOVIMENTO/ATTACCO: carta armata),
+    // evidenzia i suoi MATCH sulla griglia — come l'hover sul desktop (nessun hover su touch).
+    function mobileMatchHint() {
+      if (!VIEW.showMatches) return;
+      var s = game.state;
+      if (s.gameOver || ui.gate || s.subPhase) return;
+      var pid = null, cid = null;
+      if (s.phase === 'select') {
+        if (ui.chosen.length === 1 && ui.selectingPlayer && !isCpu(ui.selectingPlayer)) { pid = ui.selectingPlayer; cid = ui.chosen[0]; }
+      } else if ((s.phase === 'move' || s.phase === 'attack') && ui.armedCardId && !isCpu(s.activePlayer)) {
+        pid = s.activePlayer; cid = ui.armedCardId;
+      }
+      if (!pid || !cid) return;
+      var card = s.players[pid].hand.filter(function (c) { return c.id === cid; })[0];
+      if (card) highlightMatches(pid, card);
+    }
     // Long-press (touch): tenendo premuto si esegue onStart (anteprima abbinamenti), al rilascio onEnd.
     // Marca el._suppressClick per non far scattare il click (selezione carta) dopo il long-press.
     function attachLongPress(el, onStart, onEnd) {
@@ -1745,6 +1784,32 @@
       el.addEventListener('touchend', done);
       el.addEventListener('touchcancel', done);
       el.addEventListener('touchmove', function () { if (timer) { clearTimeout(timer); timer = null; } }, { passive: true });
+    }
+
+    // ---- Mobile: anteprima "scheda TOOL" al centro dello schermo durante il LONG-PRESS ----
+    function showToolPreview(type) {
+      hideToolPreview();
+      var back = h('div', 'tool-preview-back');
+      back.appendChild(objectCardEl(type));
+      document.body.appendChild(back);
+      ui._toolPreview = back;
+    }
+    function hideToolPreview() { if (ui._toolPreview) { ui._toolPreview.remove(); ui._toolPreview = null; } }
+    // Aggancia a uno slot TOOL: TAP → onTap (usa il TOOL); LONG-PRESS → mostra la scheda finché si tiene premuto.
+    function attachToolPreview(el, type, onTap) {
+      var timer = null;
+      el.addEventListener('touchstart', function () {
+        el._suppressClick = false;
+        timer = setTimeout(function () { timer = null; el._suppressClick = true; showToolPreview(type); }, 350);
+      }, { passive: true });
+      function done() { if (timer) { clearTimeout(timer); timer = null; } hideToolPreview(); }
+      el.addEventListener('touchend', done);
+      el.addEventListener('touchcancel', done);
+      el.addEventListener('touchmove', function () { if (timer) { clearTimeout(timer); timer = null; } }, { passive: true });
+      el.onclick = function () {
+        if (el._suppressClick) { el._suppressClick = false; return; } // era un long-press: non usare il TOOL
+        if (onTap) onTap();
+      };
     }
 
     // Condizioni per cui una carta può abbinare una cella (valore, semi jolly, poteri).
@@ -1875,9 +1940,10 @@
         var appGap = 4;
         var availH = window.innerHeight - sidePad * 2 - gridBox
           - (dom.hud ? dom.hud.getBoundingClientRect().height : 0)
+          - (dom.mobilePiles ? dom.mobilePiles.getBoundingClientRect().height : 0)
           - (dom.timeline ? dom.timeline.getBoundingClientRect().height : 0)
           - (dom.action ? dom.action.getBoundingClientRect().height : 0)
-          - appGap * 3 - 2;
+          - appGap * 4 - 2;
         var ch2 = Math.floor((availH - gg * (Nm - 1)) / Nm);
         var cm = Math.max(30, Math.min(cw2, ch2));
         root.style.setProperty('--cell', cm + 'px');
@@ -2158,6 +2224,7 @@
       ui.gate = null; ui.pendingShot = null; ui.brawlerMode = false; ui.glassMode = false; ui.handHidden = false; ui.selectedDrawn = null;
       ui.clashModal = null; // chiudi l'eventuale finestra di confronto del clash
       ui.peekModal = null;  // chiudi l'eventuale modale "riserva avversaria" del tactician
+      hideToolPreview();    // chiudi l'eventuale anteprima TOOL (long-press mobile)
     }
     function afterRestore() {
       if (ui.cpuTimer) { clearTimeout(ui.cpuTimer); ui.cpuTimer = null; }

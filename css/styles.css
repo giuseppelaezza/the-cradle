@@ -525,10 +525,27 @@ body.setup .sheet { padding-top: 14px; }
 /* config */
 .cfg-label { font-weight: 700; margin: 14px 0 6px; }
 .cfg-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+/* Riga che deve restare su una sola linea (es. impostazioni Avversario). */
+.cfg-row-nowrap { flex-wrap: nowrap; }
+.cfg-row-nowrap .cfg-opt { flex: 1 1 0; min-width: 0; justify-content: center; }
 .cfg-opt { display: inline-flex; align-items: center; gap: 4px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; cursor: pointer; }
 .cfg-select { font: inherit; color: var(--ink); background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
 .char-who { display: block; color: var(--muted); font-weight: 700; margin-bottom: 5px; }
 .char-select { display: block; }
+/* ARM: dropdown · seme (quadrato) · SKILL su una sola riga. */
+.char-row { display: flex; align-items: stretch; gap: 8px; min-width: 0; }
+.char-row .char-select { flex: 1 1 0; min-width: 0; }
+.char-seme { flex: 0 0 auto; width: 38px; align-self: stretch; border-radius: 8px; cursor: help;
+  display: inline-flex; align-items: center; justify-content: center; }
+.char-seme .suit-ic { width: 20px; height: 20px; }
+.char-seme.bg-oro { background: var(--oro); } .char-seme.bg-spade { background: var(--spade); }
+.char-seme.bg-coppe { background: var(--coppe); } .char-seme.bg-bastoni { background: var(--bastoni); }
+.char-skill { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 2px;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 5px 10px; cursor: help; }
+.char-skill:hover { border-color: var(--highlight); }
+.char-skill .cd-chip-name { font-size: 12.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.char-skill .cd-chip-sub { font-size: 10px; color: var(--muted); }
+.char-row .cd-random { flex: 1 1 0; align-self: center; font-size: 12px; color: var(--muted); }
 .cfg-desc { color: var(--muted); font-size: 12px; margin: 4px 0 0; line-height: 1.4; }
 /* configuratore: layout a colonna con il pulsante Regolamento centrato sotto il rettangolo */
 body.setup .overlay { flex-direction: column; gap: 14px; }
@@ -723,12 +740,23 @@ body.setup .overlay { flex-direction: column; gap: 14px; }
 }
 
 /* Elementi solo-mobile: nascosti sul desktop. */
-.players-compact, .hud-mobile-ctrls, .tl-counts { display: none; }
+.players-compact, .hud-mobile-ctrls, .tl-counts, .mobile-piles { display: none; }
+
+/* Menu mobile (hamburger): stile coerente col resto dell'interfaccia. */
+.mobile-menu { max-width: 340px; padding: 0; }
+.mm-list { display: flex; flex-direction: column; gap: 8px; padding: 16px; }
+.mm-item { width: 100%; text-align: left; padding: 12px 14px; font-size: 14px; border-radius: 10px; }
+
+/* Anteprima "scheda TOOL" al centro (long-press mobile). */
+.tool-preview-back { position: fixed; inset: 0; z-index: 320; display: flex; align-items: center; justify-content: center;
+  background: rgba(20,20,20,.8); pointer-events: none; }
 
 /* ============================ MOBILE (telefoni): layout FISSO a tutta altezza ============================ */
 @media (max-width: 640px) {
   html, body { height: 100%; }
-  body { overflow: hidden; }                 /* niente scroll di pagina */
+  /* Niente scroll di pagina + testi/elementi non selezionabili (così il long-press funziona). */
+  body { overflow: hidden; -webkit-user-select: none; -moz-user-select: none; user-select: none; -webkit-touch-callout: none; }
+  input, textarea, select, option { -webkit-user-select: auto; -moz-user-select: text; user-select: auto; }
   .app { height: 100vh; height: 100dvh; padding: 5px; gap: 4px; overflow: hidden;
     display: flex; flex-direction: column; align-items: stretch; }
   :root { --cell: 48px; --card: 48px; }      /* fallback: la griglia è poi dimensionata via JS */
@@ -772,15 +800,24 @@ body.setup .overlay { flex-direction: column; gap: 14px; }
   .board-row { flex-wrap: nowrap; gap: 0; }
   .board-row > .grid-col { flex: 0 0 auto; gap: 0; }
 
-  /* Timeline: barra fasi (testo piccolo, mai su 2 righe) + conteggi DECK/HEAP; hint compatto. */
-  .timeline-wrap { flex: 0 0 auto; gap: 2px; }
+  /* DECK / HEAP sotto la griglia (non più accanto alla barra delle fasi). */
+  .mobile-piles { display: flex; flex: 0 0 auto; align-items: center; justify-content: center; gap: 8px; }
+  .mp-pile { display: inline-flex; align-items: center; gap: 5px; padding: 3px 12px; border-radius: 999px;
+    background: var(--panel-2); border: 1px solid var(--line); font-size: 12px; }
+  .mp-pile .mp-ic { font-size: 13px; opacity: .85; }
+  .mp-pile .mp-num { font-weight: 800; font-variant-numeric: tabular-nums; }
+  .mp-pile .mp-cap { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+  .mp-heap { cursor: pointer; }
+
+  /* Timeline: barra fasi (testo piccolo, mai su 2 righe) + hint compatto, stessa altezza. */
+  .timeline-wrap { flex: 0 0 auto; gap: 4px; }
   .tl-segwrap { display: flex; align-items: center; gap: 6px; width: 100%; }
-  .tl-segrow { flex: 1 1 auto; min-width: 0; flex-wrap: nowrap; overflow-x: auto; padding: 3px 6px; }
-  .tl-seg { font-size: 10px; padding: 2px 6px; white-space: nowrap; }
+  .tl-segrow { flex: 1 1 auto; min-width: 0; min-height: 30px; align-items: stretch; flex-wrap: nowrap; overflow-x: auto; padding: 3px 6px; }
+  /* Ogni fase riempie in altezza la barra: il cerchio di highlight (.cur) scala con la barra. */
+  .tl-seg { display: inline-flex; align-items: center; font-size: 11px; padding: 0 10px; white-space: nowrap; }
+  .tl-seg.cur { transform: none; box-shadow: 0 0 0 1px rgba(255,255,255,.25); }
   .tl-arrow { font-size: 10px; }
-  .tl-counts { display: inline-flex; gap: 4px; flex: 0 0 auto; }
-  .tl-count { font-size: 11px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 999px; padding: 1px 7px; white-space: nowrap; }
-  .phase-hint { font-size: 11px; padding: 3px 8px; }
+  .phase-hint { min-height: 30px; font-size: 11px; padding: 0 12px; }
 
   /* Azione: STACK · TOOLS(mazzo·slot·scarti) · barra [Remix | Conferma | Skill] impilati e fissi. */
   .action-wrap { flex: 0 0 auto; padding: 5px; max-height: 48vh; overflow-y: auto; }
@@ -788,9 +825,12 @@ body.setup .overlay { flex-direction: column; gap: 14px; }
   .act-head { font-size: 13px; margin-bottom: 5px; }
   .act-mobile { display: flex; flex-direction: column; gap: 7px; }
   /* Carte STACK: un po' più grandi e più distanziate; scroll orizzontale se superano le 6. */
-  .am-stack { display: flex; overflow-x: auto; padding-bottom: 2px; }
+  /* Padding verticale: lascia spazio all'anello di selezione senza far crescere il pannello. */
+  .am-stack { display: flex; overflow-x: auto; padding: 5px 0; }
   .am-stack-cards { display: flex; gap: 8px; flex-wrap: nowrap; margin: 0; }
   .am-stack .card { --cs: 54px; width: 54px; height: 54px; flex: 0 0 54px; }
+  /* Carta selezionata: niente traslazione/margine (non cresce né viene tagliata in alto), solo l'anello. */
+  .am-stack .card.chosen, .am-stack .card.armed { transform: none; margin-top: 0; }
   /* TOOLS: slot più grandi e distanziati, con mazzo (sinistra) e scarti (destra). */
   .am-tools { display: flex; align-items: stretch; gap: 7px; }
   .am-pile { flex: 0 0 34px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700;
@@ -812,4 +852,32 @@ body.setup .overlay { flex-direction: column; gap: 14px; }
   .am-uses { --uh: 5px; gap: 2px; }
   .am-uses .uses-dot { width: 8px; height: 5px; }
   .am-skill.active { border-color: var(--good); box-shadow: 0 0 0 1px var(--good) inset; }
+
+  /* Dialoghi: meno padding esterno per guadagnare larghezza sui telefoni. */
+  .dialog-back { padding: 8px; }
+
+  /* ---- Composizione mazzi TOOLS: colonna sinistra più stretta, card più piccole (intera card visibile) ---- */
+  .tools-dialog { max-width: 100%; max-height: 94vh; }
+  .tools-head { flex-wrap: wrap; gap: 8px; padding: 10px 12px; }
+  .tools-head h2 { font-size: 16px; }
+  .tools-tabs { gap: 6px; }
+  .tools-tab { padding: 4px 10px; }
+  .tools-deck-col { flex: 0 0 112px; padding: 7px; gap: 6px; }
+  .tools-deck-title { font-size: 12px; }
+  .tools-deck-count { font-size: 11px; }
+  .tools-deck-item { padding: 2px 4px 2px 7px; gap: 3px; }
+  .tdi-label { font-size: 10.5px; }
+  .tdi-btn { width: 19px; height: 19px; font-size: 13px; }
+  .tdi-del { width: 17px; height: 17px; }
+  .tools-tag-row { padding: 8px; gap: 6px; }
+  .tools-tag { padding: 3px 10px; font-size: 11px; }
+  .tools-card-grid { padding: 8px; gap: 8px; grid-template-columns: repeat(auto-fill, 104px); }
+  /* Card TOOL scalata: dimensioni e testo ridotti mantenendo le proporzioni; intera card visibile. */
+  .obj-vcard.ovc-half { width: 104px; height: 138px; padding: 6px; gap: 3px; border-radius: 8px; }
+  .obj-vcard.ovc-half .ovc-phase-badge { padding: 1px 6px; font-size: 6.5px; }
+  .obj-vcard.ovc-half .ovc-name { font-size: 9.5px; line-height: 1.1; }
+  .obj-vcard.ovc-half .ovc-lbl { font-size: 6px; }
+  .obj-vcard.ovc-half .ovc-val { font-size: 7px; line-height: 1.2; }
+  .obj-vcard.ovc-half .ovc-count { min-width: 18px; height: 18px; font-size: 10px; top: -7px; right: -7px; }
+  .tools-consult .tools-card-grid { grid-template-columns: repeat(auto-fill, 104px); }
 }
